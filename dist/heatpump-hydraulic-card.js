@@ -2066,11 +2066,11 @@ class HeatpumpFlowCard extends HTMLElement {
           ${this._sourceSvg()}
 
           ${this._unitPump() ? `<g class="tap" ${de(e.volume ? 'volume' : 'mode')}>
-            <circle class="pump" cx="382" cy="250" r="12"/>
-            <g class="impeller" id="impeller-unit" style="transform-origin:382px 250px"><path d="M382 241 L387 250 L377 250Z M382 259 L377 250 L387 250Z" class="imp"/></g>
+            <circle class="pump" cx="340" cy="250" r="11"/>
+            <g class="impeller" id="impeller-unit" style="transform-origin:340px 250px"><path d="M340 242 L345 250 L335 250Z M340 258 L335 250 L345 250Z" class="imp"/></g>
           </g>` : ''}
-          <g class="tap" ${de('flow')}><text class="pipe-label" id="t-vl" x="${this._unitPump() ? 336 : 338}" y="${this._unitPump() ? 230 : 236}" text-anchor="middle"></text></g>
-          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${this._unitPump() ? 332 : 346}" y="275" text-anchor="middle"></text></g>
+          <g class="tap" ${de('flow')}><text class="pipe-label" id="t-vl" x="${this._unitPump() ? 340 : 338}" y="${this._unitPump() ? 233 : 236}" text-anchor="middle"></text></g>
+          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${this._unitPump() ? 340 : 346}" y="275" text-anchor="middle"></text></g>
           <g class="tap" ${de('return')}><text class="pipe-label" id="t-rl" x="335" y="406" text-anchor="middle"></text></g>
 
           <g class="tap" ${de('mode')}>
@@ -2671,7 +2671,7 @@ class HeatpumpFlowCard extends HTMLElement {
   }
 
   // The heat pump has its own water pump (`unit_pump`, default from the preset). It is drawn on the flow pipe next to the
-  // heat pump block, right of the flow rate. A single direct circuit without its own pump sensor then has no pump of its own.
+  // heat pump block, centred between the flow temperature and the flow rate. A single direct circuit without its own pump sensor then has no pump of its own.
   _unitPump() { return this._config.unit_pump ?? !!this._preset?.unit_pump; }
   _circuitPump(n) { return !(n === 1 && this._hcCount === 1 && this._unitPump() && !this._parts.buffer && !this._e.hc_pump); }
 
