@@ -3374,7 +3374,8 @@ class HeatpumpFlowCard extends HTMLElement {
         this._txt(`t-hc-vol${s}`, this._has(k('volume')) && Number.isFinite(hcVol) ? `${this._fmt(hcVol, 0)} l/h` : '');
         if (this._$(`t-hc-now${s}`)) {
           // Heating curve shift: "Target 36 °C (curve 34 °C + 2 K shift)" above the pump, the flow temperature below it.
-          this._txt(`t-hc-now${s}`, showFlow ? this._t(tHc) : '');
+          // Only the circuit's own flow sensor: the heat pump's flow already stands at the VL label.
+          this._txt(`t-hc-now${s}`, this._has(k('flow')) ? this._t(tHc) : '');
           this._hcTarget(n, set, this._n(k('curve_offset')), this._unit(k('curve_offset')));
         } else {
           this._txt(`t-hc${s}`, showFlow ? `${this._t(tHc)}${Number.isFinite(set) ? ` · ${i.target} ${this._fmt(set)}` : ''}` : '');

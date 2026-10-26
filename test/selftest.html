@@ -1737,17 +1737,22 @@
     const direct = C._resolve({ preset: 'heishamon' }, hassOf(st({ [`sensor.${p}_main_heating_mode`]: 'direct' })));
     check(direct.entities.hc_curve_offset === undefined, 'HeishaMon direct mode: the heat request temperature is the target, no curve shift');
     const q = (c, id) => c.shadowRoot.getElementById(id);
-    const card = mount({ preset: 'heishamon', language: 'de' }, hassOf(st())); await wait(20);
+    const zone = { [`sensor.${p}_main_z1_water_temp`]: ['36.75', '°C'] };
+    const card = mount({ preset: 'heishamon', language: 'de' }, hassOf(st(zone))); await wait(20);
     const above = q(card, 't-hc'); const below = q(card, 't-hc-now');
     check(['Soll 36 °C (Kurve 34 °C + 2 K Verschiebung)', 'Soll 36 °C (Kurve 34 °C + 2 K)', 'Soll 36 °C'].includes(above?.textContent), `target, curve and shift above the pump (${above?.textContent})`);
     check(['36,8 °C', '36.8 °C'].includes(below?.textContent), `flow temperature below the pump (${below?.textContent})`);
     const pump = card.shadowRoot.querySelector('circle.pump[cx="720"]')?.getBBox() || { y: 344, height: 32 }; const ba = above.getBBox(); const bb = below.getBBox();
     check(ba.y + ba.height <= pump.y && bb.y >= pump.y + pump.height && ba.x + ba.width <= 737 && ba.x >= 399, `above ends at the pump and stays right of the valve riser, below sits under it (${ba.x.toFixed(0)}–${(ba.x + ba.width).toFixed(0)})`);
-    check(above.parentNode.dataset.entity === `number.${p}_main_z1_heat_request_temp` && below.parentNode.dataset.entity === `sensor.${p}_main_main_outlet_temp`
+    check(above.parentNode.dataset.entity === `number.${p}_main_z1_heat_request_temp` && below.parentNode.dataset.entity === `sensor.${p}_main_z1_water_temp`
       && !card.shadowRoot.querySelector('.controls'), `read only: tap targets for the shift and the flow, no quick control (${above.parentNode.dataset.entity}, ${below.parentNode.dataset.entity})`);
-    card.hass = hassOf(st({ [`number.${p}_main_z1_heat_request_temp`]: ['-1', '°C'], [`sensor.${p}_main_z1_water_target_temp`]: ['33', '°C'] })); await wait(5);
+    card.hass = hassOf(st({ ...zone, [`number.${p}_main_z1_heat_request_temp`]: ['-1', '°C'], [`sensor.${p}_main_z1_water_target_temp`]: ['33', '°C'] })); await wait(5);
     check(/^Soll 33 °C( \(Kurve 34 °C − 1 K( Verschiebung)?\))?$/.test(above.textContent), `negative shift (${above.textContent})`);
     card.remove();
+    // Without a zone sensor the circuit has no flow of its own: the heat pump's flow stands only at the VL label.
+    const own = mount({ preset: 'heishamon', language: 'de' }, hassOf(st())); await wait(20);
+    check(q(own, 't-hc-now')?.textContent === '' && /^Soll 36 °C/.test(q(own, 't-hc')?.textContent), `no zone sensor: no flow temperature under the circuit (${q(own, 't-hc-now')?.textContent})`);
+    own.remove();
     const en = mount({ preset: 'heishamon', language: 'en' }, hassOf(st())); await wait(20);
     check(/^Target 36 °C( \(curve 34 °C \+ 2 K( shift)?\))?$/.test(q(en, 't-hc')?.textContent), `English (${q(en, 't-hc')?.textContent})`);
     en.remove();
