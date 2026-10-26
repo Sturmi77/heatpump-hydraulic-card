@@ -24,6 +24,7 @@ title
 heat_pump
 dhw
 buffer
+series_tank
 heating_circuit
 house
 room
@@ -68,6 +69,7 @@ timeline_gap
 timeline_aria
 valve_heating
 valve_cooling
+bypass
 pv
 battery
 grid

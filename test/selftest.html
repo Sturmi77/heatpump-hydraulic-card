@@ -89,7 +89,7 @@
     { program_map: [] }, { program_map: 'eco' }, { compressor_speed_max: 0 }, { compressor_speed_max: 'fast' },
     { errors: 'sensor.error' }, { error_ok: 'No Error' }, { error_ok: ['No Error', 0] },
     { timeline: 'yes' }, { timeline_hours: 0 }, { timeline_marks: 'yes' }, { timeline_marks: [{ label: 'x' }] }, { timeline_marks: [7] }, { wall_timeout: -1 }, { wall_timeout: 'soon' }, { unit_style: 'tesla' }, { unit_size: 'huge' },
-    { animations: 'sometimes' }, { flow_speed: 0 }, { flow_speed: 3.1 }, { source_spread: 'yes' }, { theme: 'sepia' }, { fullscreen: 'yes' },
+    { animations: 'sometimes' }, { flow_speed: 0 }, { flow_speed: 3.1 }, { source_spread: 'yes' }, { series_buffer: 'yes' }, { theme: 'sepia' }, { fullscreen: 'yes' },
     { texts: [] }, { texts: { NL: { title: 'x' } } }, { texts: { nl: { title: 7 } } }, { texts: { nl: { missing_key: 'x' } } },
     { brine_pressure_min: -0.1 }, { hc_pressure_crit: 1.2, hc_pressure_min: 1.0 }, { hc_pressure_min: 3, hc_pressure_max: 2 }]) {
     let threw = false; try { new C().setConfig(cfg); } catch (e) { threw = true; }
@@ -1771,6 +1771,38 @@
     check(names({ hc_count: 3 }).includes('hc_curve_offset') && names({ hc_count: 3 }).includes('hc3_curve_offset') && lab({ name: 'hc3_curve_offset' }) === lab({ name: 'hc_curve_offset' }),
       `editor offers the curve shift of each circuit (${lab({ name: 'hc_curve_offset' })})`);
     check(/- hc_curve_offset: number\.panasonic_heat_pump_main_z1_heat_request_temp = 2/.test(C._diagnosticReport({ preset: 'heishamon' }, hassOf(st()))), 'diagnostic report lists the curve shift');
+  }
+
+  // 18l. series buffer in the return: the bypass valve follows the defrost signal (or its own entity) and then stops the circuits
+  {
+    const st = (extra = {}) => toStates({
+      'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.c': ['30', 'Hz'], 'binary_sensor.d': 'off', 'binary_sensor.b': 'off', ...extra,
+    });
+    const ents = { flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c', defrost: 'binary_sensor.d' };
+    const q = (c, id) => c.shadowRoot.getElementById(id);
+    const on = (c, id) => q(c, `p-${id}`)?.classList.contains('on');
+    let card = mount({ entities: ents, series_buffer: true, language: 'de' }, hassOf(st())); await wait(20);
+    check(q(card, 'sb-tank') && q(card, 'sb-arrow') && /Reihenpuffer/.test(card.shadowRoot.querySelector('.series-title')?.textContent), 'series buffer and its valve are drawn');
+    check(on(card, 'byp-vl') && on(card, 'sb-vl') && on(card, 'sb-b') && !on(card, 'sb-a') && on(card, 'hc-vl') && on(card, 'byp-rl'), 'heating: circuit return through the buffer, bypass closed');
+    check(q(card, 't-bypass').textContent === '' && q(card, 'sb-arrow').getAttribute('d').startsWith('M614'), 'heating: valve from B to AB');
+    check(q(card, 'sb-arrow').closest('.tap').dataset.entity === 'binary_sensor.d', 'a tap on the valve opens the defrost signal');
+    card.hass = hassOf(st({ 'binary_sensor.d': 'on' })); await wait(5);
+    check(on(card, 'sb-a') && !on(card, 'sb-vl') && !on(card, 'sb-b') && !on(card, 'hc-vl') && on(card, 'byp-rl') && on(card, 'byp-vl'), 'defrost: flow through the bypass into the buffer, circuit stopped');
+    check(q(card, 't-bypass').textContent === 'Bypass' && q(card, 'sb-arrow').getAttribute('d').startsWith('M600 481'), 'defrost: valve from A to AB');
+    card.remove();
+    card = mount({ entities: { ...ents, bypass_valve: 'binary_sensor.b' }, series_buffer: true }, hassOf(st({ 'binary_sensor.d': 'on' }))); await wait(20);
+    check(!on(card, 'sb-a') && on(card, 'sb-b') && q(card, 'sb-arrow').closest('.tap').dataset.entity === 'binary_sensor.b', 'an own bypass valve entity wins over the defrost signal');
+    card.hass = hassOf(st({ 'binary_sensor.b': 'on' })); await wait(5);
+    check(on(card, 'sb-a') && !on(card, 'hc-vl'), 'bypass valve on: circuit stopped');
+    card.remove();
+    card = mount({ entities: { ...ents, buffer_top: 'sensor.bt' }, series_buffer: true }, hassOf(st({ 'sensor.bt': ['40', '°C'] }))); await wait(20);
+    check(!q(card, 'sb-tank') && q(card, 't-buf-top'), 'a parallel buffer with its own sensors wins over the series buffer');
+    card.remove();
+    card = mount({ entities: ents }, hassOf(st({ 'binary_sensor.d': 'on' }))); await wait(20);
+    check(!q(card, 'sb-tank') && on(card, 'hc-vl'), 'without series_buffer nothing changes, the circuit runs in defrost');
+    card.remove();
+    const keys = C._formSchema({}).schema.flatMap(function keysOf(n) { return n.schema ? n.schema.flatMap(keysOf) : [n.name]; });
+    check(keys.includes('series_buffer') && keys.includes('bypass_valve'), 'editor offers the series buffer and its bypass valve');
   }
 
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
