@@ -1773,7 +1773,7 @@
     check(/- hc_curve_offset: number\.panasonic_heat_pump_main_z1_heat_request_temp = 2/.test(C._diagnosticReport({ preset: 'heishamon' }, hassOf(st()))), 'diagnostic report lists the curve shift');
   }
 
-  // 18l. series buffer in the return: the bypass valve follows the defrost signal (or its own entity) and then stops the circuits
+  // 18m. series buffer in the return: the bypass valve follows the defrost signal (or its own entity) and then stops the circuits
   {
     const st = (extra = {}) => toStates({
       'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.c': ['30', 'Hz'], 'binary_sensor.d': 'off', 'binary_sensor.b': 'off', ...extra,
