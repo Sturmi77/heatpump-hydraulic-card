@@ -1,0 +1,56 @@
+name: Traffic statistics
+
+# GitHub keeps daily views and clones for 14 days only. Every week this job reads them (and stars, forks, referrers and the
+# download counts of the release assets) and appends them to traffic-stats.json on the branch "traffic-stats".
+# The traffic numbers need a token with "Administration: read" on this repository; the automatic GITHUB_TOKEN cannot read
+# them. Create a fine-grained token for this repository only and store it as the repository secret TRAFFIC_TOKEN.
+on:
+  schedule:
+    - cron: "30 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: traffic-stats
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    name: Traffic snapshot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Check out the data branch
+        run: |
+          if git ls-remote --exit-code --heads origin traffic-stats > /dev/null; then
+            git fetch --depth 1 origin traffic-stats
+            git worktree add data FETCH_HEAD
+            git -C data checkout -B traffic-stats
+          else
+            git worktree add --detach data
+            git -C data checkout --orphan traffic-stats
+            git -C data rm -rf --quiet . || true
+          fi
+      - name: Read the numbers
+        run: node scripts/traffic-snapshot.mjs data/traffic-stats.json
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+      - name: Commit the data
+        working-directory: data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add traffic-stats.json
+          if git diff --cached --quiet; then
+            echo "Nothing changed."
+          else
+            git commit -m "Traffic statistics $(date -u +%F)"
+            git push origin traffic-stats
+          fi
