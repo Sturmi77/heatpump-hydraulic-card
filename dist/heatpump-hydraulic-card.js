@@ -2065,8 +2065,12 @@ class HeatpumpFlowCard extends HTMLElement {
           ${showHc ? Array.from({ length: this._hcCount }, (_, n) => this._circuitSvg(n + 1)).join('') : ''}
           ${this._sourceSvg()}
 
-          <g class="tap" ${de('flow')}><text class="pipe-label" id="t-vl" x="338" y="236" text-anchor="middle"></text></g>
-          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="346" y="275" text-anchor="middle"></text></g>
+          ${this._unitPump() ? `<g class="tap" ${de(e.volume ? 'volume' : 'mode')}>
+            <circle class="pump" cx="382" cy="250" r="12"/>
+            <g class="impeller" id="impeller-unit" style="transform-origin:382px 250px"><path d="M382 241 L387 250 L377 250Z M382 259 L377 250 L387 250Z" class="imp"/></g>
+          </g>` : ''}
+          <g class="tap" ${de('flow')}><text class="pipe-label" id="t-vl" x="${this._unitPump() ? 336 : 338}" y="${this._unitPump() ? 230 : 236}" text-anchor="middle"></text></g>
+          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${this._unitPump() ? 332 : 346}" y="275" text-anchor="middle"></text></g>
           <g class="tap" ${de('return')}><text class="pipe-label" id="t-rl" x="335" y="406" text-anchor="middle"></text></g>
 
           <g class="tap" ${de('mode')}>
@@ -2081,10 +2085,6 @@ class HeatpumpFlowCard extends HTMLElement {
             <text class="unit-val" id="t-hp-power" x="170" y="390" text-anchor="middle"></text>
             <text class="unit-val strong" id="t-hp-cop" x="170" y="412" text-anchor="middle"></text>
           </g>
-          ${this._unitPump() ? `<g class="tap" ${de(e.volume ? 'volume' : 'mode')}>${pipePair('rl-unit', 'M290 380 H252')}
-            <circle class="pump" cx="264" cy="380" r="13"/>
-            <g class="impeller" id="impeller-unit" style="transform-origin:264px 380px"><path d="M264 370 L269 380 L259 380Z M264 390 L259 380 L269 380Z" class="imp"/></g>
-          </g>` : ''}
           ${this._sourceType === 'air' ? `<g class="tap" ${de(e.source_in ? 'source_in' : 'source_volume')}><text class="small" id="t-src-in" x="170" y="450" text-anchor="middle"></text></g>${this._has('outdoor') ? `<g class="tap" ${de('outdoor')}><text class="small" id="t-outdoor-hp" x="170" y="472" text-anchor="middle"></text></g>` : ''}` : ''}
           ${this._heaterSvg('heater', 'inline')}
 
@@ -2670,8 +2670,8 @@ class HeatpumpFlowCard extends HTMLElement {
     </g>`;
   }
 
-  // The heat pump has its own water pump (`unit_pump`, default from the preset). It is drawn at the return inlet inside the
-  // heat pump block, where the Aquarea has it. A single direct circuit without its own pump sensor then has no pump of its own.
+  // The heat pump has its own water pump (`unit_pump`, default from the preset). It is drawn on the flow pipe next to the
+  // heat pump block, right of the flow rate. A single direct circuit without its own pump sensor then has no pump of its own.
   _unitPump() { return this._config.unit_pump ?? !!this._preset?.unit_pump; }
   _circuitPump(n) { return !(n === 1 && this._hcCount === 1 && this._unitPump() && !this._parts.buffer && !this._e.hc_pump); }
 
@@ -3331,9 +3331,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const cRet = this._rlColor(tRet);
     const stroke = (id, c) => { const el = this._$(`p-${id}`); if (el) el.style.setProperty('--pc', c); };
     ['vl', 'vl-dhw', 'vl-buf', 'byp-vl'].forEach((id) => stroke(id, cFlow));
-    ['rl', 'rl-unit', 'rl-dhw', 'rl-buf', 'byp-rl'].forEach((id) => stroke(id, cRet));
+    ['rl', 'rl-dhw', 'rl-buf', 'byp-rl'].forEach((id) => stroke(id, cRet));
     const pipe = (id, on) => { this._cls(`p-${id}`, on); this._cls(`f-${id}`, on); };
-    pipe('vl', loop); pipe('rl', loop); pipe('rl-unit', loop);
+    pipe('vl', loop); pipe('rl', loop);
     // The heat pump's own water pump runs with a flow rate, else with the hot-water or heating loop.
     this._cls('impeller-unit', Number.isFinite(vol) ? vol > 0 : loop);
     pipe('vl-dhw', toDhw); pipe('rl-dhw', toDhw);

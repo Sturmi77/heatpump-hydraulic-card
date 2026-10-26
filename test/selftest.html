@@ -1773,7 +1773,7 @@
     check(/- hc_curve_offset: number\.panasonic_heat_pump_main_z1_heat_request_temp = 2/.test(C._diagnosticReport({ preset: 'heishamon' }, hassOf(st()))), 'diagnostic report lists the curve shift');
   }
 
-  // 18l. water pump inside the heat pump (unit_pump): drawn at the return inlet of the heat pump block, the single direct circuit has none
+  // 18l. water pump inside the heat pump (unit_pump): drawn on the flow pipe right of the flow rate, the single direct circuit has none
   {
     const p = 'panasonic_heat_pump';
     const st = (extra = {}) => toStates({
@@ -1783,9 +1783,11 @@
     });
     const q = (c, sel) => c.shadowRoot.querySelector(sel);
     let card = mount({ preset: 'heishamon' }, hassOf(st())); await wait(20);
-    check(q(card, '#impeller-unit') && q(card, '#p-rl-unit'), 'HeishaMon: the water pump sits in the heat pump block');
+    check(q(card, '#impeller-unit'), 'HeishaMon: the card draws the water pump of the heat pump');
     const box = q(card, '#hp-box').getBBox(); const pump = q(card, '#impeller-unit').parentNode.querySelector('circle.pump').getBBox();
-    check(pump.x >= box.x && pump.x + pump.width <= box.x + box.width && pump.y >= box.y, 'the water pump stays inside the heat pump block');
+    const apart = (a, b) => a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+    check(pump.x >= box.x + box.width && pump.x + pump.width <= 402 && pump.y < 250 && pump.y + pump.height > 250, 'the water pump sits on the flow pipe between the heat pump block and the valve');
+    check(apart(pump, q(card, '#t-vl').getBBox()) && apart(pump, q(card, '#t-vol').getBBox()), `the water pump keeps clear of the flow temperature and the flow rate (${[pump, q(card, '#t-vl').getBBox(), q(card, '#t-vol').getBBox()].map((r) => [r.x, r.y, r.width, r.height].map(Math.round).join(',')).join(' / ')})`);
     check(!q(card, 'circle.pump[cx="720"]') && !q(card, '#impeller'), 'the single direct circuit has no pump of its own');
     check(q(card, '#impeller-unit').classList.contains('on'), 'the water pump turns with a flow rate');
     check(q(card, '#impeller-unit').closest('.tap').dataset.entity === `sensor.${p}_main_pump_flow`, 'a tap on the water pump opens the flow rate');
