@@ -1773,7 +1773,7 @@
     check(/- hc_curve_offset: number\.panasonic_heat_pump_main_z1_heat_request_temp = 2/.test(C._diagnosticReport({ preset: 'heishamon' }, hassOf(st()))), 'diagnostic report lists the curve shift');
   }
 
-  // 18l. water pump inside the heat pump (unit_pump): drawn at the flow outlet of the heat pump block, the single direct circuit has none
+  // 18l. water pump inside the heat pump (unit_pump): drawn at the return inlet of the heat pump block, the single direct circuit has none
   {
     const p = 'panasonic_heat_pump';
     const st = (extra = {}) => toStates({
@@ -1783,7 +1783,7 @@
     });
     const q = (c, sel) => c.shadowRoot.querySelector(sel);
     let card = mount({ preset: 'heishamon' }, hassOf(st())); await wait(20);
-    check(q(card, '#impeller-unit') && q(card, '#p-vl-unit'), 'HeishaMon: the water pump sits in the heat pump block');
+    check(q(card, '#impeller-unit') && q(card, '#p-rl-unit'), 'HeishaMon: the water pump sits in the heat pump block');
     const box = q(card, '#hp-box').getBBox(); const pump = q(card, '#impeller-unit').parentNode.querySelector('circle.pump').getBBox();
     check(pump.x >= box.x && pump.x + pump.width <= box.x + box.width && pump.y >= box.y, 'the water pump stays inside the heat pump block');
     check(!q(card, 'circle.pump[cx="720"]') && !q(card, '#impeller'), 'the single direct circuit has no pump of its own');
