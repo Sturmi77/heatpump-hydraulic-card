@@ -99,7 +99,7 @@
   // 5. detection: the right preset for each installation, nothing for gas boilers or foreign entities
   check(HFC_PRESETS.heishamon.tested === true, 'HeishaMon preset is marked real-installation tested');
   const stub = (states, registry) => C.getStubConfig(hassOf(toStates(states), registry));
-  const expect = { 0: 'lambda', 1: 'lambda', 2: 'vicare', 3: 'vaillant', 4: 'emsesp', 5: 'heishamon', 6: 'emsesp', 8: 'wolf', 9: 'kronoterm', 10: 'ebusd', 11: 'samsung', 12: 'luxtronik' };
+  const expect = { 0: 'lambda', 1: 'lambda', 2: 'vicare', 3: 'vaillant', 4: 'emsesp', 5: 'heishamon', 6: 'emsesp', 8: 'wolf', 9: 'kronoterm', 10: 'ebusd', 11: 'samsung', 12: 'luxtronik', 15: 'stiebel_isg' };
   for (const [i, p] of Object.entries(expect)) {
     const s = setups[i]; const st = stub(s.states('heat'), s.registry || {});
     check(st.preset === p, `stub preset ${i} = ${p} (got ${st.preset})`);
@@ -544,6 +544,48 @@
       `editor explains a missing Energy-dashboard power sensor (${JSON.stringify(ed._energyMissing)} / ${ed.textContent.trim()})`);
     card.remove(); ed.remove();
   }
+
+  // 6a. power sources the installation has (#102, #103): absent sources are left out, grid tariffs share one power sensor
+  {
+    const src = (c, id) => c.shadowRoot.getElementById(`src-${id}`);
+    const flows = (c) => [...c.shadowRoot.querySelectorAll('.eflow')].map((e) => e.id).join();
+    // Two grid tariffs, only the first has a power sensor; no battery in the Energy dashboard.
+    const prefs = { energy_sources: [
+      { type: 'solar', stat_rate: 'sensor.pv' },
+      { type: 'grid', stat_energy_from: 'sensor.grid_high', power_config: { stat_rate: 'sensor.grid' } },
+      { type: 'grid', stat_energy_from: 'sensor.grid_low' },
+    ] };
+    const states = toStates({ 'sensor.hp': ['1200', 'W'], 'sensor.pv': ['300', 'W'], 'sensor.grid': ['900', 'W'] });
+    let card = mount({ entities: { power: 'sensor.hp' } }, hassOf(states, {}, prefs)); await wait(20);
+    check(!card._energyMissing.length && !/no power sensor/i.test(card.shadowRoot.textContent), `a grid tariff without a power sensor does not mark the grid as missing (${JSON.stringify(card._energyMissing)})`);
+    const split = card._energySplit();
+    check(split.pv === 300 && split.grid === 900 && split.battery === 0, `the grid power of the first tariff is used (${JSON.stringify(split)})`);
+    check(src(card, 'pv') && src(card, 'grid') && !src(card, 'bat') && flows(card) === 'ef-pv,ef-grid', `a battery missing from the Energy dashboard is not drawn (${flows(card)})`);
+    card.remove();
+    const ed = document.createElement('heatpump-flow-card-editor');
+    ed.setConfig({ entities: { power: 'sensor.hp' } }); ed.hass = hassOf(states, {}, prefs); await wait(20);
+    check(!ed._energyMissing?.length, `the editor does not report the second grid tariff (${JSON.stringify(ed._energyMissing)})`);
+    ed.remove();
+    // The same power sensor behind both tariffs counts once.
+    const same = { energy_sources: [{ type: 'grid', stat_rate: 'sensor.grid' }, { type: 'grid', power_config: { stat_rate: 'sensor.grid' } }, { type: 'solar', stat_rate: 'sensor.pv' }] };
+    card = mount({ entities: { power: 'sensor.hp' } }, hassOf(states, {}, same)); await wait(20);
+    check(card._energy.grid.length === 1 && card._energySplit().grid === 900, `a power sensor shared by two grid tariffs counts once (${card._energy.grid.length})`);
+    card.remove();
+    // Two PV arrays are separate devices: one without a power sensor still makes the PV sum incomplete.
+    const arrays = { energy_sources: [{ type: 'solar', stat_rate: 'sensor.pv' }, { type: 'solar', stat_energy_from: 'sensor.pv2_energy' }, { type: 'grid', stat_rate: 'sensor.grid' }] };
+    card = mount({ entities: { power: 'sensor.hp' } }, hassOf(states, {}, arrays)); await wait(20);
+    check(card._energyMissing.includes('solar'), 'a second PV array without a power sensor still counts as missing');
+    card.remove();
+    // Manual sources: only the configured ones are drawn; a configured but unavailable one stays, dimmed.
+    const manual = toStates({ 'sensor.hp': ['1200', 'W'], 'sensor.pv': ['300', 'W'], 'sensor.grid': ['900', 'W'] });
+    card = mount({ power_sources: 'manual', entities: { power: 'sensor.hp', pv: 'sensor.pv', grid: 'sensor.grid' } }, hassOf(manual)); await wait(20);
+    check(src(card, 'pv') && src(card, 'grid') && !src(card, 'bat') && flows(card) === 'ef-pv,ef-grid', `manual: a source without an entity is not drawn (${flows(card)})`);
+    check(/300 W/.test(card.shadowRoot.getElementById('t-src-pv-v').textContent) && /900 W/.test(card.shadowRoot.getElementById('t-src-grid-v').textContent), 'manual: the drawn sources show their power');
+    card.remove();
+    card = mount({ power_sources: 'manual', entities: { power: 'sensor.hp', pv: 'sensor.pv', battery: 'sensor.gone', grid: 'sensor.grid' } }, hassOf(manual)); await wait(20);
+    check(src(card, 'bat')?.classList.contains('absent'), 'manual: a configured but unavailable source is drawn dimmed');
+    card.remove();
+  }
   {
     const s = setups[0];
     const card = mount(s.config, hassOf(toStates(s.states('heat'))));
@@ -657,7 +699,7 @@
   {
     const s = setups[0];
     const { rows, t } = await tilesOf(s, s.config.tiles);
-    check(rows.length === 7 && rows[0][0] === 'COP heating · today' && rows[6][0] === 'Electricity heating · week', `Lambda tile order (${rows.map((r) => r[0]).join(' | ')})`);
+    check(rows.length === 8 && rows[0][0] === 'COP heating · today' && rows[6][0] === 'Electricity heating · week' && rows[7][0] === 'PV surplus share of heating · today', `Lambda tile order (${rows.map((r) => r[0]).join(' | ')})`);
     check(t['COP heating · today'] === '5.05', `legacy entity as today (${t['COP heating · today']})`);
     check(t['COP heating · month'] === '4.62', `preset period entity (${t['COP heating · month']})`);
     check(t['Electricity · today'] === '5.1 kWh · 24 % PV', `energy with PV share (${t['Electricity · today']})`);
@@ -1164,6 +1206,133 @@
     o = await lux('heat', { [`sensor.${px}_status`]: 'evu' }); check(/mode-blocked|mode-idle/.test(o.mode), `Luxtronik status evu is blocked (${o.mode})`);
     o = await lux('heat', { [`select.${px}_heating_mode`]: 'Party' }); check(/party/.test(o.prog || ''), `Luxtronik heating mode Party shows the party chip (${o.prog})`);
     o = await lux('heat', { [`select.${px}_heating_mode`]: 'Holidays' }); check(/holiday/.test(o.prog || ''), `Luxtronik heating mode Holidays shows the holiday chip (${o.prog})`);
+  }
+
+  // 13d. Stiebel Eltron ISG (integration stiebel_eltron_isg): entities by translation key, hardware that is not installed left out, mode derived from the flags
+  {
+    const s = setups[15]; const reg = s.registry;
+    const hass = (scen, extra = {}) => hassOf(toStates({ ...s.states(scen), ...extra }), reg);
+    const sid = (tk) => isgId('sensor', tk); const bid = (tk) => isgId('binary_sensor', tk);
+    const r = C._resolve(s.config, hass('heat')); const e = r.entities;
+    check(HFC_PRESETS.stiebel_isg.tested !== true && r.ready && r.prefix === '', 'Stiebel ISG is detected through translation keys and marked untested');
+    check(e.compressor === bid('compressor_on') && e.defrost === bid('evaporator_defrost') && e.valve === bid('is_heating_water') && e.mode === undefined, `Stiebel ISG compressor, defrost and hot water flag, no mode entity (${e.compressor})`);
+    check(e.flow === sid('flow_temperature_wp1') && e.return === sid('return_temperature_wp1') && e.volume === sid('volume_stream_wp1') && e.outdoor === sid('outdoor_temperature'), 'Stiebel ISG heat pump 1 flow, return, flow rate and outdoor temperature');
+    check(e.power === sid('current_power_consumption') && e.dhw_top === sid('actual_temperature_water') && e.dhw_target === sid('target_temperature_water') && e.buffer_top === sid('actual_temperature_buffer'), 'Stiebel ISG power, hot water with target, buffer');
+    check(e.hc_flow === sid('actual_temperature_hk1') && e.hc_setpoint === sid('target_temperature_hk1') && e.hc_pump === bid('heating_circuit_1_pump') && e.hc_pressure === sid('heater_pressure'), 'Stiebel ISG heating circuit 1 and the system pressure');
+    check(e.room === sid('actual_room_temperature_hk1') && e.room_target === sid('target_room_temperature_hk1') && e.program === isgId('select', 'operation_mode'), 'Stiebel ISG room temperature with target and the operating mode select');
+    check(e.source_in === undefined && e.brine_pressure === undefined && e.solar_collector === undefined && e.hot_gas === sid('hot_gas_temperature_wp1') && e.circulation === bid('circulation_pump') && e.heater === bid('nhz_stages_running'),
+      'Stiebel ISG: heat source and solar collector that read unavailable are left out, refrigerant circuit, circulation pump and heater are mapped');
+    const two = C._resolve({ ...s.config, hc_count: 2 }, hass('heat')).entities;
+    check(two.hc2_flow === undefined && two.hc2_pump === undefined && two.hc2_pressure === undefined, 'Stiebel ISG: circuit 2 that reads unavailable is not mapped');
+    const two2 = C._resolve({ ...s.config, hc_count: 2 }, hass('heat', { [sid('actual_temperature_hk2')]: ['31.0', '°C'], [sid('target_temperature_hk2')]: ['30.5', '°C'] })).entities;
+    check(two2.hc2_flow === sid('actual_temperature_hk2') && two2.hc2_setpoint === sid('target_temperature_hk2') && two2.hc2_pump === bid('heating_circuit_2_pump'), 'Stiebel ISG: an installed circuit 2 is mapped');
+    check(C.getStubConfig(hass('heat')).hc_count === undefined && C.getStubConfig(hass('heat')).source_type === undefined, 'Stiebel ISG stub leaves hc_count and source_type to the user for an air installation');
+    const brine = hass('heat', { [sid('source_temperature')]: ['3.4', '°C'], [sid('source_pressure')]: ['1.8', 'bar'] });
+    check(C.getStubConfig(brine).source_type === 'brine', 'Stiebel ISG stub: a reporting heat source temperature means brine');
+    const off = C._resolve(s.config, hass('heat', { [sid('outdoor_temperature')]: 'unavailable', [sid('actual_temperature_water')]: 'unavailable', [sid('flow_temperature_wp1')]: 'unavailable' }));
+    check(off.ready === false, 'Stiebel ISG waits while no sensor reports a value');
+    const t = r.tiles;
+    check(t.energy_heating?.total === sid('consumed_heating') && t.heat_heating?.total === sid('produced_heating') && t.heat_dhw?.total === sid('produced_water_heating')
+      && t.heat_cooling === undefined && t.energy_cooling === undefined, 'Stiebel ISG tiles: counters per use, the combined sensors first');
+    check(JSON.stringify(r.errors) === JSON.stringify([bid('error_status')]) && r.controls.length === 2 && r.details.includes(sid('compressor_heating')), 'Stiebel ISG error flag, quick controls and details');
+    const isg = async (scen, extra = {}) => {
+      const card = mount(s.config, hass(scen, extra)); await wait(20);
+      const q = (id) => card.shadowRoot.getElementById(id);
+      const out = { mode: q('chip-mode').className, flow: q('t-vl')?.textContent, rl: q('t-rl')?.textContent, hc: q('t-hc')?.textContent,
+        prog: q('chip-program')?.className, err: q('chip-err').classList.contains('on'), fan: q('fan').classList.contains('on') };
+      card.remove(); return out;
+    };
+    let o = await isg('heat');
+    check(/mode-heat/.test(o.mode) && /33\.8/.test(o.flow) && /29\.4/.test(o.rl) && /28\.9/.test(o.hc) && o.fan && !o.err, `Stiebel ISG heating: VL 33.8, RL 29.4, circuit 28.9 (${JSON.stringify(o)})`);
+    o = await isg('dhw'); check(/mode-dhw/.test(o.mode), `Stiebel ISG hot water flag is hot water (${o.mode})`);
+    o = await isg('defrost'); check(/mode-defrost/.test(o.mode), `Stiebel ISG defrost flag (${o.mode})`);
+    o = await isg('idle'); check(/mode-idle/.test(o.mode) && o.err && /eco/.test(o.prog || ''), `Stiebel ISG standby with the error flag and the eco program (${JSON.stringify(o)})`);
+  }
+
+  // 13e. PV surplus mode (pv_boost): chip, heating periods of the timeline, share tile, Lambda preset
+  {
+    const s = setups[0]; const sp = 'sensor.eu08l_emgr_power_consumption_setpoint';
+    const hass = (scen, extra = {}) => hassOf(toStates({ ...s.states(scen), ...extra }), {}, null, {});
+    const chip = async (value, cfg = {}) => {
+      const card = mount({ ...s.config, ...cfg }, hass('heat', value === undefined ? {} : { [sp]: value })); await wait(20);
+      const on = card.shadowRoot.getElementById('chip-pv').classList.contains('on'); const text = card.shadowRoot.getElementById('chip-pv').textContent;
+      card.remove(); return { on, text };
+    };
+    const r = C._resolve(s.config, hass('heat'));
+    check(HFC_PRESETS.lambda.entities('eu08l', { hp: 1, dhw: 1, buffer: 1, hc: 1 }).pv_boost === sp && r.entities.pv_boost === sp, 'Lambda preset maps the E-Manager setpoint as pv_boost');
+    let o = await chip(); check(o.on && /PV surplus/.test(o.text), `a setpoint above 0 shows the PV surplus chip (${JSON.stringify(o)})`);
+    o = await chip(['0', 'W']); check(!o.on, 'a setpoint of 0 shows no chip');
+    o = await chip('unavailable'); check(!o.on, 'an unavailable entity shows no chip');
+    const bin = await (async () => {
+      const card = mount({ ...s.config, entities: { ...s.config.entities, pv_boost: 'input_boolean.heatpump_boost' } }, hass('dhw')); await wait(20);
+      const on = card.shadowRoot.getElementById('chip-pv').classList.contains('on'); card.remove(); return on;
+    })();
+    check(bin, 'a binary entity that is on shows the chip as well');
+    // timeline: heating periods split by the history of the PV entity
+    const iso = (ms) => new Date(ms).toISOString();
+    const mode = Object.keys(toStates(s.states('heat'))).find((k) => /eu08l_hp1_operating_state$/.test(k));
+    const mock = (extra) => (h) => ({ ...h, callWS: (m) => {
+      if (m.type !== 'history/history_during_period') return h.callWS(m);
+      const start = Date.parse(m.start_time); const end = m.end_time ? Date.parse(m.end_time) : Date.now(); const out = {};
+      m.entity_ids.forEach((id) => {
+        if (id === mode) out[id] = [{ state: 'STBY', last_updated: iso(start) }, { state: 'CH', last_updated: iso(start + (end - start) / 8) }, { state: 'STBY', last_updated: iso(start + (end - start) * 7 / 8) }];
+        if (id === sp) out[id] = extra(start, end);
+      });
+      return Promise.resolve(out);
+    } });
+    const pvHist = (start, end) => [{ state: '0', last_updated: iso(start) }, { state: '1800', last_updated: iso(start + (end - start) * 2 / 8) }, { state: '0', last_updated: iso(start + (end - start) * 4 / 8) }];
+    let c = mount({ ...s.config, timeline: true, timeline_marks: false }, mock(pvHist)(hass('heat'))); await wait(80);
+    const kinds = [...c.shadowRoot.querySelectorAll('#timeline .seg')].map((x) => [...x.classList].find((k) => k.startsWith('k-')));
+    check(kinds.join() === 'k-idle,k-heat,k-pv,k-heat,k-idle', `the PV surplus part of the heating period is its own period (${kinds})`);
+    check(/Heating · PV surplus/.test(c.shadowRoot.querySelector('#timeline .tl-legend').textContent), 'the legend names it');
+    c.shadowRoot.querySelectorAll('#timeline .seg')[2].dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    check(/^Heating · PV surplus · \d\d:\d\d–\d\d:\d\d · /.test(c.shadowRoot.getElementById('tl-detail').textContent), `a tap shows start, end and duration (${c.shadowRoot.getElementById('tl-detail').textContent})`);
+    c.remove();
+    c = mount({ ...s.config, timeline: true, timeline_marks: false }, mock(() => [{ state: '0', last_updated: iso(0) }])(hass('heat'))); await wait(80);
+    check(![...c.shadowRoot.querySelectorAll('#timeline .seg')].some((x) => x.classList.contains('k-pv')), 'without a PV period the timeline has no PV surplus kind');
+    c.remove();
+    // share tile: yesterday, 24 h of history, heating 6 h to 21 h of it, PV surplus 6 h to 12 h of it
+    const share = async (period) => {
+      const card = mount({ ...s.config, tiles: [`pv_boost_share:${period}`] }, mock(pvHist)(hass('heat'))); await wait(80);
+      const rows = tileRows(card); card.remove(); return rows;
+    };
+    let rows = await share('yesterday');
+    check(rows.length === 1 && rows[0][0] === 'PV surplus share of heating · yesterday' && rows[0][1] === '33 %', `share of the heating time in PV surplus mode (${JSON.stringify(rows)})`);
+    check(C._tileOptions({ ...s.config }, r, hass('heat')).options.some((x) => x.value.startsWith('pv_boost_share')), 'the editor offers the share tile where a PV surplus entity exists');
+    const vi = setups[2]; const hv = hassOf(toStates(vi.states('heat')), vi.registry);
+    check(!C._tileOptions(vi.config, C._resolve(vi.config, hv), hv).options.some((x) => x.value.startsWith('pv_boost_share')), 'no share tile without a PV surplus entity');
+  }
+
+  // 13f. valve_map: raw valve states that do not follow "on = hot water" (a zone valve with 1 = heating, 0 = hot water, #109)
+  {
+    const s = setups[5]; const reg = s.registry || {};
+    const valveId = 'sensor.panasonic_heat_pump_main_threeway_valve_state';
+    const run = async (value, cfg = {}) => {
+      const card = mount({ ...s.config, ...cfg }, hassOf(toStates({ ...s.states('heat'), [valveId]: value }), reg)); await wait(20);
+      const mode = card.shadowRoot.getElementById('chip-mode').className; card.remove(); return mode;
+    };
+    const map = { valve_map: { 0: 'dhw', 1: 'heating' } };
+    check(/mode-dhw/.test(await run('1')) && /mode-heat/.test(await run('0')), 'without a valve_map 1 means hot water, as for every binary valve');
+    check(/mode-heat/.test(await run('1', map)) && /mode-dhw/.test(await run('0', map)), 'valve_map: 1 = heating, 0 = hot water');
+    check(/mode-dhw/.test(await run('Tank', map)) && /mode-heat/.test(await run('Room', map)), 'states outside the map keep the default reading (Tank, Room)');
+    check(/mode-dhw/.test(await run('Warm', { valve_map: { warm: 'dhw' } })), 'the map is not case sensitive');
+    for (const bad of [{ 1: 'cold' }, 'dhw', ['dhw']]) {
+      let threw = false; try { mount({ ...s.config, valve_map: bad }, hassOf(toStates(s.states('heat')), reg)); } catch (e) { threw = /valve_map/.test(e.message); }
+      check(threw, `invalid valve_map rejected ${JSON.stringify(bad)}`);
+    }
+    // timeline without a mode entity: compressor and valve
+    const ids = C._resolve(s.config, hassOf(toStates(s.states('heat')), reg)).entities;
+    const iso = (h) => new Date(Date.now() - h * 3600000).toISOString();
+    const hist = (cfg) => async () => {
+      const card = mount({ ...s.config, timeline: true, ...cfg }, ((h) => ({ ...h, callWS: (m) => (m.type === 'history/history_during_period' ? Promise.resolve({
+        [ids.compressor]: [{ state: '40', last_updated: iso(24) }],
+        [ids.valve]: [{ state: '1', last_updated: iso(24) }, { state: '0', last_updated: iso(12) }],
+      }) : h.callWS(m)) }))(hassOf(toStates(s.states('heat')), reg))); await wait(80);
+      const kinds = [...card.shadowRoot.querySelectorAll('#timeline .seg')].map((x) => [...x.classList].find((k) => k.startsWith('k-'))); card.remove(); return kinds.join();
+    };
+    const plain = await hist({})(); const mapped = await hist(map)();
+    check(plain === 'k-heat' || plain === 'k-heat,k-heat', `timeline without a map: only "on" and Tank count as hot water (${plain})`);
+    check(mapped === 'k-heat,k-dhw', `timeline with valve_map: 1 = heating for 12 h, then 0 = hot water (${mapped})`);
   }
 
   // 14. outdoor unit drawings: style per preset, manufacturer variants, fans and snowflakes, loop symbol for ground sources
@@ -2202,7 +2371,7 @@
     check(Object.entries(HFC_PRESETS).filter(([, p]) => p.primary_pump).map(([k]) => k).sort().join() === 'heishamon,kronoterm,samsung', 'presets with a primary pump: HeishaMon, Kronoterm, Samsung');
   }
 
-  // 18o. hot-water standby loss (#32): cool-down in K/h only in verified standby windows, charging and draw-off excluded
+  // 18p. hot-water standby loss (#32): cool-down in K/h only in verified standby windows, charging and draw-off excluded
   {
     const H = 3600000; const end = Date.now(); const start = end - 48 * H;
     // Temperature points every 12 minutes from `from` to `to` hours ago, falling by `rate` K/h (0.1 K resolution).
@@ -2247,7 +2416,25 @@
     // History that starts late: the time before the first state is unknown.
     r = loss({ 'binary_sensor.comp': [[10, 'off']], 'binary_sensor.valve': [[10, 'off']] });
     check(r && Math.abs(r.hours - 10) < 0.01, `time before the first known state is not used (${JSON.stringify(r)})`);
+    // A draw-off within 30 minutes of the first sample: 50 to 45 degrees after 20 minutes, then constant. It must not count as loss.
+    r = loss({ 'sensor.top': [[48, '50.0'], [47.67, '45.0'], [24, '45.0']], 'sensor.bottom': [[48, '40.0'], [47.67, '40.0']] });
+    check(r === null || r.rate < 0.03, `a draw-off right at the start of the history is not a loss (${JSON.stringify(r)})`);
+    // Unknown running signals: the compressor on while the valve is unavailable could be a hot-water run.
+    r = loss({ 'binary_sensor.comp': [[48, 'on'], [46, 'off'], [30, 'on'], [29, 'off']], 'binary_sensor.valve': [[48, 'on'], [46, 'off'], [30, 'unavailable'], [29, 'off']] });
+    check(near(r, 0.4) && r.windows === 2, `an unavailable valve while the compressor runs is excluded (${JSON.stringify(r)})`);
+    // The compressor has no history at all, the valve has: nothing can be verified.
+    r = loss({ 'binary_sensor.comp': [] });
+    check(r === null, `a running signal without history gives no value (${JSON.stringify(r)})`);
     card.remove();
+    // A thermostat as the tank sensor keeps its temperature in an attribute, so the tile is not offered for it.
+    const thermo = mount({ entities: { flow: 'sensor.f', compressor: 'binary_sensor.comp', valve: 'binary_sensor.valve', dhw_top: 'climate.tank' } },
+      hassOf(toStates({ 'sensor.f': ['35', '°C'], 'binary_sensor.comp': 'off', 'binary_sensor.valve': 'off', 'climate.tank': { state: 'heat', attributes: { current_temperature: 48 } } }))); await wait(20);
+    check(!thermo._tilePeriods('dhw_loss').length, 'a thermostat as the top tank sensor: the loss tile is not offered');
+    thermo.remove();
+    const mixed = mount({ entities: { flow: 'sensor.f', compressor: 'binary_sensor.comp', valve: 'binary_sensor.valve', dhw_top: 'sensor.top', dhw_bottom: 'climate.tank' } },
+      hassOf(toStates({ 'sensor.f': ['35', '°C'], 'binary_sensor.comp': 'off', 'binary_sensor.valve': 'off', 'sensor.top': ['40', '°C'], 'climate.tank': { state: 'heat', attributes: { current_temperature: 38 } } }))); await wait(20);
+    check(mixed._tilePeriods('dhw_loss').join() === 'now' && mixed._lossIds().temps.join() === 'sensor.top', 'a thermostat below a plain top sensor is left out of the measurement');
+    mixed.remove();
     // Tile: needs a tank sensor and a running signal; reads the history and shows K/h.
     const st = toStates({ 'sensor.f': ['35', '°C'], 'binary_sensor.comp': 'off', 'binary_sensor.valve': 'off', 'sensor.top': ['33.6', '°C'] });
     const setup = { states: () => ({}), history: Object.fromEntries(Object.entries(base).filter(([id]) => id !== 'switch.rod' && id !== 'sensor.bottom')) };

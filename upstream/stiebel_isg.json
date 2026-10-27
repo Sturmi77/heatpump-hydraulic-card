@@ -1,0 +1,22 @@
+{
+  "preset": "stiebel_isg",
+  "reviewed": {
+    "date": "2026-10-27",
+    "version": "2026.9",
+    "note": "Built from the 2026.9 source, no installation."
+  },
+  "sources": [
+    {
+      "repo": "pail23/stiebel_eltron_isg_component",
+      "branch": "main",
+      "paths": [
+        "custom_components/stiebel_eltron_isg/const.py",
+        "custom_components/stiebel_eltron_isg/sensor.py",
+        "custom_components/stiebel_eltron_isg/binary_sensor.py",
+        "custom_components/stiebel_eltron_isg/select.py",
+        "custom_components/stiebel_eltron_isg/number.py",
+        "custom_components/stiebel_eltron_isg/strings.json"
+      ]
+    }
+  ]
+}
