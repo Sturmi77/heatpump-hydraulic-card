@@ -207,7 +207,9 @@ template:
         state: "{{ states('sensor.inverter_battery_power') | float(0) * -1 }}"
 ```
 
-For automatic detection, each configured Energy-dashboard source needs a power sensor (`stat_rate`), not only a kWh counter. The card and editor name sources that are missing one. If exactly one configured source has no usable live power, its displayed share is the remainder between heat-pump power and the known sources.
+For automatic detection, each configured Energy-dashboard source needs a power sensor (`stat_rate`), not only a kWh counter. Several grid sources (for example two tariffs on one meter) are covered by one power sensor on any of them; several PV arrays or batteries need one each. The card and editor name sources that are missing one. If exactly one configured source has no usable live power, its displayed share is the remainder between heat-pump power and the known sources.
+
+Only the sources the installation has are drawn: without a battery entity (manual) or a battery in the Energy dashboard, the schematic shows PV and grid only. A configured source whose sensor is unavailable stays visible, dimmed.
 
 ### Viessmann Vitocal (ViCare) – untested, feedback welcome
 ```yaml

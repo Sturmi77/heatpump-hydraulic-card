@@ -544,6 +544,48 @@
       `editor explains a missing Energy-dashboard power sensor (${JSON.stringify(ed._energyMissing)} / ${ed.textContent.trim()})`);
     card.remove(); ed.remove();
   }
+
+  // 6a. power sources the installation has (#102, #103): absent sources are left out, grid tariffs share one power sensor
+  {
+    const src = (c, id) => c.shadowRoot.getElementById(`src-${id}`);
+    const flows = (c) => [...c.shadowRoot.querySelectorAll('.eflow')].map((e) => e.id).join();
+    // Two grid tariffs, only the first has a power sensor; no battery in the Energy dashboard.
+    const prefs = { energy_sources: [
+      { type: 'solar', stat_rate: 'sensor.pv' },
+      { type: 'grid', stat_energy_from: 'sensor.grid_high', power_config: { stat_rate: 'sensor.grid' } },
+      { type: 'grid', stat_energy_from: 'sensor.grid_low' },
+    ] };
+    const states = toStates({ 'sensor.hp': ['1200', 'W'], 'sensor.pv': ['300', 'W'], 'sensor.grid': ['900', 'W'] });
+    let card = mount({ entities: { power: 'sensor.hp' } }, hassOf(states, {}, prefs)); await wait(20);
+    check(!card._energyMissing.length && !/no power sensor/i.test(card.shadowRoot.textContent), `a grid tariff without a power sensor does not mark the grid as missing (${JSON.stringify(card._energyMissing)})`);
+    const split = card._energySplit();
+    check(split.pv === 300 && split.grid === 900 && split.battery === 0, `the grid power of the first tariff is used (${JSON.stringify(split)})`);
+    check(src(card, 'pv') && src(card, 'grid') && !src(card, 'bat') && flows(card) === 'ef-pv,ef-grid', `a battery missing from the Energy dashboard is not drawn (${flows(card)})`);
+    card.remove();
+    const ed = document.createElement('heatpump-flow-card-editor');
+    ed.setConfig({ entities: { power: 'sensor.hp' } }); ed.hass = hassOf(states, {}, prefs); await wait(20);
+    check(!ed._energyMissing?.length, `the editor does not report the second grid tariff (${JSON.stringify(ed._energyMissing)})`);
+    ed.remove();
+    // The same power sensor behind both tariffs counts once.
+    const same = { energy_sources: [{ type: 'grid', stat_rate: 'sensor.grid' }, { type: 'grid', power_config: { stat_rate: 'sensor.grid' } }, { type: 'solar', stat_rate: 'sensor.pv' }] };
+    card = mount({ entities: { power: 'sensor.hp' } }, hassOf(states, {}, same)); await wait(20);
+    check(card._energy.grid.length === 1 && card._energySplit().grid === 900, `a power sensor shared by two grid tariffs counts once (${card._energy.grid.length})`);
+    card.remove();
+    // Two PV arrays are separate devices: one without a power sensor still makes the PV sum incomplete.
+    const arrays = { energy_sources: [{ type: 'solar', stat_rate: 'sensor.pv' }, { type: 'solar', stat_energy_from: 'sensor.pv2_energy' }, { type: 'grid', stat_rate: 'sensor.grid' }] };
+    card = mount({ entities: { power: 'sensor.hp' } }, hassOf(states, {}, arrays)); await wait(20);
+    check(card._energyMissing.includes('solar'), 'a second PV array without a power sensor still counts as missing');
+    card.remove();
+    // Manual sources: only the configured ones are drawn; a configured but unavailable one stays, dimmed.
+    const manual = toStates({ 'sensor.hp': ['1200', 'W'], 'sensor.pv': ['300', 'W'], 'sensor.grid': ['900', 'W'] });
+    card = mount({ power_sources: 'manual', entities: { power: 'sensor.hp', pv: 'sensor.pv', grid: 'sensor.grid' } }, hassOf(manual)); await wait(20);
+    check(src(card, 'pv') && src(card, 'grid') && !src(card, 'bat') && flows(card) === 'ef-pv,ef-grid', `manual: a source without an entity is not drawn (${flows(card)})`);
+    check(/300 W/.test(card.shadowRoot.getElementById('t-src-pv-v').textContent) && /900 W/.test(card.shadowRoot.getElementById('t-src-grid-v').textContent), 'manual: the drawn sources show their power');
+    card.remove();
+    card = mount({ power_sources: 'manual', entities: { power: 'sensor.hp', pv: 'sensor.pv', battery: 'sensor.gone', grid: 'sensor.grid' } }, hassOf(manual)); await wait(20);
+    check(src(card, 'bat')?.classList.contains('absent'), 'manual: a configured but unavailable source is drawn dimmed');
+    card.remove();
+  }
   {
     const s = setups[0];
     const card = mount(s.config, hassOf(toStates(s.states('heat'))));
