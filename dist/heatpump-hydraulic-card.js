@@ -640,9 +640,10 @@ const HFC_PRESETS = {
         valve: s('3_way_diverter_valve_htg_dhw'),
         heater: s('electric_booster_heater'),
         dhw_top: s('dhw_temperature'),
-        // wolf_smartset binds set_dhw_temperature_adjusted to the read-only "Warmwassersolltemperatur" (10 °C on the reference
-        // installation) and the setting "Warmwassersolltemperatur eingestellt" to the number set_dhw_temperature, the reverse of wolflink.
-        dhw_target: sm ? [ctx.key('wolf_smartset', 'number', 'set_dhw_temperature'), s('set_dhw_temperature_adjusted')] : s('set_dhw_temperature_adjusted'),
+        // wolf_smartset: the sensor set_dhw_temperature_adjusted ("Warmwassersolltemperatur") is the effective DHW target; it follows the
+        // DHW status and drops to 10 °C (frost protection) while hot water is off. The number set_dhw_temperature ("Warmwassersolltemperatur
+        // eingestellt") holds the configured value around the clock and is the fallback. The keys are bound the reverse way from wolflink.
+        dhw_target: sm ? [s('set_dhw_temperature_adjusted'), ctx.key('wolf_smartset', 'number', 'set_dhw_temperature')] : s('set_dhw_temperature_adjusted'),
         hc_flow: hc(s('flow_temperature')),
         // In wolf_smartset "Ausgang MKP" duplicates "Mischerkreispumpe" and starts disabled, so the pump of the system tab comes first.
         hc_pump: hc(sm ? [s('mixer_circuit_pump'), s('mkp_mixer_circuit_pump')] : s('mkp_mixer_circuit_pump')),

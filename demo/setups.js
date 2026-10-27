@@ -262,8 +262,8 @@ const wolfSmartsetStates = (s) => ({
   'sensor.heizgerat_aussentemperatur_heizung': ['4.5', '°C'], 'sensor.bedienmodul_bm_2_0_gemittelte_aussentemperatur': ['5.2', '°C'],
   'sensor.heizgerat_3_wege_umschaltventil_hz_ww': s === 'dhw' ? 'Warmwasser' : 'Heizen', 'sensor.heizgerat_3_wege_umschaltventil_hz_k': 'Heizen',
   'sensor.heizgerat_e_heizung': 'Aus',
-  // "Warmwassersolltemperatur" (read-only) reads 10 °C on the reference installation; the setting is the number below.
-  'sensor.heizgerat_warmwassertemperatur': [s === 'dhw' ? '44' : '47', '°C'], 'sensor.heizgerat_warmwassersolltemperatur': ['10', '°C'],
+  // "Warmwassersolltemperatur" (read-only) is the effective DHW target: 48 °C while hot water is on or ready, 10 °C only while the DHW status is Aus.
+  'sensor.heizgerat_warmwassertemperatur': [s === 'dhw' ? '44' : '47', '°C'], 'sensor.heizgerat_warmwassersolltemperatur': ['48', '°C'],
   'sensor.wolf_cha_warmwasser_status': s === 'dhw' ? 'Ein' : 'Bereit, keine Ladung',
   'sensor.bedienmodul_bm_2_0_vorlauftemperatur': ['30.1', '°C'],
   'sensor.bedienmodul_bm_2_0_mischerkreis_status': s === 'idle' ? 'AT Abschaltung' : 'Heizbetrieb',
