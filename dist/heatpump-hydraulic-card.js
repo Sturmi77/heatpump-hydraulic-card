@@ -1013,7 +1013,7 @@ const HFC_I18N = {
       hours: 'Compressor hours', hours_per_start: 'Runtime per start', load_classes: 'Load classes 1-5', aux_hours: 'Heater hours', aux_starts: 'Heater starts',
       spread: 'Spread', volume: 'Flow rate', heat_estimated: 'Heat output', power: 'Power', heat_live: 'Heat output', compressor_speed: 'Compressor',
       source_spread: 'Source spread', outdoor: 'Outdoor', dhw_top: 'DHW tank', room: 'Room', brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', pv_share: 'PV share today',
-      pv_production: 'PV yield', solar_thermal: 'Solar thermal', cost: 'Cost',
+      pv_production: 'PV yield', solar_thermal: 'Solar thermal', cost: 'Cost', dhw_loss: 'DHW standby loss',
     },
     periods: { now: 'now', today: 'today', yesterday: 'yesterday', week: 'week', month: 'month', year: 'year', total: 'total' },
     modes: {
@@ -1053,7 +1053,7 @@ const HFC_I18N = {
       hours: 'Verdichterstunden', hours_per_start: 'Laufzeit pro Start', load_classes: 'Lastklassen 1-5', aux_hours: 'Heizstab-Stunden', aux_starts: 'Heizstab-Starts',
       spread: 'Spreizung', volume: 'Volumenstrom', heat_estimated: 'Wärmeleistung', power: 'Leistung', heat_live: 'Wärmeleistung', compressor_speed: 'Verdichter',
       source_spread: 'Spreizung Quelle', outdoor: 'Außen', dhw_top: 'WW-Speicher', room: 'Raum', brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', pv_share: 'PV-Anteil heute',
-      pv_production: 'PV-Ertrag', solar_thermal: 'Solarthermie', cost: 'Kosten',
+      pv_production: 'PV-Ertrag', solar_thermal: 'Solarthermie', cost: 'Kosten', dhw_loss: 'WW-Standbyverlust',
     },
     periods: { now: 'aktuell', today: 'heute', yesterday: 'gestern', week: 'Woche', month: 'Monat', year: 'Jahr', total: 'gesamt' },
     modes: {
@@ -1300,7 +1300,11 @@ const HFC_TILES = {
   pv_share: { live: true },
   pv_production: { kind: 'energy' }, solar_thermal: { kind: 'energy' },
   cost: { kind: 'cost', periods: ['today', 'yesterday', 'week', 'month', 'year', 'total'] },
+  dhw_loss: { kind: 'loss', periods: ['now'], noSuffix: true },
 };
+// Standby loss of the hot-water tank: history window, minimum standby window, settling time after charging or draw-off,
+// and the temperature changes within 30 minutes that count as draw-off or as heating the card cannot explain.
+const HFC_LOSS = { hours: 48, minWindow: 3, settle: 0.5, drawOff: 1.5, rise: 1.0 };
 
 /* ------------------------------------------------------------------ */
 /* Card                                                                */
@@ -2525,6 +2529,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (def.live) return period === 'now' && this._liveAvail(key) ? { live: true } : null;
     if (def.kind === 'classes') return period === 'total' && this._tileMap.load_class1 ? { classes: true } : null;
     if (def.kind === 'cost') return this._tileSource('energy', period) ? { cost: true } : null;
+    if (def.kind === 'loss') return period === 'now' && this._lossIds() ? { loss: true } : null;
     const map = this._tileMap[key] || {};
     // The entities of the default tiles (cop_heating_today …) count as "today", unless the preset maps them to another period.
     const legacy = def.legacy && this._has(def.legacy) ? this._e[def.legacy] : null;
@@ -2692,6 +2697,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (src.envCop) return this._tileEntity(src.envCop[0], period);
     if (src.classes) return this._tileMap.load_class1;
     if (src.cost) return this._tileEntity(this._tileSource('energy', period), period);
+    if (src.loss) return this._lossIds()?.temps[0] || '';
     return '';
   }
 
@@ -2713,6 +2719,7 @@ class HeatpumpFlowCard extends HTMLElement {
         return `${approx ? '≈' : ''}${v.toLocaleString(this._hass.locale?.language || this._lang, { style: 'currency', currency, minimumFractionDigits: dec(2), maximumFractionDigits: dec(2) })}`;
       } catch (err) { return `${approx ? '≈' : ''}${out(v, 2, currency)}`; }
     }
+    if (src.loss) { const loss = this._dhwLossNow(); return loss ? out(loss.rate, 2, 'K/h') : '–'; }
     const v = this._srcValue(src, def.kind, period);
     const approx = src.ratio || src.envCop ? '≈' : '';
     if (def.kind === 'cop') return Number.isFinite(v) ? `${approx}${this._fmt(v, dec(2))}` : '–';
@@ -3123,6 +3130,89 @@ class HeatpumpFlowCard extends HTMLElement {
     this._ring = r;
   }
   _hideRing() { if (this._ring) { this._ring.remove(); this._ring = null; } }
+
+  /* ---------- standby loss of the hot-water tank ---------- */
+  // The tank sensors (the uppermost is measured, all of them detect draw-off) and what tells charging from standby:
+  // the operating mode or the compressor with the valve, plus the DHW heater rod and the solar pump. Without a running
+  // signal no standby window can be verified, so there is no value.
+  _lossIds() {
+    const temps = ['dhw_top', 'dhw_middle', 'dhw_bottom'].filter((k) => this._has(k)).map((k) => this._e[k]);
+    const run = this._timelineIds();
+    if (!temps.length || !run) return null;
+    return { temps, run, extra: ['dhw_heater', 'solar_pump'].filter((k) => this._has(k)).map((k) => this._e[k]) };
+  }
+
+  // Loss over the last HFC_LOSS.hours from the recorder history, cached like the other recorder queries.
+  _dhwLossNow() {
+    const ids = this._lossIds();
+    if (!ids) return null;
+    const list = [...new Set([...ids.temps, ...Object.values(ids.run).filter(Boolean), ...ids.extra])];
+    const end = Date.now(); const start = end - HFC_LOSS.hours * 3600000;
+    const hist = this._wsCached(`dhwloss|${list.join(',')}`, {
+      type: 'history/history_during_period', start_time: new Date(start).toISOString(), entity_ids: list,
+      minimal_response: true, no_attributes: true, significant_changes_only: false,
+    }, (res) => this._timelineHistory(res, list));
+    if (!hist) return null;
+    // The history changes every five minutes; the analysis runs once per history.
+    if (this._lossMemo?.hist !== hist) this._lossMemo = { hist, v: this._dhwLoss(hist, ids, start, end) };
+    return this._lossMemo.v;
+  }
+
+  // Cool-down of the tank in K/h from verified standby windows only. Excluded, each with a settling time: hot-water operation,
+  // heater rod or solar pump not clearly off, unknown states, draw-off (a sensor drops HFC_LOSS.drawOff K within 30 minutes)
+  // and heating the card cannot explain (a rise of HFC_LOSS.rise K). Every remaining window of at least HFC_LOSS.minWindow
+  // hours gets a linear fit of the uppermost sensor; the result is the mean slope weighted by window length.
+  // Returns { rate, hours, windows, temp } or null without a window.
+  _dhwLoss(hist, ids, start, end) {
+    const H = 3600000; const settle = HFC_LOSS.settle * H; const half = H / 2;
+    const busy = [];
+    // Hot-water operation and gaps from the same segments as the timeline; time before the first state is unknown.
+    const segs = this._timelineSegments(hist, ids.run, start, end);
+    if (!segs.length) return null;
+    if (segs[0].from > start) busy.push([start, segs[0].from]);
+    segs.forEach((s) => { if (s.kind === 'dhw' || s.kind === 'gap') busy.push([s.from, s.to + settle]); });
+    const off = (s) => ['off', 'false', 'aus', 'idle', 'standby'].includes(String(s).toLowerCase()) || parseFloat(s) === 0;
+    ids.extra.forEach((id) => {
+      const list = hist[id] || [];
+      if (!list.length || list[0].t > start) busy.push([start, list.length ? list[0].t : end]);
+      list.forEach((e, n) => { if (!off(e.s)) busy.push([e.t, (list[n + 1]?.t ?? end) + settle]); });
+    });
+    const series = ids.temps.map((id) => (hist[id] || []).map((e) => ({ t: e.t, v: parseFloat(e.s) })));
+    series.forEach((list) => {
+      if (!list.length || list[0].t > start) busy.push([start, list.length ? list[0].t : end]);
+      let j = 0;
+      list.forEach((e, n) => {
+        if (!Number.isFinite(e.v)) { busy.push([e.t, (list[n + 1]?.t ?? end) + settle]); return; }
+        // The value held 30 minutes earlier, found with a pointer that only moves forward.
+        while (j + 1 < n && list[j + 1].t <= e.t - half) j++;
+        const before = list[j].t <= e.t - half ? list[j].v : NaN;
+        if (before - e.v >= HFC_LOSS.drawOff || e.v - before >= HFC_LOSS.rise) busy.push([e.t - half - settle, e.t + settle]);
+      });
+    });
+    // Free windows between the merged busy intervals.
+    busy.sort((a, b) => a[0] - b[0]);
+    const free = []; let t = start;
+    busy.forEach(([from, to]) => { if (from > t) free.push([t, Math.min(from, end)]); t = Math.max(t, to); });
+    if (t < end) free.push([t, end]);
+    const measured = series[0];
+    let weight = 0; let sum = 0; let temps = 0; let samples = 0; let windows = 0;
+    free.filter(([from, to]) => to - from >= HFC_LOSS.minWindow * H).forEach(([from, to]) => {
+      // Sample the held value every ten minutes and fit a line (K per hour).
+      const pts = []; let k = 0;
+      for (let at = from; at <= to; at += 600000) {
+        while (k + 1 < measured.length && measured[k + 1].t <= at) k++;
+        if (measured[k] && measured[k].t <= at && Number.isFinite(measured[k].v)) pts.push([(at - from) / H, measured[k].v]);
+      }
+      if (pts.length < 4) return;
+      const mx = pts.reduce((a, p) => a + p[0], 0) / pts.length; const my = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+      const slope = pts.reduce((a, p) => a + (p[0] - mx) * (p[1] - my), 0) / pts.reduce((a, p) => a + (p[0] - mx) ** 2, 0);
+      // A tank does not warm up in standby: a rising fit means an unknown heat source, so the window is not used.
+      if (!(slope <= 0.05)) return;
+      const len = (to - from) / H;
+      weight += len; sum += Math.max(-slope, 0) * len; temps += my * pts.length; samples += pts.length; windows++;
+    });
+    return windows ? { rate: sum / weight, hours: weight, windows, temp: temps / samples } : null;
+  }
 
   /* ---------- timeline of the operating mode ---------- */
   // Entities whose history tells what the heat pump did: the operating mode, else the compressor (and the valve for hot water).
