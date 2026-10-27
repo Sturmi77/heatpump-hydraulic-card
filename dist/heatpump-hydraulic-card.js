@@ -404,42 +404,50 @@ const HFC_PRESETS = {
     name: 'Vaillant (myPyllant)',
     index: { hc: 0, dhw: 0 },
     unit_style: 'vaillant',
+    // Home Assistant adds a number (_2) to an entity id that was already taken: the home name stands before the name of
+    // the entity, and a trailing number is not part of it.
     detect: (ctx) => {
-      const id = ctx.match(/^sensor\.(.+)_energy_manager_state$/, 'mypyllant')
-        || ctx.match(/^sensor\.(.+)_system_flow_temperature$/, 'mypyllant');
-      return id === undefined ? undefined : id.replace(/^sensor\./, '').replace(/_(energy_manager_state|system_flow_temperature)$/, '');
+      const id = ctx.match(/^sensor\.(.+)_energy_manager_state(?:_\d+)?$/, 'mypyllant')
+        || ctx.match(/^sensor\.(.+)_system_flow_temperature(?:_\d+)?$/, 'mypyllant');
+      return id === undefined ? undefined : id.replace(/^sensor\./, '').replace(/_(energy_manager_state|system_flow_temperature)(?:_\d+)?$/, '');
     },
     entities: (p, i, ctx) => {
-      const s = `sensor.${p}`;
       const m = (re) => ctx.match(re, 'mypyllant');
+      // The exact id first; if it does not exist, the entity of that name that carries a number (_2).
+      const e = (name) => {
+        const exact = `sensor.${p}_${name}`;
+        return ctx.state(exact) !== undefined ? exact : (m(new RegExp(`^sensor\\.${p}_${name}_\\d+$`)) || exact);
+      };
       return {
-        mode: `${s}_energy_manager_state`,
-        flow: `${s}_system_flow_temperature`,
-        outdoor: `${s}_outdoor_temperature`,
-        power: m(new RegExp(`^sensor\\.${p}_device_\\d+.*_current_power$`)),
-        dhw_top: [`${s}_domestic_hot_water_${i.dhw}_tank_temperature`, `${s}_top_dhw_cylinder_temperature`],
-        dhw_bottom: `${s}_bottom_dhw_cylinder_temperature`,
-        dhw_target: `${s}_domestic_hot_water_${i.dhw}_setpoint`,
-        buffer_top: `${s}_top_central_heating_cylinder_temperature`,
-        buffer_bottom: `${s}_bottom_central_heating_cylinder_temperature`,
-        hc_flow: `${s}_circuit_${i.hc}_current_flow_temperature`,
-        hc_setpoint: `${s}_circuit_${i.hc}_flow_temperature_setpoint`,
-        hc_mode: `${s}_circuit_${i.hc}_state`,
-        room: m(new RegExp(`^sensor\\.${p}_zone_.+_current_temperature$`)),
-        room_target: m(new RegExp(`^sensor\\.${p}_zone_.+_desired_temperature$`)),
-        program: m(new RegExp(`^sensor\\.${p}_zone_.+_current_special_function$`)),
-        cop_heating_today: m(new RegExp(`^sensor\\.${p}.*_heating_energy_efficiency$`)),
+        mode: e('energy_manager_state'),
+        flow: e('system_flow_temperature'),
+        outdoor: e('outdoor_temperature'),
+        power: m(new RegExp(`^sensor\\.${p}_device_\\d+.*_current_power(?:_\\d+)?$`)),
+        dhw_top: [e(`domestic_hot_water_${i.dhw}_tank_temperature`), e('top_dhw_cylinder_temperature')],
+        dhw_bottom: e('bottom_dhw_cylinder_temperature'),
+        dhw_target: e(`domestic_hot_water_${i.dhw}_setpoint`),
+        buffer_top: e('top_central_heating_cylinder_temperature'),
+        buffer_bottom: e('bottom_central_heating_cylinder_temperature'),
+        hc_flow: e(`circuit_${i.hc}_current_flow_temperature`),
+        hc_setpoint: e(`circuit_${i.hc}_flow_temperature_setpoint`),
+        hc_mode: e(`circuit_${i.hc}_state`),
+        // The room comes from the zone sensors; an installation with only the zone thermostat (climate) uses its
+        // current temperature and its target.
+        room: [m(new RegExp(`^sensor\\.${p}_zone_.+_current_temperature(?:_\\d+)?$`)), m(new RegExp(`^climate\\.${p}_zone_[^.]+$`))],
+        room_target: [m(new RegExp(`^sensor\\.${p}_zone_.+_desired_temperature(?:_\\d+)?$`)), m(new RegExp(`^climate\\.${p}_zone_[^.]+$`))],
+        program: m(new RegExp(`^sensor\\.${p}_zone_.+_current_special_function(?:_\\d+)?$`)),
+        cop_heating_today: m(new RegExp(`^sensor\\.${p}.*_heating_energy_efficiency(?:_\\d+)?$`)),
       };
     },
     // Daily energy per device and mode ("Consumed Electrical Energy Heating", "Heat Generated Domestic Hot Water" …).
     tiles: (p, i, ctx) => {
-      const d = (suffix) => ctx.match(new RegExp(`^sensor\\.${p}_device_\\d+.*_${suffix}$`), 'mypyllant');
+      const d = (suffix) => ctx.match(new RegExp(`^sensor\\.${p}_device_\\d+.*_${suffix}(?:_\\d+)?$`), 'mypyllant');
       return {
         energy_heating: { today: d('consumed_electrical_energy_heating') }, energy_dhw: { today: d('consumed_electrical_energy_domestic_hot_water') },
         heat_heating: { today: d('heat_generated_heating') }, heat_dhw: { today: d('heat_generated_domestic_hot_water') },
       };
     },
-    errors: (p, i, ctx) => [ctx.match(new RegExp(`^binary_sensor\\.${p}.*_trouble_codes$`), 'mypyllant')].filter(Boolean),
+    errors: (p, i, ctx) => [ctx.match(new RegExp(`^binary_sensor\\.${p}.*_trouble_codes(?:_\\d+)?$`), 'mypyllant')].filter(Boolean),
     mode_map: { STANDBY: 'idle', DHW: 'dhw', HEATING: 'heating', COOLING: 'cooling' },
     hc_mode_map: { HEATING: 'heating', COOLING: 'cooling', STANDBY: 'idle' },
     stat_labels: { cop_heating_today: { de: 'Effizienz Heizen', en: 'Heating efficiency' } },
@@ -2319,8 +2327,9 @@ class HeatpumpFlowCard extends HTMLElement {
       buffer,
       // A series buffer sits in the return; a parallel buffer (with its own sensors) wins.
       series: !!this._config.series_buffer && !buffer && (this._noBypass() ? 'fixed' : 'valve'),
-      // A direct system still has a circuit: use the heat-pump flow/return when no circuit-specific sensors exist.
-      hc: this._has('hc_flow') || this._has('hc_mode') || this._has('hc_pump') || (!buffer && (this._has('flow') || this._has('return'))),
+      // Circuit 1 exists wherever the heat loop is drawn, without a sensor of its own: it hangs on the buffer (whose temperature
+      // it shows as its flow), or on the heat pump's flow and return in a direct system.
+      hc: this._has('hc_flow') || this._has('hc_mode') || this._has('hc_pump') || buffer || this._has('flow') || this._has('return'),
       house: this._has('room') || this._has('room_target'),
       circ: this._has('circulation'),
       primaryPump: this._primaryPump(),
