@@ -25,6 +25,8 @@ const HFC_SCRIPT_URL = (() => {
 //   error_ok                   → text states that mean "no error"; any other known text shows the chip
 //   tiles(prefix, idx, ctx)    → { tile: { period: entity_id | [candidates…] } } for the stat tile catalog (HFC_TILES);
 //                                a "total" counter with long-term statistics also gives today, yesterday, week, month and year
+//   dynamic                    → true when entities() maps parts by their readings (ctx.state): the card resolves again every
+//                                minute and rebuilds when a mapping appears, so parts that report late are not lost
 //   *_mode_map                 → raw state → normalized mode
 //   valve_map                  → raw state of the `valve` entity → dhw | heating (default: on, Tank, DHW … mean hot water)
 // ctx.key(platform, domain, translation_key) finds entities via the entity registry (language-independent),
@@ -765,6 +767,8 @@ const HFC_PRESETS = {
   // buffer is not exposed, so neither is mapped.
   luxtronik: {
     name: 'Luxtronik (Alpha Innotec, Novelan, Roth …)',
+    // A mixing circuit counts when its sensors report: the card looks again every minute for circuits that report late.
+    dynamic: true,
     auto_circuits: false,
     detect: (ctx) => (ctx.key('luxtronik2', 'sensor', 'status') || ctx.key('luxtronik2', 'sensor', 'flow_in_temperature') ? '' : undefined),
     entities: (p, i, ctx) => {
@@ -840,6 +844,8 @@ const HFC_PRESETS = {
   // derives the mode from the compressor, the defrost flag and the hot water flag; cooling is not shown.
   stiebel_isg: {
     name: 'Stiebel Eltron ISG (WPM, LWZ) / Tecalor',
+    // Optional parts are mapped by their readings: the card looks again every minute for parts that report late.
+    dynamic: true,
     auto_circuits: false,
     source_type: (e) => (e.source_in || e.brine_pressure ? 'brine' : 'air'),
     detect: (ctx) => (['outdoor_temperature', 'actual_temperature_water', 'flow_temperature'].some((tk) => ctx.key('stiebel_eltron_isg', 'sensor', tk)) ? '' : undefined),
@@ -1510,8 +1516,10 @@ class HeatpumpFlowCard extends HTMLElement {
 
   // Form schema. With a config, circuit fields and groups are limited to hc_count.
   static _formSchema(config, tiles) {
-    const lang = (document.querySelector('home-assistant')?.hass?.locale?.language || navigator.language || 'en').slice(0, 2);
-    const L = hfcBuiltin(HFC_EDITOR, lang);
+    // The full locale first (pt-br), then its language (pt), like the card does; each table has its own set of languages.
+    const locale = String(document.querySelector('home-assistant')?.hass?.locale?.language || navigator.language || 'en').toLowerCase().replace('_', '-');
+    const langIn = (table) => (locale in table ? locale : locale.split('-')[0]);
+    const L = hfcBuiltin(HFC_EDITOR, langIn(HFC_EDITOR));
     const hcCount = config ? hfcHcCount(config) : HFC_MAX_HC;
     const customLanguages = Object.keys(config?.texts || {}).filter((v) => !(v in HFC_LANGUAGES));
     const languageOptions = [{ value: 'auto', label: 'Auto' },
@@ -1595,7 +1603,7 @@ class HeatpumpFlowCard extends HTMLElement {
       ],
       // Keys of circuits 2 to 6 reuse the labels of circuit 1 (hc2_flow → hc_flow, hc2_room → room).
       computeLabel: (s) => L[s.name] || L[String(s.name).replace(/^hc[2-6]_/, 'hc_')] || L[String(s.name).replace(/^hc[2-6]_/, '')]
-        || hfcBuiltin(HFC_I18N, lang).det[s.name] || s.name,
+        || hfcBuiltin(HFC_I18N, langIn(HFC_I18N)).det[s.name] || s.name,
       L,
     };
   }
@@ -1742,7 +1750,8 @@ class HeatpumpFlowCard extends HTMLElement {
       dhw: { ...(preset?.dhw_mode_map || {}), ...(config.dhw_mode_map || {}) },
       buffer: { ...(preset?.buffer_mode_map || {}), ...(config.buffer_mode_map || {}) },
       hc: { ...(preset?.hc_mode_map || {}), ...(config.hc_mode_map || {}) },
-      valve: { ...(preset?.valve_map || {}), ...(config.valve_map || {}) },
+      // The keys are lower case, so a state matches whatever case the key was written in.
+      valve: Object.fromEntries(Object.entries({ ...(preset?.valve_map || {}), ...(config.valve_map || {}) }).map(([k, v]) => [String(k).toLowerCase(), v])),
     };
     this._runningStates = config.running_states || preset?.running_states || [];
     this._statusLabels = preset?.status_labels || {};
@@ -1891,6 +1900,17 @@ class HeatpumpFlowCard extends HTMLElement {
     }
     this._needsBuild = !r.ready;
     this._lastTry = Date.now();
+    this._mapped = HeatpumpFlowCard._mappingSet(r); this._checkedAt = Date.now();
+  }
+
+  // Everything a resolution maps, as "kind:key=entity" strings: compared to find mappings that appeared later.
+  static _mappingSet(r) {
+    const id = (x) => (typeof x === 'string' ? x : x?.entity);
+    return new Set([
+      ...Object.entries(r.entities).map(([k, v]) => `entity:${k}=${v}`),
+      ...Object.entries(r.tiles).flatMap(([k, periods]) => Object.entries(periods).map(([p, v]) => `tile:${k}.${p}=${v}`)),
+      ...[...(r.controls || []), ...(r.details || []), ...(r.errors || [])].map((x) => `list:${id(x)}`),
+    ]);
   }
 
   static _energyInfo(prefs) {
@@ -2003,6 +2023,13 @@ class HeatpumpFlowCard extends HTMLElement {
       if (revision !== this._pointtRevision) {
         this._pointtRevision = revision; this._needsBuild = true; this._lastTry = 0;
       }
+    }
+    // A preset that maps optional hardware by its readings (`dynamic`) looks again every minute. Only a mapping that has
+    // appeared since the build triggers a new build: a sensor that drops out for a moment never removes anything.
+    if (this._preset?.dynamic && !this._needsBuild && this._rendered && this._mapped && Date.now() - this._checkedAt > 60000) {
+      this._checkedAt = Date.now();
+      const r = HeatpumpFlowCard._resolve(this._config, this._hass);
+      if (r.ready && [...HeatpumpFlowCard._mappingSet(r)].some((m) => !this._mapped.has(m))) { this._needsBuild = true; this._lastTry = 0; }
     }
     // Retry detection at most every 30 s while the integration's entities are not there yet.
     if (this._needsBuild && (!this._rendered || Date.now() - this._lastTry > 30000)) { this._build(); this._rendered = false; }
@@ -3397,8 +3424,14 @@ class HeatpumpFlowCard extends HTMLElement {
       minimal_response: true, no_attributes: true, significant_changes_only: false,
     }, (res) => this._timelineHistory(res, idList));
     if (!hist) return NaN;
-    const segs = this._timelineSegments(hist, ids, Date.parse(range[0]), range[1] ? Date.parse(range[1]) : Date.now());
-    const time = (kind) => segs.filter((s) => s.kind === kind).reduce((sum, s) => sum + s.to - s.from, 0);
+    const from = Date.parse(range[0]); const to = range[1] ? Date.parse(range[1]) : Date.now();
+    const segs = this._timelineSegments(hist, ids, from, to);
+    // Only the time in which the PV entity has a known state counts: before its first state (not recorded, added later) and
+    // while it is unknown or unavailable nothing is known about it, which must not read as "not in PV surplus mode".
+    const list = hist[ids.pv] || [];
+    const known = list.map((e, n) => [e.t, list[n + 1] ? list[n + 1].t : to, e.s]).filter(([, , s]) => !['unknown', 'unavailable'].includes(s));
+    const within = (s) => known.reduce((sum, [a, b]) => sum + Math.max(0, Math.min(s.to, b) - Math.max(s.from, a)), 0);
+    const time = (kind) => segs.filter((s) => s.kind === kind).reduce((sum, s) => sum + within(s), 0);
     const heating = time('heat') + time('pv');
     return heating > 0 ? (time('pv') / heating) * 100 : NaN;
   }
