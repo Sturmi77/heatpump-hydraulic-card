@@ -648,9 +648,10 @@ const HFC_PRESETS = {
         valve: s('3_way_diverter_valve_htg_dhw'),
         heater: s('electric_booster_heater'),
         dhw_top: s('dhw_temperature'),
-        // wolf_smartset binds set_dhw_temperature_adjusted to the read-only "Warmwassersolltemperatur" (10 °C on the reference
-        // installation) and the setting "Warmwassersolltemperatur eingestellt" to the number set_dhw_temperature, the reverse of wolflink.
-        dhw_target: sm ? [ctx.key('wolf_smartset', 'number', 'set_dhw_temperature'), s('set_dhw_temperature_adjusted')] : s('set_dhw_temperature_adjusted'),
+        // wolf_smartset: the sensor set_dhw_temperature_adjusted ("Warmwassersolltemperatur") is the effective DHW target; it follows the
+        // DHW status and drops to 10 °C (frost protection) while hot water is off. The number set_dhw_temperature ("Warmwassersolltemperatur
+        // eingestellt") holds the configured value around the clock and is the fallback. The keys are bound the reverse way from wolflink.
+        dhw_target: sm ? [s('set_dhw_temperature_adjusted'), ctx.key('wolf_smartset', 'number', 'set_dhw_temperature')] : s('set_dhw_temperature_adjusted'),
         hc_flow: hc(s('flow_temperature')),
         // In wolf_smartset "Ausgang MKP" duplicates "Mischerkreispumpe" and starts disabled, so the pump of the system tab comes first.
         hc_pump: hc(sm ? [s('mixer_circuit_pump'), s('mkp_mixer_circuit_pump')] : s('mkp_mixer_circuit_pump')),
@@ -658,8 +659,8 @@ const HFC_PRESETS = {
         hc_pressure: s('system_pressure'),
         room: s('room_temperature'),
         room_target: sm ? ctx.key('wolf_smartset', 'number', 'day_temperature_mixer_circuit_1') : s('day_temperature'),
-        // wolf_smartset has no party or holiday parameter yet.
-        program: sm ? undefined : s('holiday_mode'),
+        // wolf_smartset: the mixer circuit demand (Anforderung Mischerkreis, 36000400001) carries the time program and the party, holiday and eco modes.
+        program: sm ? s('mixer_circuit_demand') : s('holiday_mode'),
         hours: s('compressor_operating_hours'),
         aux_hours: s('e_heating_operating_hours'),
       };
@@ -689,7 +690,9 @@ const HFC_PRESETS = {
       at_abschaltung: 'off', rt_abschaltung: 'off', at_frostschutz: 'frost', rt_frostschutz: 'frost', warmwasservorrang: 'idle',
       'AT Abschaltung': 'off', 'RT Abschaltung': 'off', 'AT Frostschutz': 'frost', 'RT Frostschutz': 'frost',
     },
-    program_map: { aktiviert: 'holiday', deaktiviert: 'none' },
+    // wolflink holiday mode (aktiviert, deaktiviert); wolf_smartset mixer circuit demand: "Automatik aus" is the setback outside the heating
+    // time program, "Automatik ein" the normal operation. Partymodus, Urlaubsmodus and Sparbetrieb match the card's default patterns.
+    program_map: { aktiviert: 'holiday', deaktiviert: 'none', 'Automatik ein': 'none', 'Automatik aus': 'night' },
     running_states: ['Betrieb'],
     // Keys are the raw status texts: wolflink slugs (vorspulen) and wolf_smartset texts (Vorspülen).
     status_labels: {

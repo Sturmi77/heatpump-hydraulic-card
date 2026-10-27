@@ -439,17 +439,17 @@
       && e.return === 'sensor.heizgerat_rucklauftemperatur' && e.volume === 'sensor.heizgerat_heizkreisdurchfluss' && e.outdoor === 'sensor.heizgerat_aussentemperatur_heizung',
       `wolf_smartset power, heat, flow, return, volume and outdoor (${e.power} / ${e.flow} / ${e.outdoor})`);
     check(e.valve === 'sensor.heizgerat_3_wege_umschaltventil_hz_ww' && e.heater === 'sensor.heizgerat_e_heizung' && e.dhw_top === 'sensor.heizgerat_warmwassertemperatur'
-      && e.dhw_target === 'number.wolf_cha_warmwassersolltemperatur_eingestellt', `wolf_smartset valve, heater, tank and the number as DHW target (${e.valve} / ${e.dhw_target})`);
-    // without the number (no write access) the read-only sensor is the fallback
-    const numId = 'number.wolf_cha_warmwassersolltemperatur_eingestellt';
-    check(C._resolve({ preset: 'wolf' }, hassOf(toStates(without(ws.states('heat'), numId)), without(ws.registry, numId))).entities.dhw_target === 'sensor.heizgerat_warmwassersolltemperatur',
-      'wolf_smartset DHW target falls back to the read-only sensor');
+      && e.dhw_target === 'sensor.heizgerat_warmwassersolltemperatur', `wolf_smartset valve, heater, tank and the sensor as DHW target (${e.valve} / ${e.dhw_target})`);
+    // without the sensor the number (the configured value) is the fallback
+    const numId = 'number.wolf_cha_warmwassersolltemperatur_eingestellt'; const adjId = 'sensor.heizgerat_warmwassersolltemperatur';
+    check(C._resolve({ preset: 'wolf' }, hassOf(toStates(without(ws.states('heat'), adjId)), without(ws.registry, adjId))).entities.dhw_target === numId,
+      'wolf_smartset DHW target falls back to the number');
     check(e.hc_flow === 'sensor.bedienmodul_bm_2_0_vorlauftemperatur' && e.hc_pump === 'sensor.wolf_cha_mischerkreispumpe' && e.hc_mode === 'sensor.bedienmodul_bm_2_0_mischerkreis_status'
       && e.hc_pressure === 'sensor.heizgerat_anlagendruck' && e.room_target === 'number.bedienmodul_bm_2_0_tagtemperatur_heizung_mischerkreis_1',
       `wolf_smartset circuit: flow, system-tab pump, mode, pressure and the number as room target (${e.hc_pump} / ${e.room_target})`);
     check(e.hours === 'sensor.heizgerat_betriebsstunden_verdichter' && e.aux_hours === 'sensor.heizgerat_betriebsstunden_e_heizung' && e.buffer_top === 'sensor.heizgerat_sammlertemperatur',
       'wolf_smartset hours counters and the manual buffer line');
-    check(e.room === undefined && e.program === undefined, `wolf_smartset: no room sensor, no program (${e.room} / ${e.program})`);
+    check(e.room === undefined && e.program === 'sensor.bedienmodul_bm_2_0_anforderung_mischerkreis', `wolf_smartset: no room sensor, program from the mixer circuit demand (${e.room} / ${e.program})`);
     // one mixer circuit only: a second circuit maps nothing instead of repeating circuit 1 (both branches)
     const two = C._resolve({ ...ws.config, hc_count: 2 }, hassS('heat')).entities;
     const twoL = C._resolve({ ...wl.config, hc_count: 2 }, hassOf(toStates(wl.states('heat')), wl.registry)).entities;
@@ -485,8 +485,8 @@
     // it keeps the heat pump keys but loses the circuit, or fails to detect altogether
     const devReg = Object.fromEntries(Object.entries(ws.registry).map(([id, r]) => [id, { ...r, device_id: id.includes('heizgerat_') ? 'dev-hg' : (id.includes('bm_2_') ? 'dev-bm2' : 'dev-sys') }]));
     const onHg = C._resolve({ preset: 'wolf', device: 'dev-hg' }, hassOf(toStates(ws.states('heat')), devReg));
-    check(onHg.ready && onHg.entities.mode && !onHg.entities.hc_flow && !onHg.entities.hc_pump && !onHg.entities.hc_mode && !onHg.entities.room_target && !onHg.entities.dhw_target?.startsWith('number.'),
-      `device: Heizgerät keeps the heat pump but loses the circuit and the DHW setting (${onHg.entities.hc_flow} / ${onHg.entities.dhw_target})`);
+    check(onHg.ready && onHg.entities.mode && !onHg.entities.hc_flow && !onHg.entities.hc_pump && !onHg.entities.hc_mode && !onHg.entities.room_target && onHg.entities.dhw_target === 'sensor.heizgerat_warmwassersolltemperatur',
+      `device: Heizgerät keeps the heat pump and the DHW target sensor but loses the circuit (${onHg.entities.hc_flow} / ${onHg.entities.dhw_target})`);
     check(!C._resolve({ preset: 'wolf', device: 'dev-bm2' }, hassOf(toStates(ws.states('heat')), devReg)).ready, 'device: Bedienmodul is not detected at all');
     // capitalised Wolf texts: the maps are case-insensitive, the four slugged AT/RT mixer states exist in both spellings
     const card = mount(ws.config, hassS('heat')); await wait(20);
@@ -1040,6 +1040,26 @@
       c.shadowRoot.getElementById('chip-program').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
       check(ev[0] === 'select.heatpump_heating_program', `program chip opens the program entity (${ev})`);
       c.remove();
+    }
+
+    // 5b. Wolf (wolf_smartset): effective DHW target and program from the mixer circuit demand
+    {
+      const ws = setups.find((x) => x.name === 'Wolf CHA (wolf_smartset)');
+      const adjId = 'sensor.heizgerat_warmwassersolltemperatur'; const numId = 'number.wolf_cha_warmwassersolltemperatur_eingestellt';
+      // hot water off: the sensor drops to 10 °C (frost protection) and the card follows it, the number keeps the configured 48 °C
+      const off = mount(ws.config, hassWith(ws, 'heat', { [adjId]: ['10', '°C'], 'sensor.wolf_cha_warmwasser_status': 'Aus' })); await wait(20);
+      check(off._e.dhw_target === adjId && off._n('dhw_target') === 10 && off._hass.states[numId].state === '48',
+        `DHW off: target 10 °C from the sensor, number stays 48 (${off._n('dhw_target')} / ${off._hass.states[numId].state})`);
+      off.remove();
+      // the mixer circuit demand as program: Automatik aus is the setback outside the time program, Automatik ein shows no chip
+      const demand = 'sensor.bedienmodul_bm_2_0_anforderung_mischerkreis';
+      check((await prog(ws, 'heat', { [demand]: 'Automatik aus' }))[0] === 'night', 'Automatik aus shows the night chip');
+      check((await prog(ws, 'heat', { [demand]: 'Automatik ein' }))[0] === '', 'Automatik ein shows no chip');
+      for (const [raw, kind] of [['Partymodus', 'party'], ['Urlaubsmodus', 'holiday'], ['Sparbetrieb', 'eco']]) {
+        check((await prog(ws, 'heat', { [demand]: raw }))[0] === kind, `${raw} is ${kind} through the default patterns`);
+      }
+      const wl = setups.find((x) => x.name === 'Wolf CHA');
+      check(C._resolve(wl.config, hassWith(wl, 'heat')).entities.program === 'sensor.zuhause_holiday_mode', 'wolflink still maps program to holiday_mode');
     }
 
     // solar thermal
