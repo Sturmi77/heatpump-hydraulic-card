@@ -1,5 +1,0 @@
-- `valve_map`: the keys now match a valve state in any case (`Tank: heating` also matches `tank`).
-- Editor: a regional language block (`pt-br`) is used when Home Assistant runs in that locale, then its language (`pt`), then English; before, the locale was cut to two letters.
-- `npm run i18n:check` rejects a group where English has text, an empty group included, instead of reporting "i18n OK" for a translation that would show `[object Object]`.
-- Tile `pv_boost_share`: only the time in which the PV entity has a known state counts. Without a PV history, or with only `unavailable` states, the tile shows a dash instead of 0 %.
-- Stiebel ISG and Luxtronik presets: parts that are mapped by their readings (buffer, solar, circuits, counters) and report only after the card has started are found within a minute, without reloading the card. A sensor that drops out for a moment does not remove a mapping.
