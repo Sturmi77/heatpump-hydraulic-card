@@ -2371,6 +2371,84 @@
     check(Object.entries(HFC_PRESETS).filter(([, p]) => p.primary_pump).map(([k]) => k).sort().join() === 'heishamon,kronoterm,samsung', 'presets with a primary pump: HeishaMon, Kronoterm, Samsung');
   }
 
+  // 18p. hot-water standby loss (#32): cool-down in K/h only in verified standby windows, charging and draw-off excluded
+  {
+    const H = 3600000; const end = Date.now(); const start = end - 48 * H;
+    // Temperature points every 12 minutes from `from` to `to` hours ago, falling by `rate` K/h (0.1 K resolution).
+    const cool = (from, to, t0, rate) => { const out = []; for (let h = from; h >= to - 1e-9; h -= 0.2) out.push([h, (t0 - rate * (from - h)).toFixed(1)]); return out; };
+    const hist = (spec) => Object.fromEntries(Object.entries(spec).map(([id, pts]) => [id, pts.map(([h, s]) => ({ t: end - h * H, s: String(s) }))]));
+    const ids = { temps: ['sensor.top', 'sensor.bottom'], run: { comp: 'binary_sensor.comp', valve: 'binary_sensor.valve' }, extra: ['switch.rod'] };
+    const base = {
+      'binary_sensor.comp': [[48, 'on'], [46, 'off']], 'binary_sensor.valve': [[48, 'on'], [46, 'off']], 'switch.rod': [[48, 'off']],
+      'sensor.top': [...cool(48, 46.2, 45, -3.5), ...cool(46, 0, 52, 0.4)], 'sensor.bottom': [...cool(48, 46.2, 40, -5), ...cool(46, 0, 50, 0.3)],
+    };
+    const card = mount({ entities: { flow: 'sensor.f', compressor: 'binary_sensor.comp', valve: 'binary_sensor.valve', dhw_top: 'sensor.top' } },
+      hassOf(toStates({ 'sensor.f': ['35', '°C'], 'binary_sensor.comp': 'off', 'binary_sensor.valve': 'off', 'sensor.top': ['40', '°C'] }))); await wait(20);
+    const loss = (spec) => card._dhwLoss(hist({ ...base, ...spec }), ids, start, end);
+    const near = (r, v) => r && Math.abs(r.rate - v) < 0.03;
+    let r = loss({});
+    // The window starts after the charge, its settling time and the last rise of the charge (about 45.3 of 48 hours).
+    check(near(r, 0.4) && r.windows === 1 && r.hours > 45 && r.hours <= 45.5, `clean standby after a charge: 0.4 K/h over about 45 h (${JSON.stringify(r)})`);
+    // Draw-off: the top sensor drops 2 K, the bottom 12 K; the drop itself must not count as loss.
+    r = loss({ 'sensor.top': [...cool(48, 46.2, 45, -3.5), ...cool(46, 20.2, 52, 0.4), ...cool(20, 0, 52 - 0.4 * 26 - 2, 0.4)],
+      'sensor.bottom': [...cool(48, 46.2, 40, -5), ...cool(46, 20.2, 50, 0.3), ...cool(20, 0, 50 - 0.3 * 26 - 12, 0.3)] });
+    check(near(r, 0.4) && r.windows === 2, `draw-off is cut out of the standby window (${JSON.stringify(r)})`);
+    // Small draw-off seen only at the bottom sensor (cold water enters at the bottom).
+    r = loss({ 'sensor.bottom': [...cool(48, 46.2, 40, -5), ...cool(46, 30.2, 50, 0.3), ...cool(30, 0, 50 - 0.3 * 16 - 6, 0.3)] });
+    check(r && r.windows === 2, `a draw-off seen only at the bottom sensor splits the window (${JSON.stringify(r)})`);
+    // A hot-water charge in between: compressor on with the valve on hot water, the tank warms up.
+    r = loss({ 'binary_sensor.comp': [[48, 'on'], [46, 'off'], [24, 'on'], [23, 'off']], 'binary_sensor.valve': [[48, 'on'], [46, 'off'], [24, 'on'], [23, 'off']],
+      'sensor.top': [...cool(48, 46.2, 45, -3.5), ...cool(46, 24.2, 52, 0.4), ...cool(24, 23.2, 43.2, -9), ...cool(23, 0, 52, 0.4)] });
+    check(near(r, 0.4) && r.windows === 2, `a hot-water charge is excluded (${JSON.stringify(r)})`);
+    // The heater rod heats the tank without the heat pump.
+    r = loss({ 'switch.rod': [[48, 'off'], [30, 'on'], [29, 'off']], 'sensor.top': [...cool(48, 46.2, 45, -3.5), ...cool(46, 30.2, 52, 0.4), ...cool(30, 29.2, 45.6, -6), ...cool(29, 0, 51, 0.4)] });
+    check(near(r, 0.4) && r.windows === 2, `heater rod operation is excluded (${JSON.stringify(r)})`);
+    // A rise the card cannot explain (no charging signal) is excluded as well.
+    r = loss({ 'sensor.top': [...cool(48, 46.2, 45, -3.5), ...cool(46, 25.2, 52, 0.4), [25, '46.0'], ...cool(24.8, 0, 47.6, 0.4)] });
+    check(near(r, 0.4) && r.windows === 2, `an unexplained temperature rise is excluded (${JSON.stringify(r)})`);
+    // An unavailable sensor leaves a gap.
+    r = loss({ 'sensor.top': [...cool(48, 46.2, 45, -3.5), ...cool(46, 10.2, 52, 0.4), [10, 'unavailable'], ...cool(9, 0, 52 - 0.4 * 37, 0.4)] });
+    check(near(r, 0.4) && r.windows === 2, `an unavailable tank sensor is excluded (${JSON.stringify(r)})`);
+    // Charges every 2.5 hours leave no window of three hours: no value instead of a guess.
+    const often = []; for (let h = 48; h > 0; h -= 2.5) often.push([h, 'on'], [h - 0.3, 'off']);
+    r = loss({ 'binary_sensor.comp': often, 'binary_sensor.valve': often });
+    check(r === null, `without a standby window of three hours there is no value (${JSON.stringify(r)})`);
+    // History that starts late: the time before the first state is unknown.
+    r = loss({ 'binary_sensor.comp': [[10, 'off']], 'binary_sensor.valve': [[10, 'off']] });
+    check(r && Math.abs(r.hours - 10) < 0.01, `time before the first known state is not used (${JSON.stringify(r)})`);
+    // A draw-off within 30 minutes of the first sample: 50 to 45 degrees after 20 minutes, then constant. It must not count as loss.
+    r = loss({ 'sensor.top': [[48, '50.0'], [47.67, '45.0'], [24, '45.0']], 'sensor.bottom': [[48, '40.0'], [47.67, '40.0']] });
+    check(r === null || r.rate < 0.03, `a draw-off right at the start of the history is not a loss (${JSON.stringify(r)})`);
+    // Unknown running signals: the compressor on while the valve is unavailable could be a hot-water run.
+    r = loss({ 'binary_sensor.comp': [[48, 'on'], [46, 'off'], [30, 'on'], [29, 'off']], 'binary_sensor.valve': [[48, 'on'], [46, 'off'], [30, 'unavailable'], [29, 'off']] });
+    check(near(r, 0.4) && r.windows === 2, `an unavailable valve while the compressor runs is excluded (${JSON.stringify(r)})`);
+    // The compressor has no history at all, the valve has: nothing can be verified.
+    r = loss({ 'binary_sensor.comp': [] });
+    check(r === null, `a running signal without history gives no value (${JSON.stringify(r)})`);
+    card.remove();
+    // A thermostat as the tank sensor keeps its temperature in an attribute, so the tile is not offered for it.
+    const thermo = mount({ entities: { flow: 'sensor.f', compressor: 'binary_sensor.comp', valve: 'binary_sensor.valve', dhw_top: 'climate.tank' } },
+      hassOf(toStates({ 'sensor.f': ['35', '°C'], 'binary_sensor.comp': 'off', 'binary_sensor.valve': 'off', 'climate.tank': { state: 'heat', attributes: { current_temperature: 48 } } }))); await wait(20);
+    check(!thermo._tilePeriods('dhw_loss').length, 'a thermostat as the top tank sensor: the loss tile is not offered');
+    thermo.remove();
+    const mixed = mount({ entities: { flow: 'sensor.f', compressor: 'binary_sensor.comp', valve: 'binary_sensor.valve', dhw_top: 'sensor.top', dhw_bottom: 'climate.tank' } },
+      hassOf(toStates({ 'sensor.f': ['35', '°C'], 'binary_sensor.comp': 'off', 'binary_sensor.valve': 'off', 'sensor.top': ['40', '°C'], 'climate.tank': { state: 'heat', attributes: { current_temperature: 38 } } }))); await wait(20);
+    check(mixed._tilePeriods('dhw_loss').join() === 'now' && mixed._lossIds().temps.join() === 'sensor.top', 'a thermostat below a plain top sensor is left out of the measurement');
+    mixed.remove();
+    // Tile: needs a tank sensor and a running signal; reads the history and shows K/h.
+    const st = toStates({ 'sensor.f': ['35', '°C'], 'binary_sensor.comp': 'off', 'binary_sensor.valve': 'off', 'sensor.top': ['33.6', '°C'] });
+    const setup = { states: () => ({}), history: Object.fromEntries(Object.entries(base).filter(([id]) => id !== 'switch.rod' && id !== 'sensor.bottom')) };
+    const tile = mount({ entities: { flow: 'sensor.f', compressor: 'binary_sensor.comp', valve: 'binary_sensor.valve', dhw_top: 'sensor.top' }, tiles: ['dhw_loss'] }, hassOf(st, {}, undefined, setup));
+    await wait(60);
+    const stats = tile.shadowRoot.getElementById('stats').textContent;
+    check(/DHW standby loss/.test(stats) && /0\.4\d K\/h/.test(stats), `the tile shows the standby loss (${stats.trim()})`);
+    check(tile._tilePeriods('dhw_loss').join() === 'now' && tile._tileEntity(tile._tileSource('dhw_loss', 'now')) === 'sensor.top', 'the tile opens the tank sensor');
+    tile.remove();
+    const none = mount({ entities: { flow: 'sensor.f', dhw_top: 'sensor.top' } }, hassOf(st)); await wait(20);
+    check(!none._tilePeriods('dhw_loss').length, 'without an operating mode or compressor the loss tile is not offered');
+    none.remove();
+  }
+
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
   {
     const s = setups[0];

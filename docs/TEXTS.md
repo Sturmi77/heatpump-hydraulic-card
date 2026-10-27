@@ -165,6 +165,7 @@ pv_share
 pv_production
 solar_thermal
 cost
+dhw_loss
 ```
 
 ## `periods`
