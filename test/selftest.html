@@ -1335,6 +1335,24 @@
     check(mapped === 'k-heat,k-dhw', `timeline with valve_map: 1 = heating for 12 h, then 0 = hot water (${mapped})`);
   }
 
+  // 13h. heating circuit 1 with a buffer and no circuit entity of its own (#118)
+  {
+    const st = toStates({ 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.buf': ['33', '°C'], 'sensor.dhw': ['48', '°C'], 'binary_sensor.comp': 'on' });
+    const base = { flow: 'sensor.f', return: 'sensor.r', dhw_top: 'sensor.dhw', compressor: 'binary_sensor.comp' };
+    const circuit = async (entities, extra = {}) => {
+      const card = mount({ entities, ...extra }, hassOf(st)); await wait(30);
+      const sr = card.shadowRoot; const out = { drawn: !!sr.getElementById('p-hc-body'), label: sr.getElementById('t-hc')?.textContent || '' };
+      card.remove(); return out;
+    };
+    check((await circuit(base)).drawn, 'no buffer, no circuit entity: circuit 1 hangs on the heat pump flow and return');
+    let o = await circuit({ ...base, buffer_top: 'sensor.buf' });
+    check(o.drawn && o.label === '', `a buffer without a circuit entity: circuit 1 is drawn, without a flow label of its own (the buffer shows its temperature) (${JSON.stringify(o)})`);
+    check((await circuit({ ...base, buffer_top: 'sensor.buf' }, { hc_count: 2 })).drawn, 'a buffer, two circuits: still drawn');
+    check((await circuit({ ...base, buffer_top: 'sensor.buf', hc_flow: 'sensor.f' })).drawn, 'a buffer with a circuit entity: drawn as before');
+    check((await circuit({ flow: 'sensor.f', buffer_mode: 'binary_sensor.comp' })).drawn, 'a buffer mode alone counts as a buffer');
+    check(!(await circuit({ dhw_top: 'sensor.dhw', compressor: 'binary_sensor.comp' })).drawn, 'only a hot water tank: no circuit is drawn');
+  }
+
   // 13g. review follow-ups: valve_map keys in any case, regional editor languages, PV share without PV history, presets that report late
   {
     // valve_map: the key is matched in any case
