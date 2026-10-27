@@ -1335,6 +1335,64 @@
     check(mapped === 'k-heat,k-dhw', `timeline with valve_map: 1 = heating for 12 h, then 0 = hot water (${mapped})`);
   }
 
+  // 13g. review follow-ups: valve_map keys in any case, regional editor languages, PV share without PV history, presets that report late
+  {
+    // valve_map: the key is matched in any case
+    const hm = setups[5]; const hreg = hm.registry || {}; const valveId = 'sensor.panasonic_heat_pump_main_threeway_valve_state';
+    const modeOf = async (value, cfg) => {
+      const card = mount({ ...hm.config, ...cfg }, hassOf(toStates({ ...hm.states('heat'), [valveId]: value }), hreg)); await wait(20);
+      const mode = card.shadowRoot.getElementById('chip-mode').className; card.remove(); return mode;
+    };
+    check(/mode-heat/.test(await modeOf('tank', { valve_map: { Tank: 'heating' } })) && /mode-heat/.test(await modeOf('TANK', { valve_map: { Tank: 'heating' } }))
+      && /mode-heat/.test(await modeOf('Tank', { valve_map: { tank: 'heating' } })) && /mode-dhw/.test(await modeOf('Tank', {})), 'valve_map keys match a state in any case');
+
+    // editor: the full locale first, then its language, then English
+    const ha = document.createElement('home-assistant'); document.body.appendChild(ha);
+    HFC_EDITOR['pt-br'] = { preset: 'Predefinição' };
+    const label = (language) => { ha.hass = { locale: { language } }; return C._formSchema({}).L.preset; };
+    check(label('pt-BR') === 'Predefinição' && label('pt_BR') === 'Predefinição', 'the editor uses a regional language block (pt-br)');
+    check(label('pt-PT') === 'Preset' && label('de-AT') === HFC_EDITOR.de.preset && label('en-GB') === 'Preset', 'without a regional block the language, then English, is used');
+    delete HFC_EDITOR['pt-br']; ha.remove();
+
+    // PV share: only the time in which the PV entity has a known state counts
+    const s = setups[0]; const sp = 'sensor.eu08l_emgr_power_consumption_setpoint';
+    const mode = Object.keys(toStates(s.states('heat'))).find((k) => /eu08l_hp1_operating_state$/.test(k));
+    const hass = () => hassOf(toStates(s.states('heat')), {}, null, {});
+    const iso = (ms) => new Date(ms).toISOString();
+    const shareWith = async (pv) => {
+      const withWS = (h) => ({ ...h, callWS: (m) => {
+        if (m.type !== 'history/history_during_period') return h.callWS(m);
+        const start = Date.parse(m.start_time); const end = m.end_time ? Date.parse(m.end_time) : Date.now(); const out = {}; const hr = (end - start) / 24;
+        m.entity_ids.forEach((id) => {
+          if (id === mode) out[id] = [{ state: 'STBY', last_updated: iso(start) }, { state: 'CH', last_updated: iso(start + 3 * hr) }, { state: 'STBY', last_updated: iso(start + 21 * hr) }];
+          if (id === sp) out[id] = pv(start, hr);
+        });
+        return Promise.resolve(out);
+      } });
+      const card = mount({ ...s.config, tiles: ['pv_boost_share:yesterday'] }, withWS(hass())); await wait(80);
+      const rows = tileRows(card); card.remove(); return rows[0]?.[1];
+    };
+    check(await shareWith((st, hr) => [{ state: '0', last_updated: iso(st) }, { state: '1800', last_updated: iso(st + 6 * hr) }, { state: '0', last_updated: iso(st + 12 * hr) }]) === '33 %', 'PV share with a complete PV history: 6 of 18 heating hours');
+    check(await shareWith(() => []) === '–', 'PV share without any PV history is not 0 %');
+    check(await shareWith((st) => [{ state: 'unavailable', last_updated: iso(st) }]) === '–', 'PV share with only unavailable PV states is not 0 %');
+    check(await shareWith((st, hr) => [{ state: '0', last_updated: iso(st + 12 * hr) }, { state: '1800', last_updated: iso(st + 15 * hr) }, { state: '0', last_updated: iso(st + 18 * hr) }]) === '33 %',
+      'PV share counts only the heating time in which the PV entity is known (3 of 9 hours)');
+
+    // presets that map parts by their readings look again: parts that report late appear, parts that drop out stay
+    const st = setups[15]; const reg = st.registry; const buffer = isgId('sensor', 'actual_temperature_buffer');
+    const withBuffer = (value) => hassOf(toStates({ ...st.states('heat'), [buffer]: value }), reg);
+    check(HFC_PRESETS.stiebel_isg.dynamic === true && HFC_PRESETS.luxtronik.dynamic === true, 'the Stiebel and Luxtronik presets look again for parts that report late');
+    const late = mount(st.config, withBuffer('unavailable')); await wait(20);
+    check(late._e.buffer_top === undefined, 'a buffer sensor that is unavailable at the start is not mapped');
+    late.hass = withBuffer(['27.4', '°C']); await wait(20);
+    check(late._e.buffer_top === undefined, 'the card does not look again within a minute');
+    late._checkedAt = 0; late.hass = withBuffer(['27.4', '°C']); await wait(20);
+    check(late._e.buffer_top === buffer && !!late.shadowRoot.getElementById('t-buf-top'), 'a buffer sensor that reports later is mapped and drawn');
+    late._checkedAt = 0; late.hass = withBuffer('unavailable'); await wait(20);
+    check(late._e.buffer_top === buffer, 'a sensor that drops out for a moment is not removed');
+    late.remove();
+  }
+
   // 14. outdoor unit drawings: style per preset, manufacturer variants, fans and snowflakes, loop symbol for ground sources
   {
     const draw = async (setup, scen, cfg = {}) => {
