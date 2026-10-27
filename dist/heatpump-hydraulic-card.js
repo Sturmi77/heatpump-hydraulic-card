@@ -1804,9 +1804,13 @@ class HeatpumpFlowCard extends HTMLElement {
     const configured = {}; const missing = [];
     const of = (type) => {
       const found = sources.filter((s) => s.type === type);
-      const rates = found.map(rate).filter(Boolean);
+      // The same power sensor behind several sources (e.g. two tariffs) counts once.
+      const sig = (r) => [r.id, !!r.inv, r.from, r.to].join('|');
+      const rates = found.map(rate).filter(Boolean).filter((r, n, all) => all.findIndex((o) => sig(o) === sig(r)) === n);
       configured[type] = found.length > 0;
-      if (found.length > rates.length) missing.push(type);
+      // Several grid sources are usually tariffs of one connection and one meter, so one power sensor covers them all.
+      // Several PV arrays or batteries are separate devices: each needs its own sensor, or the sum is incomplete.
+      if (type === 'grid' ? found.length > 0 && !rates.length : found.length > found.map(rate).filter(Boolean).length) missing.push(type);
       return rates;
     };
     return { energy: { solar: of('solar'), battery: of('battery'), grid: of('grid') }, configured, missing };
@@ -1832,6 +1836,14 @@ class HeatpumpFlowCard extends HTMLElement {
     if (['pv', 'battery', 'grid'].some((k) => this._has(k))) return 'manual';
     if (this._energy && this._config.power_sources !== 'manual' && this._has('power')) return 'energy';
     return '';
+  }
+
+  // Power sources the installation has: a manual entity, or a source of that type in the Energy dashboard.
+  // A missing one (e.g. no battery) is left out of the schematic instead of being drawn dimmed.
+  _srcKeys() {
+    const mode = this._powerMode();
+    const type = { pv: 'solar', battery: 'battery', grid: 'grid' };
+    return ['pv', 'battery', 'grid'].filter((key) => (mode === 'energy' ? !!this._energyConfigured?.[type[key]] : mode === 'manual' && !!this._e[key]));
   }
 
   _rateW(r) {
@@ -2163,7 +2175,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const buffer = this._has('buffer_top') || this._has('buffer_mode');
     const parts = {
       power: this._powerMode(),
-      sources: this._powerMode() === 'energy' ? [this._energy.solar.length, this._energy.battery.length, this._energy.grid.length].join() : '',
+      sources: `${this._powerMode() === 'energy' ? [this._energy.solar.length, this._energy.battery.length, this._energy.grid.length].join() : ''}|${this._srcKeys().join()}`,
       // A tank with only a lower sensor (e.g. HeishaMon's single sensor near the bottom) is still drawn.
       dhw: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_mode'].some((k) => this._has(k)),
       buffer,
@@ -2245,6 +2257,9 @@ class HeatpumpFlowCard extends HTMLElement {
       ? `<path class="pipe" id="p-${id}" d="${d}"/><path class="flow" id="f-${id}" d="${d}"/>` : '');
     const P_SRC = 'M70 70 V118 Q70 140 92 140 H148 Q170 140 170 162 V190';
     const G_SRC = 'M270 70 V118 Q270 140 248 140 H192 Q170 140 170 162 V190';
+    const shown = P.power ? this._srcKeys() : [];
+    const SRC = [['pv', 70, i.pv, P_SRC, 'pv'], ['bat', 170, i.battery, 'M170 70 V190', 'battery'], ['grid', 270, i.grid, G_SRC, 'grid']]
+      .filter((s) => shown.includes(s[4]));
     const showHc = P.hc || this._hcCount > 1;
     const U = this._sourceType === 'air' ? this._unitArt() : null;
     const H = 560 + (showHc ? (this._hcCount - 1) * 250 : 0);
@@ -2281,9 +2296,9 @@ class HeatpumpFlowCard extends HTMLElement {
           </defs>
 
           ${P.power ? `
-            <path class="eline pv" d="${P_SRC}"/><path class="eline bat" d="M170 70 V190"/><path class="eline grid" d="${G_SRC}"/>
-            <path class="eflow pv" id="ef-pv" d="${P_SRC}"/><path class="eflow bat" id="ef-bat" d="M170 70 V190"/><path class="eflow grid" id="ef-grid" d="${G_SRC}"/>
-            ${this._source('pv', 70, i.pv, this._srcEntity('pv'))}${this._source('bat', 170, i.battery, this._srcEntity('battery'))}${this._source('grid', 270, i.grid, this._srcEntity('grid'))}` : ''}
+            ${SRC.map(([id, , , d]) => `<path class="eline ${id}" d="${d}"/>`).join('')}
+            ${SRC.map(([id, , , d]) => `<path class="eflow ${id}" id="ef-${id}" d="${d}"/>`).join('')}
+            ${SRC.map(([id, x, label, , key]) => this._source(id, x, label, this._srcEntity(key))).join('')}` : ''}
 
           ${pipePair('vl', P.dhw ? 'M290 250 H402' : 'M290 250 H400 Q420 250 420 270 V338 Q420 360 442 360 H520')}
           ${pipePair('vl-dhw', 'M420 232 V102 Q420 80 442 80 H520', P.dhw)}
