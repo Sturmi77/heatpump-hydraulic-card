@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const file = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'heatpump-hydraulic-card.js');
+// HFC_CARD_FILE points the check at another copy of the card (used to test the check itself).
+const file = process.env.HFC_CARD_FILE || path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist', 'heatpump-hydraulic-card.js');
 const source = fs.readFileSync(file, 'utf8');
 
 // Cuts the object literal after `const <name> = ` out of the source. Quotes and comments are skipped, so braces in
@@ -60,6 +61,14 @@ for (const [label, table] of Object.entries(tables)) {
     const block = table[code];
     const have = new Set();
     if (block !== undefined && !isObject(block)) { fail(`${label} ${code}: must be an object`); continue; }
+    // A group where English has text (or text where English has a group), including an empty group, would show
+    // "[object Object]" at runtime; flattening alone would drop it without a word.
+    const shape = (value, ref, where) => Object.entries(value).forEach(([key, child]) => {
+      if (!(key in ref)) { if (isObject(child) && !Object.keys(child).length) fail(`${label} ${code}: unknown key "${where}${key}" (it is not in the English block)`); return; }
+      if (isObject(ref[key]) !== isObject(child)) fail(`${label} ${code}: "${where}${key}" must be ${isObject(ref[key]) ? 'a group of texts' : 'text'}, as in English`);
+      else if (isObject(child)) shape(child, ref[key], `${where}${key}.`);
+    });
+    if (block !== undefined) shape(block, table.en, '');
     for (const [key, value] of leaves(block || {})) {
       if (!reference.has(key)) { fail(`${label} ${code}: unknown key "${key}" (it is not in the English block)`); continue; }
       if (typeof value !== 'string' || !value.trim()) { fail(`${label} ${code}: "${key}" must be non-empty text (leave it out to fall back to English)`); continue; }
