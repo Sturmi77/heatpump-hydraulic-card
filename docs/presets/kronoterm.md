@@ -15,6 +15,7 @@ Source: the [Kronoterm integration](https://github.com/Favio25/Kronoterm-homeass
 - `valve`: binary sensor `dhw_circulation_pump` (bit 1 of 2028), the circulator that charges the tank. It is on exactly during hot water runs.
 - `power` / `heat`: `current_heating_cooling_power` (2129, electrical; the Cloud computes it as capacity ÷ COP) / `current_heating_cooling_capacity` (2329).
 - `flow` / `return` / `outdoor`: `hp_outlet_temperature` (2104) / `hp_inlet_temperature` (2101) / `temperature_outside` (2103).
+- `primary_pump: true`: the main circulation pump of the heat pump (`main_pump_status`, register 2038, "Status glavne obtočne črpalke") runs for heating, hot water and defrost, so the card draws it on the flow pipe next to the heat pump block. It turns while the heat pump heats, heats water or defrosts (the preset has no flow rate); the state of the entity is not read. The loop pumps (`hc_pump`) stay in their circuits. `primary_pump: false` removes the pump again.
 - `heater`: binary sensor `reserve_source_status` (2003), the internal backup heater. `aux_hours`: `operating_hours_additional_source_1` (2095).
 - `dhw_top` / `dhw_target`: with Modbus the sensors `dhw_temperature` (2102) / `dhw_current_setpoint` (2024); with the Cloud API the climate entity `dhw_temperature`, read as `current_temperature` and `temperature`. `circulation`: binary sensor `circulation_pump` (bit 0 of 2028).
 - Loops 1 to 4 as heating circuits (`hc_count`): `hc_flow` from `loop_N_inlet_temperature` (Cloud) or `loop_N_temp` (Modbus 2130, 2110 …), else `loop_N_temperature` (Cloud, only without a room thermostat, because with one it is the room temperature); `hc_pump` from the binary sensor `circulation_loop_N` (2045, 2055 …).
@@ -34,11 +35,12 @@ Source: the [Kronoterm integration](https://github.com/Favio25/Kronoterm-homeass
 - `activations_defrost`: went from 0 to 1 at the first defrost of the season, so it is unclear whether it is a total or a 24 h count.
 - Finalized "yesterday" energy: these sensors read 0 until the Cloud finalizes the day in the evening; yesterday comes from the statistics of the electricity counter instead.
 - Modbus `loop_N_inlet_temp` (2188 to 2190): the register map describes it as the desired temperature of the circuit.
-- `system_pressure_setting` and the Cloud button `acknowledge_alarm` (both new in 1.7.3), `main_pump_status`, `additional_source`, `alternative_source_*`: no matching card key. The button can be added to `controls`.
+- `system_pressure_setting` and the Cloud button `acknowledge_alarm` (both new in 1.7.3), `main_pump_status` (as an entity: the pump is drawn, but its state is not read), `additional_source`, `alternative_source_*`: no matching card key. The button can be added to `controls`.
 
 ## Evidence
 
 - Reference installation: Kronoterm Hydro S 2 + ADAPT 0312-K3 HT / HK 3F (air/water, controller 3.7.0), integration 1.7.2 with the Cloud API, Home Assistant 2026.10.4. One hot water tank, two loops (loop 1 with a room thermostat), a reservoir without a tank sensor. The entity registry, live states, seven days of history and the long-term statistics were replayed into the card ([#66](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/66)).
+- Primary pump: the register map of the integration names register 2038 the status of the main circulation pump (Kronoterm Modbus document, pages 6 and 13). That the pump sits ahead of the hot water circulator, in the heat pump or the hydro module, is concluded from the demo data of this installation (on while heating, hot water and defrost, off in standby) and not yet confirmed by a manual or a diagnostic report; a report is welcome ([#12](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/12)).
 - Integration source: `const.py`, `sensor.py`, `binary_sensor.py`, `climate.py`, `select.py`, `energy.py`, `register_map.py`, `kronoterm.json` and `kronoterm_tt3000.json`.
 - Pressure: the changelog of integration 1.7.3 ("Cloud heating system pressure now reads measured pressure from register 2326 instead of the pressure alarm setting at 2325"), the register map, and the history of the reference installation, where `heating_system_pressure` read 0.8 bar without a single change from 17 to 26 October 2026 (1.7.2, Cloud API). The value after the update has not been checked on the installation yet.
 
