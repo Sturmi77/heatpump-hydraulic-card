@@ -1303,6 +1303,38 @@
     check(!C._tileOptions(vi.config, C._resolve(vi.config, hv), hv).options.some((x) => x.value.startsWith('pv_boost_share')), 'no share tile without a PV surplus entity');
   }
 
+  // 13f. valve_map: raw valve states that do not follow "on = hot water" (a zone valve with 1 = heating, 0 = hot water, #109)
+  {
+    const s = setups[5]; const reg = s.registry || {};
+    const valveId = 'sensor.panasonic_heat_pump_main_threeway_valve_state';
+    const run = async (value, cfg = {}) => {
+      const card = mount({ ...s.config, ...cfg }, hassOf(toStates({ ...s.states('heat'), [valveId]: value }), reg)); await wait(20);
+      const mode = card.shadowRoot.getElementById('chip-mode').className; card.remove(); return mode;
+    };
+    const map = { valve_map: { 0: 'dhw', 1: 'heating' } };
+    check(/mode-dhw/.test(await run('1')) && /mode-heat/.test(await run('0')), 'without a valve_map 1 means hot water, as for every binary valve');
+    check(/mode-heat/.test(await run('1', map)) && /mode-dhw/.test(await run('0', map)), 'valve_map: 1 = heating, 0 = hot water');
+    check(/mode-dhw/.test(await run('Tank', map)) && /mode-heat/.test(await run('Room', map)), 'states outside the map keep the default reading (Tank, Room)');
+    check(/mode-dhw/.test(await run('Warm', { valve_map: { warm: 'dhw' } })), 'the map is not case sensitive');
+    for (const bad of [{ 1: 'cold' }, 'dhw', ['dhw']]) {
+      let threw = false; try { mount({ ...s.config, valve_map: bad }, hassOf(toStates(s.states('heat')), reg)); } catch (e) { threw = /valve_map/.test(e.message); }
+      check(threw, `invalid valve_map rejected ${JSON.stringify(bad)}`);
+    }
+    // timeline without a mode entity: compressor and valve
+    const ids = C._resolve(s.config, hassOf(toStates(s.states('heat')), reg)).entities;
+    const iso = (h) => new Date(Date.now() - h * 3600000).toISOString();
+    const hist = (cfg) => async () => {
+      const card = mount({ ...s.config, timeline: true, ...cfg }, ((h) => ({ ...h, callWS: (m) => (m.type === 'history/history_during_period' ? Promise.resolve({
+        [ids.compressor]: [{ state: '40', last_updated: iso(24) }],
+        [ids.valve]: [{ state: '1', last_updated: iso(24) }, { state: '0', last_updated: iso(12) }],
+      }) : h.callWS(m)) }))(hassOf(toStates(s.states('heat')), reg))); await wait(80);
+      const kinds = [...card.shadowRoot.querySelectorAll('#timeline .seg')].map((x) => [...x.classList].find((k) => k.startsWith('k-'))); card.remove(); return kinds.join();
+    };
+    const plain = await hist({})(); const mapped = await hist(map)();
+    check(plain === 'k-heat' || plain === 'k-heat,k-heat', `timeline without a map: only "on" and Tank count as hot water (${plain})`);
+    check(mapped === 'k-heat,k-dhw', `timeline with valve_map: 1 = heating for 12 h, then 0 = hot water (${mapped})`);
+  }
+
   // 14. outdoor unit drawings: style per preset, manufacturer variants, fans and snowflakes, loop symbol for ground sources
   {
     const draw = async (setup, scen, cfg = {}) => {

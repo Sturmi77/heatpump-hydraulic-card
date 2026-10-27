@@ -26,6 +26,7 @@ const HFC_SCRIPT_URL = (() => {
 //   tiles(prefix, idx, ctx)    → { tile: { period: entity_id | [candidates…] } } for the stat tile catalog (HFC_TILES);
 //                                a "total" counter with long-term statistics also gives today, yesterday, week, month and year
 //   *_mode_map                 → raw state → normalized mode
+//   valve_map                  → raw state of the `valve` entity → dhw | heating (default: on, Tank, DHW … mean hot water)
 // ctx.key(platform, domain, translation_key) finds entities via the entity registry (language-independent),
 // ctx.match(regex, platform) finds the first entity id matching a pattern, ctx.state(entity_id) reads a current state.
 // PointT uses stable resource keys in unique_id; entity ids can be translated or renamed.
@@ -1667,6 +1668,11 @@ class HeatpumpFlowCard extends HTMLElement {
     if (config.primary_pump !== undefined && config.primary_pump !== null && typeof config.primary_pump !== 'boolean') {
       throw new Error('primary_pump must be true or false');
     }
+    if (config.valve_map !== undefined && config.valve_map !== null) {
+      if (typeof config.valve_map !== 'object' || Array.isArray(config.valve_map) || Object.values(config.valve_map).some((v) => !['dhw', 'heating'].includes(v))) {
+        throw new Error('valve_map must map raw valve states to dhw or heating');
+      }
+    }
     if (config.texts !== undefined && config.texts !== null) HeatpumpFlowCard._validateTexts(config.texts);
     if (config.flow_speed !== undefined && config.flow_speed !== null && config.flow_speed !== '' && !(+config.flow_speed >= 0.2 && +config.flow_speed <= 3)) {
       throw new Error('flow_speed must be a number from 0.2 to 3');
@@ -1732,6 +1738,7 @@ class HeatpumpFlowCard extends HTMLElement {
       dhw: { ...(preset?.dhw_mode_map || {}), ...(config.dhw_mode_map || {}) },
       buffer: { ...(preset?.buffer_mode_map || {}), ...(config.buffer_mode_map || {}) },
       hc: { ...(preset?.hc_mode_map || {}), ...(config.hc_mode_map || {}) },
+      valve: { ...(preset?.valve_map || {}), ...(config.valve_map || {}) },
     };
     this._runningStates = config.running_states || preset?.running_states || [];
     this._statusLabels = preset?.status_labels || {};
@@ -2072,6 +2079,11 @@ class HeatpumpFlowCard extends HTMLElement {
     group.dataset.a11y = `${label}: ${this._pressureText(key)}, ${this._i[`pressure_${state}`]}`;
   }
   _on(key) { return ['on', 'true', 'open', '1', 'ein'].includes(String(this._s(key)).toLowerCase()); }
+  // Diverter valve state through `valve_map`: true = hot water, false = heating, undefined = the state is not in the map.
+  _valveMapped(raw) {
+    const mapped = this._norm(this._maps.valve, raw);
+    return mapped === 'dhw' ? true : mapped === 'heating' ? false : undefined;
+  }
   // PV surplus mode: a binary entity that is on, or a power (e.g. the setpoint of an energy manager) above 0.
   _pvOn(state) { const s = String(state).toLowerCase(); return ['on', 'true', 'open', 'ein'].includes(s) || parseFloat(s) > 0; }
   _pvBoost() { return this._has('pv_boost') && this._pvOn(this._s('pv_boost')); }
@@ -3319,7 +3331,7 @@ class HeatpumpFlowCard extends HTMLElement {
       const comp = hist[ids.comp]; const valve = ids.valve ? hist[ids.valve] : [];
       const at = (list, t) => { let s; for (const e of list) { if (e.t <= t) s = e.s; else break; } return s; };
       const on = (s) => s !== undefined && !['off', 'unavailable', 'unknown', '0', '0.0'].includes(String(s).toLowerCase());
-      const dhw = (s) => s !== undefined && (['on', 'tank', 'dhw', 'hot water', 'warmwasser'].includes(String(s).toLowerCase()));
+      const dhw = (s) => s !== undefined && (this._valveMapped(s) ?? ['on', 'tank', 'dhw', 'hot water', 'warmwasser'].includes(String(s).toLowerCase()));
       [...new Set([...comp.map((e) => e.t), ...valve.map((e) => e.t)])].sort((a, b) => a - b).forEach((t) => {
         const cs = at(comp, t);
         if (['unknown', 'unavailable'].includes(cs)) points.push({ t, kind: 'gap', raw: cs });
@@ -3702,7 +3714,9 @@ class HeatpumpFlowCard extends HTMLElement {
       || (!this._has('compressor') && !this._has('power') && !this._has('status') && ['heating', 'dhw', 'cooling', 'defrost'].includes(hp));
     const defrost = hp === 'defrost' || status.toUpperCase().includes('DEFROST') || (this._has('defrost') && this._on('defrost'));
     // Valve: binary (on = DHW) or a state such as "Tank" / "DHW".
-    const valveDhw = this._has('valve') && (this._on('valve') || ['tank', 'tank (dhw)', 'dhw', 'hot water', 'hot_water', 'warmwasser'].includes(String(this._s('valve')).toLowerCase()));
+    // A `valve_map` (raw state → dhw | heating) decides first, for valves that report 1 for heating or other texts.
+    const valveMapped = this._has('valve') ? this._valveMapped(this._s('valve')) : undefined;
+    const valveDhw = this._has('valve') && (valveMapped ?? (this._on('valve') || ['tank', 'tank (dhw)', 'dhw', 'hot water', 'hot_water', 'warmwasser'].includes(String(this._s('valve')).toLowerCase())));
     // Integrations without an operating-mode entity: a running compressor means heating unless the valve says DHW.
     // Defrost wins over a stopped compressor: it pauses for about a minute while the 4-way valve switches (HeishaMon).
     if (!this._has('mode')) hp = defrost ? 'defrost' : !running ? 'idle' : (valveDhw ? 'dhw' : 'heating');
