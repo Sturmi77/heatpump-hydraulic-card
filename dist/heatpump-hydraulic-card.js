@@ -3320,7 +3320,8 @@ class HeatpumpFlowCard extends HTMLElement {
     const modOk = Number.isFinite(mod) && mod > 0;
     const speed = this._flowSpeed;
     const scaled = (seconds) => `${(seconds / speed).toFixed(2)}s`;
-    const dur = circ ? Math.min(Math.max(2000 / vol, 6), 30) : Number.isFinite(vol) && vol > 0 ? Math.min(Math.max(3.4 - vol / 1000, 0.8), 3) : (modOk ? 2.6 - mod * 1.8 : 2);
+    // The dash speed is proportional to the flow rate: 1000 l/h is one dash cycle per second, sniffing a few l/h crawls.
+    const dur = Number.isFinite(vol) && vol > 0 ? Math.min(Math.max(1000 / vol, 0.4), 30) : (modOk ? 2.6 - mod * 1.8 : 2);
     this.style.setProperty('--hfc-dur', scaled(dur));
     const fanDur = running ? (modOk ? 2.4 - mod * 1.9 : Math.min(Math.max(2.4 - (power || 0) / 1500, 0.5), 2.4)) : 0;
     this.style.setProperty('--hfc-fan', scaled(fanDur));
