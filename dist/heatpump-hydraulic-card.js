@@ -534,6 +534,8 @@ const HFC_PRESETS = {
       const curve = ctx.state(`sensor.${m}heating_mode`) === 'compensation curve';
       return {
         compressor: `sensor.${m}compressor_freq`,
+        // The fan runs on for about a minute after the compressor stops.
+        fan_speed: `sensor.${m}fan1_motor_speed`,
         valve: `sensor.${m}threeway_valve_state`,
         defrost: [`binary_sensor.${m}defrosting_state`, `switch.${m}defrosting_state`],
         heater: [`binary_sensor.${m}internal_heater_state`, `sensor.${m}internal_heater_state`],
@@ -1120,7 +1122,7 @@ const HFC_EDITOR = {
     brine_pressure_min: 'Brine pressure warning below', brine_pressure_crit: 'Brine pressure critical below', brine_pressure_max: 'Brine pressure warning above',
     hc_pressure_min: 'Heating pressure warning below', hc_pressure_crit: 'Heating pressure critical below', hc_pressure_max: 'Heating pressure warning above',
     sec_hp: 'Heat pump', sec_storage: 'Storage', sec_hc: 'Heating circuit & house', sec_power: 'Power sources', sec_stats: 'Statistics',
-    mode: 'Operating mode', status: 'Status / sub-state', compressor: 'Compressor running (binary or frequency)', defrost: 'Defrost active (binary)', power: 'Electrical power',
+    mode: 'Operating mode', status: 'Status / sub-state', compressor: 'Compressor running (binary or frequency)', defrost: 'Defrost active (binary)', fan_speed: 'Fan speed (rpm or binary)', power: 'Electrical power',
     heat: 'Heat output', flow: 'Flow temperature', return: 'Return temperature', volume: 'Flow rate heating side',
     source_volume: 'Flow rate source side', source_in: 'Source / air inlet temperature', outdoor: 'Outdoor temperature',
     valve: 'Diverter valve on DHW (binary or Tank/Room)', bypass_valve: 'Series buffer bypass valve (on = bypass; default: defrost)',
@@ -1182,7 +1184,7 @@ const HFC_EDITOR = {
     brine_pressure_min: 'Soledruck Warnung unter', brine_pressure_crit: 'Soledruck kritisch unter', brine_pressure_max: 'Soledruck Warnung über',
     hc_pressure_min: 'Heizungsdruck Warnung unter', hc_pressure_crit: 'Heizungsdruck kritisch unter', hc_pressure_max: 'Heizungsdruck Warnung über',
     sec_hp: 'Wärmepumpe', sec_storage: 'Speicher', sec_hc: 'Heizkreis & Haus', sec_power: 'Stromquellen', sec_stats: 'Kennzahlen',
-    mode: 'Betriebsart', status: 'Status / Unterzustand', compressor: 'Verdichter läuft (binär oder Frequenz)', defrost: 'Abtauen aktiv (binär)', power: 'Leistungsaufnahme',
+    mode: 'Betriebsart', status: 'Status / Unterzustand', compressor: 'Verdichter läuft (binär oder Frequenz)', defrost: 'Abtauen aktiv (binär)', fan_speed: 'Lüfterdrehzahl (U/min oder binär)', power: 'Leistungsaufnahme',
     heat: 'Wärmeleistung', flow: 'Vorlauftemperatur', return: 'Rücklauftemperatur', volume: 'Volumenstrom Heizseite',
     source_volume: 'Volumenstrom Quelle', source_in: 'Quelle / Luft-Eintritt', outdoor: 'Außentemperatur',
     valve: 'Umschaltventil auf WW (binär oder Tank/Room)', bypass_valve: 'Bypass-Ventil Reihenpuffer (ein = Bypass; Standard: Abtauen)',
@@ -1203,7 +1205,7 @@ const HFC_MAX_HC = 6;
 const hfcHcCount = (config) => Math.min(Math.max(Math.round(+config?.hc_count) || 1, 1), HFC_MAX_HC);
 
 const HFC_ENTITY_GROUPS = {
-  sec_hp: ['mode', 'status', 'compressor', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater'],
+  sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater'],
   sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'dhw_heater', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'bypass_valve', 'solar_collector', 'solar_pump'],
   sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_pressure', 'room', 'room_target', 'program'],
   // The room of circuit 1 is the house (room, room_target); circuits 2 to 6 show theirs in their status line.
@@ -2271,7 +2273,6 @@ class HeatpumpFlowCard extends HTMLElement {
           <defs>
             <linearGradient id="g-dhw" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-dhw-top"/>${this._has('dhw_middle') ? '<stop offset="50%" id="g-dhw-middle"/>' : ''}<stop offset="100%" id="g-dhw-bottom"/></linearGradient>
             <linearGradient id="g-buf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-buf-top"/>${this._has('buffer_middle') ? '<stop offset="50%" id="g-buf-middle"/>' : ''}<stop offset="100%" id="g-buf-bottom"/></linearGradient>
-            <linearGradient id="g-rad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-rad-top"/><stop offset="100%" id="g-rad-bottom"/></linearGradient>
             <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
           </defs>
 
@@ -3573,7 +3574,13 @@ class HeatpumpFlowCard extends HTMLElement {
     // The dash speed is proportional to the flow rate: 1000 l/h is one dash cycle per second, sniffing a few l/h crawls.
     const dur = Number.isFinite(vol) && vol > 0 ? Math.min(Math.max(1000 / vol, 0.4), 30) : (modOk ? 2.6 - mod * 1.8 : 2);
     this.style.setProperty('--hfc-dur', scaled(dur));
-    const fanDur = running ? (modOk ? 2.4 - mod * 1.9 : Math.min(Math.max(2.4 - (power || 0) / 1500, 0.5), 2.4)) : 0;
+    // A fan speed entity wins: the fan runs on after the compressor stops. Numeric values are rpm, else on/off.
+    // An unavailable or unknown fan entity (integration offline, Home Assistant restart) counts as missing.
+    const fanKnown = this._has('fan_speed') && !['unavailable', 'unknown'].includes(String(this._s('fan_speed')).toLowerCase());
+    const fanRpm = fanKnown ? this._n('fan_speed') : NaN;
+    const fanOn = fanKnown ? (Number.isFinite(fanRpm) ? fanRpm > 0 : this._on('fan_speed')) : running;
+    const fanDur = !fanOn ? 0 : Number.isFinite(fanRpm) ? Math.min(Math.max(2.4 - fanRpm / 500, 0.5), 2.4)
+      : (modOk ? 2.4 - mod * 1.9 : Math.min(Math.max(2.4 - (power || 0) / 1500, 0.5), 2.4));
     this.style.setProperty('--hfc-fan', scaled(fanDur));
     this.style.setProperty('--hfc-pump', scaled(modOk ? 1.8 - mod * 1.2 : 1.2));
     this.style.setProperty('--hfc-electrical', scaled(1.1));
@@ -3681,7 +3688,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._txt('t-vol', this._has('volume') && flowLoop && Number.isFinite(vol) ? `${this._fmt(vol, 0)} l/h` : '');
 
     // heat pump
-    this._cls('fan', running); this._cls('fan2', running);
+    this._cls('fan', fanOn); this._cls('fan2', fanOn);
     this._cls('snow', defrost && this._sourceType === 'air'); this._cls('snow2', defrost && this._sourceType === 'air'); this._cls('vapour', defrost && this._sourceType === 'air'); this._cls('hp-box', running);
     const hpBox = this._$('hp-box');
     if (hpBox) {
