@@ -1393,6 +1393,35 @@
     late.remove();
   }
 
+  // 13i. Vaillant (myPyllant) with suffixed entity ids (_2) and a zone thermostat only (#120)
+  {
+    const reg = (states) => Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'mypyllant' }]));
+    const base = {
+      'sensor.home_energy_manager_state_2': 'HEATING', 'sensor.home_system_flow_temperature_2': ['31.4', '°C'],
+      'sensor.home_circuit_0_current_flow_temperature': ['33.75', '°C'], 'sensor.home_domestic_hot_water_0_tank_temperature': ['38.0', '°C'],
+      'sensor.home_domestic_hot_water_0_setpoint': ['45.0', '°C'], 'sensor.home_top_central_heating_cylinder_temperature': ['31.4', '°C'],
+      'climate.home_zone_1_circuit_0_climate': { state: 'auto', attributes: { current_temperature: 18.5, temperature: 20 } },
+    };
+    const resolve = (states, config = { preset: 'vaillant' }) => C._resolve(config, hassOf(toStates(states), reg(states)));
+    let r = resolve(base); let e = r.entities;
+    check(r.ready && r.prefix === 'home', `the home is found although its entity ids end in _2 (ready ${r.ready}, prefix "${r.prefix}")`);
+    check(e.mode === 'sensor.home_energy_manager_state_2' && e.flow === 'sensor.home_system_flow_temperature_2', 'entities with a number are used where the plain id does not exist');
+    check(e.hc_flow === 'sensor.home_circuit_0_current_flow_temperature' && e.dhw_top === 'sensor.home_domestic_hot_water_0_tank_temperature'
+      && e.dhw_target === 'sensor.home_domestic_hot_water_0_setpoint' && e.buffer_top === 'sensor.home_top_central_heating_cylinder_temperature', 'circuit, hot water and buffer of the same home');
+    check(e.room === 'climate.home_zone_1_circuit_0_climate' && e.room_target === 'climate.home_zone_1_circuit_0_climate', 'the zone thermostat serves as room temperature and target without zone sensors');
+    const card = mount({ preset: 'vaillant' }, hassOf(toStates(base), reg(base))); await wait(30);
+    check(/mode-heat/.test(card.shadowRoot.getElementById('chip-mode').className) && /18\.5/.test(card.shadowRoot.getElementById('t-room')?.textContent || ''), 'the card shows the heating mode and the room temperature of the thermostat');
+    card.remove();
+    r = resolve({ ...base, 'sensor.home_energy_manager_state': 'STANDBY', 'sensor.home_system_flow_temperature': ['29.0', '°C'],
+      'sensor.home_zone_1_current_temperature': ['21.0', '°C'], 'sensor.home_zone_1_desired_temperature': ['22.0', '°C'] }); e = r.entities;
+    check(e.mode === 'sensor.home_energy_manager_state' && e.flow === 'sensor.home_system_flow_temperature', 'the plain id wins over the one with a number');
+    check(e.room === 'sensor.home_zone_1_current_temperature' && e.room_target === 'sensor.home_zone_1_desired_temperature', 'zone sensors win over the thermostat');
+    r = resolve({ 'sensor.home_2_energy_manager_state': 'COOLING' });
+    check(r.ready && r.prefix === 'home_2' && r.entities.mode === 'sensor.home_2_energy_manager_state', `a home that is named home_2 keeps its name as the prefix (${r.prefix})`);
+    r = resolve(base, { preset: 'vaillant', prefix: 'home' });
+    check(r.ready && r.entities.mode === 'sensor.home_energy_manager_state_2', 'with the prefix set by hand the numbered entity is found, too');
+  }
+
   // 14. outdoor unit drawings: style per preset, manufacturer variants, fans and snowflakes, loop symbol for ground sources
   {
     const draw = async (setup, scen, cfg = {}) => {

@@ -249,14 +249,14 @@ It maps the refrigeration-circuit mode, compressor and diverter valve; system el
 type: custom:heatpump-flow-card
 preset: vaillant
 ```
-The home name prefix is detected from `sensor.<home>_energy_manager_state`.
+The home name prefix is detected from `sensor.<home>_energy_manager_state`. An entity id that ends in a number (`…_energy_manager_state_2`, which Home Assistant adds to an id that was already taken) is found as well; where both exist, the plain id wins. If the detection picks the wrong home or fails, set `prefix: <home>` (the part of the entity ids before the name of the entity).
 
 What you get:
 - the energy manager state (standby, heating, DHW, cooling) as the mode
 - system flow temperature
 - DHW tank and buffer
 - circuit 0 flow, setpoint and state
-- zone room temperature and target
+- zone room temperature and target; without zone sensors the zone thermostat (`climate.<home>_zone_…`) serves as room temperature and target
 - device power and heating efficiency
 - trouble codes
 
