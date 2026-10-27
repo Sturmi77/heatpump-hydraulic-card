@@ -2175,6 +2175,30 @@
     preset.remove();
   }
 
+  // 21. built-in languages: a partly translated language works without gaps and shows up in the editor (docs/TRANSLATING.md)
+  {
+    HFC_LANGUAGES.xx = 'Xxish';
+    HFC_I18N.xx = { title: 'Xx title', det: { hours: 'Xx hours' }, modes: { heating: 'Xx heating' } };
+    HFC_EDITOR.xx = { title: 'Xx editor title' };
+    try {
+      const options = C._formSchema({ texts: { nl: { title: 'x' } } }).schema.flatMap(function find(n) { return n.name === 'language' ? [n.selector.select.options] : n.schema ? n.schema.flatMap(find) : []; })[0];
+      check(options[0].value === 'auto' && ['de', 'en', 'xx', 'nl'].every((v) => options.some((o) => o.value === v)), 'the editor lists Auto, the built-in languages and the custom ones');
+      check(options.find((o) => o.value === 'xx').label === 'Xxish' && options.find((o) => o.value === 'de').label === 'Deutsch', 'built-in languages are listed with their own name');
+      check(options.filter((o) => o.value === 'de').length === 1 && options.filter((o) => o.value === 'xx').length === 1, 'a language is listed once');
+      check(hfcBuiltin(HFC_EDITOR, 'xx').title === 'Xx editor title' && hfcBuiltin(HFC_EDITOR, 'xx').preset === HFC_EDITOR.en.preset, 'editor labels of a partial language fall back to English');
+      check(hfcBuiltin(HFC_I18N, 'xx').det.hours === 'Xx hours' && hfcBuiltin(HFC_I18N, 'xx').det.starts_total === HFC_I18N.en.det.starts_total, 'nested texts of a partial language fall back to English');
+      const states = toStates({ 'sensor.flow': ['35', '°C'], 'sensor.return': ['30', '°C'] });
+      const xx = mount({ language: 'xx', entities: { flow: 'sensor.flow', return: 'sensor.return' } }, hassOf(states)); await wait(20);
+      check(ok(xx) && xx._lang === 'xx' && xx.shadowRoot.querySelector('.title').textContent === 'Xx title' && xx._i.compressor_off === HFC_I18N.en.compressor_off,
+        'a built-in language selects by code and the missing card texts are English');
+      xx.remove();
+      const regional = mount({ language: 'xx-yy', entities: { flow: 'sensor.flow', return: 'sensor.return' } }, hassOf(states)); await wait(20);
+      check(regional._lang === 'xx', 'a regional variant uses the built-in language of its base code');
+      regional.remove();
+      check(C._language({}, { locale: { language: 'xx-YY' } }) === 'xx' && C._language({}, { locale: { language: 'qq' } }) === 'en', 'the Home Assistant language selects a built-in language, unknown ones use English');
+    } finally { delete HFC_LANGUAGES.xx; delete HFC_I18N.xx; delete HFC_EDITOR.xx; }
+  }
+
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');
   document.getElementById('result').textContent = fails.length ? 'FAIL' : 'PASS';
