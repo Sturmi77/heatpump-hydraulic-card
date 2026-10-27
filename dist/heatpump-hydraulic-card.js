@@ -2316,8 +2316,9 @@ class HeatpumpFlowCard extends HTMLElement {
       buffer,
       // A series buffer sits in the return; a parallel buffer (with its own sensors) wins.
       series: !!this._config.series_buffer && !buffer && (this._noBypass() ? 'fixed' : 'valve'),
-      // A direct system still has a circuit: use the heat-pump flow/return when no circuit-specific sensors exist.
-      hc: this._has('hc_flow') || this._has('hc_mode') || this._has('hc_pump') || (!buffer && (this._has('flow') || this._has('return'))),
+      // Circuit 1 exists wherever the heat loop is drawn, without a sensor of its own: it hangs on the buffer (whose temperature
+      // it shows as its flow), or on the heat pump's flow and return in a direct system.
+      hc: this._has('hc_flow') || this._has('hc_mode') || this._has('hc_pump') || buffer || this._has('flow') || this._has('return'),
       house: this._has('room') || this._has('room_target'),
       circ: this._has('circulation'),
       primaryPump: this._primaryPump(),
