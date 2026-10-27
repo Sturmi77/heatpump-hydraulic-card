@@ -80,7 +80,7 @@ Pump counters remain follow-up work in [#31](https://github.com/Sturmi77/heatpum
 
 ## Storage topology
 
-Combined/layered storage ([#50](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/50)), the wood stove ([#36](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/36)) and a second heat generator ([#51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51)) share one plan: [TOPOLOGY.md](TOPOLOGY.md). Phase 1 (combined storage) is the next larger feature; the stove follows after a geometry spike; the second heat generator waits for data from a real hybrid installation.
+Combined/layered storage ([#50](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/50)), the wood stove ([#36](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/36)) and a second heat generator ([#51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51)) share one plan: [TOPOLOGY.md](TOPOLOGY.md). It recommends a staged internal component model: first a geometry snapshot test and a generated combination test, then one flow model, then the storage column as components with the combined storage (phase 1) as the first new one. The stove follows; the second heat generator waits for data from a real hybrid installation.
 
 ## Larger feature priority
 
