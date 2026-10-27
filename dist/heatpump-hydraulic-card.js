@@ -6,7 +6,7 @@
  *
  * https://github.com/Sturmi77/heatpump-hydraulic-card · MIT License
  */
-const HFC_VERSION = '0.12.0';
+const HFC_VERSION = '0.13.0';
 // Address this file was loaded from: shows at once when a dashboard resource still points to an old file.
 const HFC_SCRIPT_URL = (() => {
   try {
@@ -25,7 +25,10 @@ const HFC_SCRIPT_URL = (() => {
 //   error_ok                   → text states that mean "no error"; any other known text shows the chip
 //   tiles(prefix, idx, ctx)    → { tile: { period: entity_id | [candidates…] } } for the stat tile catalog (HFC_TILES);
 //                                a "total" counter with long-term statistics also gives today, yesterday, week, month and year
+//   dynamic                    → true when entities() maps parts by their readings (ctx.state): the card resolves again every
+//                                minute and rebuilds when a mapping appears, so parts that report late are not lost
 //   *_mode_map                 → raw state → normalized mode
+//   valve_map                  → raw state of the `valve` entity → dhw | heating (default: on, Tank, DHW … mean hot water)
 // ctx.key(platform, domain, translation_key) finds entities via the entity registry (language-independent),
 // ctx.match(regex, platform) finds the first entity id matching a pattern, ctx.state(entity_id) reads a current state.
 // PointT uses stable resource keys in unique_id; entity ids can be translated or renamed.
@@ -764,6 +767,8 @@ const HFC_PRESETS = {
   // buffer is not exposed, so neither is mapped.
   luxtronik: {
     name: 'Luxtronik (Alpha Innotec, Novelan, Roth …)',
+    // A mixing circuit counts when its sensors report: the card looks again every minute for circuits that report late.
+    dynamic: true,
     auto_circuits: false,
     detect: (ctx) => (ctx.key('luxtronik2', 'sensor', 'status') || ctx.key('luxtronik2', 'sensor', 'flow_in_temperature') ? '' : undefined),
     entities: (p, i, ctx) => {
@@ -839,6 +844,8 @@ const HFC_PRESETS = {
   // derives the mode from the compressor, the defrost flag and the hot water flag; cooling is not shown.
   stiebel_isg: {
     name: 'Stiebel Eltron ISG (WPM, LWZ) / Tecalor',
+    // Optional parts are mapped by their readings: the card looks again every minute for parts that report late.
+    dynamic: true,
     auto_circuits: false,
     source_type: (e) => (e.source_in || e.brine_pressure ? 'brine' : 'air'),
     detect: (ctx) => (['outdoor_temperature', 'actual_temperature_water', 'flow_temperature'].some((tk) => ctx.key('stiebel_eltron_isg', 'sensor', tk)) ? '' : undefined),
@@ -1098,7 +1105,7 @@ const HFC_I18N = {
       hours: 'Compressor hours', hours_per_start: 'Runtime per start', load_classes: 'Load classes 1-5', aux_hours: 'Heater hours', aux_starts: 'Heater starts',
       spread: 'Spread', volume: 'Flow rate', heat_estimated: 'Heat output', power: 'Power', heat_live: 'Heat output', compressor_speed: 'Compressor',
       source_spread: 'Source spread', outdoor: 'Outdoor', dhw_top: 'DHW tank', room: 'Room', brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', pv_share: 'PV share today',
-      pv_boost_share: 'PV surplus share of heating', pv_production: 'PV yield', solar_thermal: 'Solar thermal', cost: 'Cost',
+      pv_boost_share: 'PV surplus share of heating', pv_production: 'PV yield', solar_thermal: 'Solar thermal', cost: 'Cost', dhw_loss: 'DHW standby loss',
     },
     periods: { now: 'now', today: 'today', yesterday: 'yesterday', week: 'week', month: 'month', year: 'year', total: 'total' },
     modes: {
@@ -1138,7 +1145,7 @@ const HFC_I18N = {
       hours: 'Verdichterstunden', hours_per_start: 'Laufzeit pro Start', load_classes: 'Lastklassen 1-5', aux_hours: 'Heizstab-Stunden', aux_starts: 'Heizstab-Starts',
       spread: 'Spreizung', volume: 'Volumenstrom', heat_estimated: 'Wärmeleistung', power: 'Leistung', heat_live: 'Wärmeleistung', compressor_speed: 'Verdichter',
       source_spread: 'Spreizung Quelle', outdoor: 'Außen', dhw_top: 'WW-Speicher', room: 'Raum', brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', pv_share: 'PV-Anteil heute',
-      pv_boost_share: 'PV-Überschuss-Anteil am Heizen', pv_production: 'PV-Ertrag', solar_thermal: 'Solarthermie', cost: 'Kosten',
+      pv_boost_share: 'PV-Überschuss-Anteil am Heizen', pv_production: 'PV-Ertrag', solar_thermal: 'Solarthermie', cost: 'Kosten', dhw_loss: 'WW-Standbyverlust',
     },
     periods: { now: 'aktuell', today: 'heute', yesterday: 'gestern', week: 'Woche', month: 'Monat', year: 'Jahr', total: 'gesamt' },
     modes: {
@@ -1389,7 +1396,11 @@ const HFC_TILES = {
   pv_boost_share: { kind: 'share', periods: ['today', 'yesterday', 'week'] },
   pv_production: { kind: 'energy' }, solar_thermal: { kind: 'energy' },
   cost: { kind: 'cost', periods: ['today', 'yesterday', 'week', 'month', 'year', 'total'] },
+  dhw_loss: { kind: 'loss', periods: ['now'], noSuffix: true },
 };
+// Standby loss of the hot-water tank: history window, minimum standby window, settling time after charging or draw-off,
+// and the temperature changes within 30 minutes that count as draw-off or as heating the card cannot explain.
+const HFC_LOSS = { hours: 48, minWindow: 3, settle: 0.5, drawOff: 1.5, rise: 1.0 };
 
 /* ------------------------------------------------------------------ */
 /* Card                                                                */
@@ -1505,8 +1516,10 @@ class HeatpumpFlowCard extends HTMLElement {
 
   // Form schema. With a config, circuit fields and groups are limited to hc_count.
   static _formSchema(config, tiles) {
-    const lang = (document.querySelector('home-assistant')?.hass?.locale?.language || navigator.language || 'en').slice(0, 2);
-    const L = hfcBuiltin(HFC_EDITOR, lang);
+    // The full locale first (pt-br), then its language (pt), like the card does; each table has its own set of languages.
+    const locale = String(document.querySelector('home-assistant')?.hass?.locale?.language || navigator.language || 'en').toLowerCase().replace('_', '-');
+    const langIn = (table) => (locale in table ? locale : locale.split('-')[0]);
+    const L = hfcBuiltin(HFC_EDITOR, langIn(HFC_EDITOR));
     const hcCount = config ? hfcHcCount(config) : HFC_MAX_HC;
     const customLanguages = Object.keys(config?.texts || {}).filter((v) => !(v in HFC_LANGUAGES));
     const languageOptions = [{ value: 'auto', label: 'Auto' },
@@ -1590,7 +1603,7 @@ class HeatpumpFlowCard extends HTMLElement {
       ],
       // Keys of circuits 2 to 6 reuse the labels of circuit 1 (hc2_flow → hc_flow, hc2_room → room).
       computeLabel: (s) => L[s.name] || L[String(s.name).replace(/^hc[2-6]_/, 'hc_')] || L[String(s.name).replace(/^hc[2-6]_/, '')]
-        || hfcBuiltin(HFC_I18N, lang).det[s.name] || s.name,
+        || hfcBuiltin(HFC_I18N, langIn(HFC_I18N)).det[s.name] || s.name,
       L,
     };
   }
@@ -1667,6 +1680,11 @@ class HeatpumpFlowCard extends HTMLElement {
     if (config.primary_pump !== undefined && config.primary_pump !== null && typeof config.primary_pump !== 'boolean') {
       throw new Error('primary_pump must be true or false');
     }
+    if (config.valve_map !== undefined && config.valve_map !== null) {
+      if (typeof config.valve_map !== 'object' || Array.isArray(config.valve_map) || Object.values(config.valve_map).some((v) => !['dhw', 'heating'].includes(v))) {
+        throw new Error('valve_map must map raw valve states to dhw or heating');
+      }
+    }
     if (config.texts !== undefined && config.texts !== null) HeatpumpFlowCard._validateTexts(config.texts);
     if (config.flow_speed !== undefined && config.flow_speed !== null && config.flow_speed !== '' && !(+config.flow_speed >= 0.2 && +config.flow_speed <= 3)) {
       throw new Error('flow_speed must be a number from 0.2 to 3');
@@ -1732,6 +1750,8 @@ class HeatpumpFlowCard extends HTMLElement {
       dhw: { ...(preset?.dhw_mode_map || {}), ...(config.dhw_mode_map || {}) },
       buffer: { ...(preset?.buffer_mode_map || {}), ...(config.buffer_mode_map || {}) },
       hc: { ...(preset?.hc_mode_map || {}), ...(config.hc_mode_map || {}) },
+      // The keys are lower case, so a state matches whatever case the key was written in.
+      valve: Object.fromEntries(Object.entries({ ...(preset?.valve_map || {}), ...(config.valve_map || {}) }).map(([k, v]) => [String(k).toLowerCase(), v])),
     };
     this._runningStates = config.running_states || preset?.running_states || [];
     this._statusLabels = preset?.status_labels || {};
@@ -1880,6 +1900,17 @@ class HeatpumpFlowCard extends HTMLElement {
     }
     this._needsBuild = !r.ready;
     this._lastTry = Date.now();
+    this._mapped = HeatpumpFlowCard._mappingSet(r); this._checkedAt = Date.now();
+  }
+
+  // Everything a resolution maps, as "kind:key=entity" strings: compared to find mappings that appeared later.
+  static _mappingSet(r) {
+    const id = (x) => (typeof x === 'string' ? x : x?.entity);
+    return new Set([
+      ...Object.entries(r.entities).map(([k, v]) => `entity:${k}=${v}`),
+      ...Object.entries(r.tiles).flatMap(([k, periods]) => Object.entries(periods).map(([p, v]) => `tile:${k}.${p}=${v}`)),
+      ...[...(r.controls || []), ...(r.details || []), ...(r.errors || [])].map((x) => `list:${id(x)}`),
+    ]);
   }
 
   static _energyInfo(prefs) {
@@ -1993,6 +2024,13 @@ class HeatpumpFlowCard extends HTMLElement {
         this._pointtRevision = revision; this._needsBuild = true; this._lastTry = 0;
       }
     }
+    // A preset that maps optional hardware by its readings (`dynamic`) looks again every minute. Only a mapping that has
+    // appeared since the build triggers a new build: a sensor that drops out for a moment never removes anything.
+    if (this._preset?.dynamic && !this._needsBuild && this._rendered && this._mapped && Date.now() - this._checkedAt > 60000) {
+      this._checkedAt = Date.now();
+      const r = HeatpumpFlowCard._resolve(this._config, this._hass);
+      if (r.ready && [...HeatpumpFlowCard._mappingSet(r)].some((m) => !this._mapped.has(m))) { this._needsBuild = true; this._lastTry = 0; }
+    }
     // Retry detection at most every 30 s while the integration's entities are not there yet.
     if (this._needsBuild && (!this._rendered || Date.now() - this._lastTry > 30000)) { this._build(); this._rendered = false; }
     this._loadEnergy();
@@ -2072,6 +2110,11 @@ class HeatpumpFlowCard extends HTMLElement {
     group.dataset.a11y = `${label}: ${this._pressureText(key)}, ${this._i[`pressure_${state}`]}`;
   }
   _on(key) { return ['on', 'true', 'open', '1', 'ein'].includes(String(this._s(key)).toLowerCase()); }
+  // Diverter valve state through `valve_map`: true = hot water, false = heating, undefined = the state is not in the map.
+  _valveMapped(raw) {
+    const mapped = this._norm(this._maps.valve, raw);
+    return mapped === 'dhw' ? true : mapped === 'heating' ? false : undefined;
+  }
   // PV surplus mode: a binary entity that is on, or a power (e.g. the setpoint of an energy manager) above 0.
   _pvOn(state) { const s = String(state).toLowerCase(); return ['on', 'true', 'open', 'ein'].includes(s) || parseFloat(s) > 0; }
   _pvBoost() { return this._has('pv_boost') && this._pvOn(this._s('pv_boost')); }
@@ -2633,6 +2676,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (def.live) return period === 'now' && this._liveAvail(key) ? { live: true } : null;
     if (def.kind === 'classes') return period === 'total' && this._tileMap.load_class1 ? { classes: true } : null;
     if (def.kind === 'cost') return this._tileSource('energy', period) ? { cost: true } : null;
+    if (def.kind === 'loss') return period === 'now' && this._lossIds() ? { loss: true } : null;
     if (def.kind === 'share') return this._timelineIds()?.pv ? { share: true } : null;
     const map = this._tileMap[key] || {};
     // The entities of the default tiles (cop_heating_today …) count as "today", unless the preset maps them to another period.
@@ -2802,6 +2846,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (src.classes) return this._tileMap.load_class1;
     if (src.share) return this._e.pv_boost;
     if (src.cost) return this._tileEntity(this._tileSource('energy', period), period);
+    if (src.loss) return this._lossIds()?.temps[0] || '';
     return '';
   }
 
@@ -2824,6 +2869,7 @@ class HeatpumpFlowCard extends HTMLElement {
         return `${approx ? '≈' : ''}${v.toLocaleString(this._hass.locale?.language || this._lang, { style: 'currency', currency, minimumFractionDigits: dec(2), maximumFractionDigits: dec(2) })}`;
       } catch (err) { return `${approx ? '≈' : ''}${out(v, 2, currency)}`; }
     }
+    if (src.loss) { const loss = this._dhwLossNow(); return loss ? out(loss.rate, 2, 'K/h') : '–'; }
     const v = this._srcValue(src, def.kind, period);
     const approx = src.ratio || src.envCop ? '≈' : '';
     if (def.kind === 'cop') return Number.isFinite(v) ? `${approx}${this._fmt(v, dec(2))}` : '–';
@@ -3235,6 +3281,101 @@ class HeatpumpFlowCard extends HTMLElement {
   }
   _hideRing() { if (this._ring) { this._ring.remove(); this._ring = null; } }
 
+  /* ---------- standby loss of the hot-water tank ---------- */
+  // The tank sensors (the uppermost is measured, all of them detect draw-off) and what tells charging from standby:
+  // the operating mode or the compressor with the valve, plus the DHW heater rod and the solar pump. Without a running
+  // signal no standby window can be verified, so there is no value.
+  // A thermostat (climate, water heater) keeps the temperature in an attribute, which the history query leaves out, so it
+  // cannot be the measured sensor: without a plain sensor at the top the tile is not offered.
+  _lossIds() {
+    const keys = ['dhw_top', 'dhw_middle', 'dhw_bottom'].filter((k) => this._has(k));
+    const sensors = keys.filter((k) => !['climate', 'water_heater'].includes(String(this._e[k]).split('.')[0]));
+    const temps = sensors.map((k) => this._e[k]);
+    const run = this._timelineIds();
+    if (!temps.length || sensors[0] !== keys[0] || !run) return null;
+    return { temps, run, extra: ['dhw_heater', 'solar_pump'].filter((k) => this._has(k)).map((k) => this._e[k]) };
+  }
+
+  // Loss over the last HFC_LOSS.hours from the recorder history, cached like the other recorder queries.
+  _dhwLossNow() {
+    const ids = this._lossIds();
+    if (!ids) return null;
+    const list = [...new Set([...ids.temps, ...Object.values(ids.run).filter(Boolean), ...ids.extra])];
+    const end = Date.now(); const start = end - HFC_LOSS.hours * 3600000;
+    const hist = this._wsCached(`dhwloss|${list.join(',')}`, {
+      type: 'history/history_during_period', start_time: new Date(start).toISOString(), entity_ids: list,
+      minimal_response: true, no_attributes: true, significant_changes_only: false,
+    }, (res) => this._timelineHistory(res, list));
+    if (!hist) return null;
+    // The history changes every five minutes; the analysis runs once per history.
+    if (this._lossMemo?.hist !== hist) this._lossMemo = { hist, v: this._dhwLoss(hist, ids, start, end) };
+    return this._lossMemo.v;
+  }
+
+  // Cool-down of the tank in K/h from verified standby windows only. Excluded, each with a settling time: hot-water operation,
+  // heater rod or solar pump not clearly off, unknown states, draw-off (a sensor drops HFC_LOSS.drawOff K within 30 minutes)
+  // and heating the card cannot explain (a rise of HFC_LOSS.rise K). Every remaining window of at least HFC_LOSS.minWindow
+  // hours gets a linear fit of the uppermost sensor; the result is the mean slope weighted by window length.
+  // Returns { rate, hours, windows, temp } or null without a window.
+  _dhwLoss(hist, ids, start, end) {
+    const H = 3600000; const settle = HFC_LOSS.settle * H; const half = H / 2;
+    const busy = [];
+    // Hot-water operation and gaps from the same segments as the timeline; time before the first state is unknown.
+    const segs = this._timelineSegments(hist, ids.run, start, end);
+    if (!segs.length) return null;
+    if (segs[0].from > start) busy.push([start, segs[0].from]);
+    segs.forEach((s) => { if (s.kind === 'dhw' || s.kind === 'gap') busy.push([s.from, s.to + settle]); });
+    // The timeline reads a missing or unavailable compressor or valve as idle or heating, which could hide a hot-water run:
+    // every running signal must be known all the time.
+    Object.values(ids.run).filter(Boolean).forEach((id) => {
+      const list = hist[id] || [];
+      if (!list.length || list[0].t > start) busy.push([start, list.length ? list[0].t : end]);
+      list.forEach((e, n) => { if (['unknown', 'unavailable'].includes(e.s)) busy.push([e.t, (list[n + 1]?.t ?? end) + settle]); });
+    });
+    const off = (s) => ['off', 'false', 'aus', 'idle', 'standby'].includes(String(s).toLowerCase()) || parseFloat(s) === 0;
+    ids.extra.forEach((id) => {
+      const list = hist[id] || [];
+      if (!list.length || list[0].t > start) busy.push([start, list.length ? list[0].t : end]);
+      list.forEach((e, n) => { if (!off(e.s)) busy.push([e.t, (list[n + 1]?.t ?? end) + settle]); });
+    });
+    const series = ids.temps.map((id) => (hist[id] || []).map((e) => ({ t: e.t, v: parseFloat(e.s) })));
+    series.forEach((list) => {
+      if (!list.length || list[0].t > start) busy.push([start, list.length ? list[0].t : end]);
+      let j = 0;
+      list.forEach((e, n) => {
+        if (!Number.isFinite(e.v)) { busy.push([e.t, (list[n + 1]?.t ?? end) + settle]); return; }
+        // The value held 30 minutes earlier, found with a pointer that only moves forward. Within the first 30 minutes of the
+        // history the first value is the baseline, so a draw-off right at the start is seen as well.
+        while (j + 1 < n && list[j + 1].t <= e.t - half) j++;
+        const before = n > 0 ? list[j].v : NaN;
+        if (before - e.v >= HFC_LOSS.drawOff || e.v - before >= HFC_LOSS.rise) busy.push([e.t - half - settle, e.t + settle]);
+      });
+    });
+    // Free windows between the merged busy intervals.
+    busy.sort((a, b) => a[0] - b[0]);
+    const free = []; let t = start;
+    busy.forEach(([from, to]) => { if (from > t) free.push([t, Math.min(from, end)]); t = Math.max(t, to); });
+    if (t < end) free.push([t, end]);
+    const measured = series[0];
+    let weight = 0; let sum = 0; let temps = 0; let samples = 0; let windows = 0;
+    free.filter(([from, to]) => to - from >= HFC_LOSS.minWindow * H).forEach(([from, to]) => {
+      // Sample the held value every ten minutes and fit a line (K per hour).
+      const pts = []; let k = 0;
+      for (let at = from; at <= to; at += 600000) {
+        while (k + 1 < measured.length && measured[k + 1].t <= at) k++;
+        if (measured[k] && measured[k].t <= at && Number.isFinite(measured[k].v)) pts.push([(at - from) / H, measured[k].v]);
+      }
+      if (pts.length < 4) return;
+      const mx = pts.reduce((a, p) => a + p[0], 0) / pts.length; const my = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+      const slope = pts.reduce((a, p) => a + (p[0] - mx) * (p[1] - my), 0) / pts.reduce((a, p) => a + (p[0] - mx) ** 2, 0);
+      // A tank does not warm up in standby: a rising fit means an unknown heat source, so the window is not used.
+      if (!(slope <= 0.05)) return;
+      const len = (to - from) / H;
+      weight += len; sum += Math.max(-slope, 0) * len; temps += my * pts.length; samples += pts.length; windows++;
+    });
+    return windows ? { rate: sum / weight, hours: weight, windows, temp: temps / samples } : null;
+  }
+
   /* ---------- timeline of the operating mode ---------- */
   // Entities whose history tells what the heat pump did: the operating mode, else the compressor (and the valve for hot water).
   // A `pv_boost` entity adds its history: the heating periods in PV surplus mode become their own kind.
@@ -3283,8 +3424,14 @@ class HeatpumpFlowCard extends HTMLElement {
       minimal_response: true, no_attributes: true, significant_changes_only: false,
     }, (res) => this._timelineHistory(res, idList));
     if (!hist) return NaN;
-    const segs = this._timelineSegments(hist, ids, Date.parse(range[0]), range[1] ? Date.parse(range[1]) : Date.now());
-    const time = (kind) => segs.filter((s) => s.kind === kind).reduce((sum, s) => sum + s.to - s.from, 0);
+    const from = Date.parse(range[0]); const to = range[1] ? Date.parse(range[1]) : Date.now();
+    const segs = this._timelineSegments(hist, ids, from, to);
+    // Only the time in which the PV entity has a known state counts: before its first state (not recorded, added later) and
+    // while it is unknown or unavailable nothing is known about it, which must not read as "not in PV surplus mode".
+    const list = hist[ids.pv] || [];
+    const known = list.map((e, n) => [e.t, list[n + 1] ? list[n + 1].t : to, e.s]).filter(([, , s]) => !['unknown', 'unavailable'].includes(s));
+    const within = (s) => known.reduce((sum, [a, b]) => sum + Math.max(0, Math.min(s.to, b) - Math.max(s.from, a)), 0);
+    const time = (kind) => segs.filter((s) => s.kind === kind).reduce((sum, s) => sum + within(s), 0);
     const heating = time('heat') + time('pv');
     return heating > 0 ? (time('pv') / heating) * 100 : NaN;
   }
@@ -3319,7 +3466,7 @@ class HeatpumpFlowCard extends HTMLElement {
       const comp = hist[ids.comp]; const valve = ids.valve ? hist[ids.valve] : [];
       const at = (list, t) => { let s; for (const e of list) { if (e.t <= t) s = e.s; else break; } return s; };
       const on = (s) => s !== undefined && !['off', 'unavailable', 'unknown', '0', '0.0'].includes(String(s).toLowerCase());
-      const dhw = (s) => s !== undefined && (['on', 'tank', 'dhw', 'hot water', 'warmwasser'].includes(String(s).toLowerCase()));
+      const dhw = (s) => s !== undefined && (this._valveMapped(s) ?? ['on', 'tank', 'dhw', 'hot water', 'warmwasser'].includes(String(s).toLowerCase()));
       [...new Set([...comp.map((e) => e.t), ...valve.map((e) => e.t)])].sort((a, b) => a - b).forEach((t) => {
         const cs = at(comp, t);
         if (['unknown', 'unavailable'].includes(cs)) points.push({ t, kind: 'gap', raw: cs });
@@ -3701,7 +3848,9 @@ class HeatpumpFlowCard extends HTMLElement {
       || (!this._has('compressor') && !this._has('power') && !this._has('status') && ['heating', 'dhw', 'cooling', 'defrost'].includes(hp));
     const defrost = hp === 'defrost' || status.toUpperCase().includes('DEFROST') || (this._has('defrost') && this._on('defrost'));
     // Valve: binary (on = DHW) or a state such as "Tank" / "DHW".
-    const valveDhw = this._has('valve') && (this._on('valve') || ['tank', 'tank (dhw)', 'dhw', 'hot water', 'hot_water', 'warmwasser'].includes(String(this._s('valve')).toLowerCase()));
+    // A `valve_map` (raw state → dhw | heating) decides first, for valves that report 1 for heating or other texts.
+    const valveMapped = this._has('valve') ? this._valveMapped(this._s('valve')) : undefined;
+    const valveDhw = this._has('valve') && (valveMapped ?? (this._on('valve') || ['tank', 'tank (dhw)', 'dhw', 'hot water', 'hot_water', 'warmwasser'].includes(String(this._s('valve')).toLowerCase())));
     // Integrations without an operating-mode entity: a running compressor means heating unless the valve says DHW.
     // Defrost wins over a stopped compressor: it pauses for about a minute while the 4-way valve switches (HeishaMon).
     if (!this._has('mode')) hp = defrost ? 'defrost' : !running ? 'idle' : (valveDhw ? 'dhw' : 'heating');

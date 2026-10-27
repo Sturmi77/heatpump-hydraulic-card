@@ -33,6 +33,7 @@ body:
         - open3e
         - vaillant
         - emsesp
+        - bosch_buderus_heating
         - ebusd
         - wolf
         - luxtronik
