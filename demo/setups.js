@@ -28,10 +28,11 @@ const lambdaStates = (x, s) => {
     [`${x}hp1_evaporation_temperature`]: ['3.6', '°C'], [`${x}hp1_condensation_temperature`]: ['36.9', '°C'],
     [`${x}hp1_suction_gas_temperature`]: ['8.4', '°C'], [`${x}hp1_hot_gas_temperature`]: ['61.5', '°C'],
     [`${x}hp1_subcooling_temperature`]: ['3.1', '°C'], [`${x}hp1_expansion_valve_opening_angle`]: ['38', '%'],
+    [`${x}emgr_power_consumption_setpoint`]: ['0', 'W'],
     [`${x}hp1_error_number`]: '0', [`${x}boil1_error_number`]: '0', [`${x}buff1_error_number`]: '0', [`${x}hc1_error_number`]: '0', [`${x}ambient_error_number`]: '0',
   };
   const S = {
-    heat: {},
+    heat: { [`${x}emgr_power_consumption_setpoint`]: ['1800', 'W'] },
     dhw: { [`${x}hp1_compressor_unit_rating`]: ['62', '%'], [`${x}hp1_condensation_temperature`]: ['52.4', '°C'], [`${x}hp1_hot_gas_temperature`]: ['78.0', '°C'],
       [`${x}hp1_operating_state`]: 'DHW', [`${x}boil1_operating_state`]: 'DHW', [`${x}buff1_operating_state`]: 'STBY',
       [`${x}hp1_flow_line_temperature`]: '48.6', [`${x}hp1_return_line_temperature`]: '43.1', [`${x}hp1_inverter_power_consumption`]: '1650',
@@ -539,7 +540,9 @@ const setups = [
     name: 'Lambda', sub: 'legacy naming, PV/battery split, quick controls, own tile selection, details with refrigerant circuit',
     states: (s) => ({ ...lambdaStates('eu08l_', s), ...extras(s) }),
     statistics: { 'sensor.eu08l_hp1_heating_energy_total': { yesterday: 12.9, week: 61.3 } },
-    history: { 'input_boolean.heatpump_boost': [[24, 'off'], [14, 'on'], [10, 'off'], [5.5, 'on'], [3.2, 'off']] },
+    // The E-Manager asks for PV surplus during part of the heating periods: they show as PV surplus in the timeline.
+    history: { 'input_boolean.heatpump_boost': [[24, 'off'], [14, 'on'], [10, 'off'], [5.5, 'on'], [3.2, 'off']],
+      'sensor.eu08l_emgr_power_consumption_setpoint': [[24, '0'], [19.6, '1800'], [17, '0'], [12, '1500'], [10.5, '0'], [2.9, '1900']] },
     config: {
       preset: 'lambda', title: 'Lambda', hc_type: 'radiator', timeline: true, timeline_marks: true,
       entities: {
@@ -553,7 +556,7 @@ const setups = [
       controls: ['input_boolean.heatpump_boost', 'button.heatpump_dhw_boost', 'select.heatpump_operating_mode', 'number.heatpump_dhw_target'],
       details: [{ entity: 'sensor.heating_curve_flow', name: 'Heating curve flow' }],
       details_open: true,
-      tiles: ['cop_heating', 'cop_heating:month', 'cop_dhw', 'energy', 'starts', 'defrosts:yesterday', 'energy_heating:week'],
+      tiles: ['cop_heating', 'cop_heating:month', 'cop_dhw', 'energy', 'starts', 'defrosts:yesterday', 'energy_heating:week', 'pv_boost_share:today'],
     },
   },
   {
