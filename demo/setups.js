@@ -364,6 +364,67 @@ const luxtronikStates = (s) => ({
   'sensor.luxtronik2_dhw_energy_input': { state: '2310.1', attributes: { unit_of_measurement: 'kWh', state_class: 'total_increasing' } },
 });
 
+// Stiebel Eltron ISG (WPMsystem) through the Stiebel Eltron ISG integration (pail23), resolved via translation_key. The entity ids and the
+// values of the temperatures, the flow rate, the hot water, the heat counter and the operating mode are those of the installation in
+// issue #69 (a French Home Assistant); the rest is invented. Heating circuit 2, the solar collector and the heat source are not installed
+// and read unavailable, as the integration does for hardware that is missing.
+const isgPrefix = 'stiebel_eltron_wpmsystem_';
+const isgNames = {
+  sensor: {
+    outdoor_temperature: 'temperature_exterieure', flow_temperature_wp1: 'temperature_de_depart_pac1', return_temperature_wp1: 'temperature_de_retour_pac1',
+    volume_stream_wp1: 'debit_volumique_pac1', actual_temperature_water: 'temperature_actuelle_eau_chaude', target_temperature_water: 'temperature_cible_eau_chaude',
+    actual_temperature_buffer: 'temperature_actuelle_tampon', actual_temperature_hk1: 'temperature_actuelle_cc_1', target_temperature_hk1: 'temperature_cible_cc_1',
+    actual_temperature_hk2: 'temperature_actuelle_cc_2', target_temperature_hk2: 'temperature_cible_cc_2',
+    actual_room_temperature_hk1: 'temperature_ambiante_cc_1', target_room_temperature_hk1: 'temperature_ambiante_cible_cc_1',
+    current_power_consumption: 'puissance_absorbee', heater_pressure: 'pression_chauffage', source_temperature: 'temperature_source', source_pressure: 'pression_source',
+    solar_collector_temperature: 'temperature_capteur_solaire', hot_gas_temperature_wp1: 'temperature_gaz_chauds_pac1',
+    high_pressure_wp1: 'haute_pression_pac1', low_pressure_wp1: 'basse_pression_pac1',
+    produced_heating: 'chaleur_produite_chauffage', produced_heating_total: 'chaleur_produite_chauffage_total',
+    produced_water_heating: 'chaleur_produite_eau_chaude', consumed_heating: 'energie_consommee_chauffage', consumed_water_heating: 'energie_consommee_eau_chaude',
+    compressor_heating: 'duree_compresseur_chauffage', compressor_heating_water: 'duree_compresseur_eau_chaude', nhz_1_2_runtime: 'duree_appoint_1_2',
+  },
+  binary_sensor: {
+    compressor_on: 'compresseur', evaporator_defrost: 'degivrage_evaporateur', is_heating_water: 'production_eau_chaude', nhz_stages_running: 'appoint_en_marche',
+    heating_circuit_1_pump: 'pompe_circuit_chauffage_1', heating_circuit_2_pump: 'pompe_circuit_chauffage_2', circulation_pump: 'pompe_de_bouclage', error_status: 'defaut',
+  },
+  select: { operation_mode: 'mode_de_fonctionnement' },
+  number: { comfort_water_temperature_target: 'consigne_confort_eau_chaude' },
+};
+const isgId = (domain, tk) => `${domain}.${isgPrefix}${isgNames[domain][tk]}`;
+const isgReg = Object.fromEntries(Object.entries(isgNames).flatMap(([domain, tks]) => Object.keys(tks).map((tk) => [isgId(domain, tk), tk])));
+const isgStates = (s) => {
+  const pick = (v) => v[s];
+  const sensor = (tk, value, unit) => [isgId('sensor', tk), unit ? [value, unit] : value];
+  const counter = (tk, value, unit) => [isgId('sensor', tk), { state: value, attributes: { unit_of_measurement: unit, state_class: 'total_increasing' } }];
+  const binary = (tk, on) => [isgId('binary_sensor', tk), on ? 'on' : 'off'];
+  return Object.fromEntries([
+    sensor('outdoor_temperature', '5.2', '°C'),
+    sensor('flow_temperature_wp1', pick({ heat: '33.8', dhw: '52.4', defrost: '24.6', idle: '30.1' }), '°C'),
+    sensor('return_temperature_wp1', pick({ heat: '29.4', dhw: '47.9', defrost: '26.2', idle: '29.8' }), '°C'),
+    sensor('volume_stream_wp1', pick({ heat: '22.2', dhw: '19.4', defrost: '21.0', idle: '0.0' }), 'L/min'),
+    sensor('actual_temperature_water', pick({ heat: '45.4', dhw: '47.1', defrost: '45.2', idle: '45.0' }), '°C'),
+    sensor('target_temperature_water', '48.0', '°C'),
+    sensor('actual_temperature_buffer', pick({ heat: '27.4', dhw: '27.0', defrost: '26.8', idle: '28.1' }), '°C'),
+    sensor('actual_temperature_hk1', pick({ heat: '28.9', dhw: '28.2', defrost: '27.6', idle: '28.4' }), '°C'),
+    sensor('target_temperature_hk1', '27.5', '°C'),
+    sensor('actual_temperature_hk2', 'unavailable'), sensor('target_temperature_hk2', 'unavailable'),
+    sensor('actual_room_temperature_hk1', '22.8', '°C'), sensor('target_room_temperature_hk1', '22.5', '°C'),
+    sensor('current_power_consumption', pick({ heat: '1.6', dhw: '2.1', defrost: '1.2', idle: '0.0' }), 'kW'),
+    sensor('heater_pressure', '1.6', 'bar'),
+    sensor('source_temperature', 'unavailable'), sensor('source_pressure', 'unavailable'), sensor('solar_collector_temperature', 'unavailable'),
+    sensor('hot_gas_temperature_wp1', pick({ heat: '62.0', dhw: '78.4', defrost: '41.0', idle: '25.0' }), '°C'),
+    sensor('high_pressure_wp1', pick({ heat: '17.8', dhw: '24.6', defrost: '13.2', idle: '10.9' }), 'bar'),
+    sensor('low_pressure_wp1', pick({ heat: '5.2', dhw: '5.0', defrost: '3.9', idle: '7.4' }), 'bar'),
+    counter('produced_heating', '33856', 'kWh'), counter('produced_heating_total', '33837', 'kWh'),
+    counter('produced_water_heating', '7420', 'kWh'), counter('consumed_heating', '9210', 'kWh'), counter('consumed_water_heating', '2150', 'kWh'),
+    counter('compressor_heating', '5120', 'h'), counter('compressor_heating_water', '1310', 'h'), counter('nhz_1_2_runtime', '38', 'h'),
+    binary('compressor_on', s !== 'idle'), binary('evaporator_defrost', s === 'defrost'), binary('is_heating_water', s === 'dhw'),
+    binary('nhz_stages_running', false), binary('heating_circuit_1_pump', s === 'heat' || s === 'idle'), binary('heating_circuit_2_pump', false),
+    binary('circulation_pump', false), binary('error_status', s === 'idle'),
+    [isgId('select', 'operation_mode'), { state: pick({ heat: 'program', dhw: 'program', defrost: 'program', idle: 'eco' }), attributes: { friendly_name: 'Mode de fonctionnement', options: ['emergency', 'ready', 'program', 'comfort', 'eco', 'water_heating'] } }],
+    [isgId('number', 'comfort_water_temperature_target'), { state: '48', attributes: { friendly_name: 'Consigne confort eau chaude', unit_of_measurement: '°C', min: 10, max: 60, step: 1 } }],
+  ]);
+};
 // Samsung EHS (esphome-samsung-nasa): entity names of Beormund's example.yaml, valve and error code as text sensors.
 const samsungStates = (s) => ({
   'sensor.heat_pump_flow_temp_out': [{ heat: '32.6', dhw: '45.1', defrost: '22.0', idle: '28.0' }[s], '°C'],
@@ -689,6 +750,15 @@ setups.push({
   states: (s) => pointtSetup(s).states, registry: pointtSetup().registry,
   config: { preset: 'bosch_buderus_heating', title: 'Home Comfort', power_sources: 'manual',
     tiles: ['energy:total', 'heat:total', 'env_energy:total', 'cop_total:total', 'starts:total', 'hours:total'] },
+});
+setups.push({
+  name: 'Stiebel Eltron WPMsystem', sub: 'Stiebel Eltron ISG integration, French entity ids found by translation key, buffer, one circuit, optional hardware unavailable',
+  states: isgStates,
+  registry: Object.fromEntries(Object.entries(isgReg).map(([id, tk]) => [id, { platform: 'stiebel_eltron_isg', translation_key: tk }])),
+  config: {
+    preset: 'stiebel_isg', title: 'Stiebel Eltron',
+    tiles: ['cop_heating:total', 'cop_dhw:total', 'energy_heating:total', 'heat_heating:total', 'spread', 'hc_pressure'],
+  },
 });
 
 const scenarios = [['heat', 'Heating'], ['dhw', 'Hot water'], ['defrost', 'Defrost'], ['idle', 'Standby + error']];

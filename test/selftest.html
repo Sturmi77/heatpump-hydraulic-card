@@ -99,7 +99,7 @@
   // 5. detection: the right preset for each installation, nothing for gas boilers or foreign entities
   check(HFC_PRESETS.heishamon.tested === true, 'HeishaMon preset is marked real-installation tested');
   const stub = (states, registry) => C.getStubConfig(hassOf(toStates(states), registry));
-  const expect = { 0: 'lambda', 1: 'lambda', 2: 'vicare', 3: 'vaillant', 4: 'emsesp', 5: 'heishamon', 6: 'emsesp', 8: 'wolf', 9: 'kronoterm', 10: 'ebusd', 11: 'samsung', 12: 'luxtronik' };
+  const expect = { 0: 'lambda', 1: 'lambda', 2: 'vicare', 3: 'vaillant', 4: 'emsesp', 5: 'heishamon', 6: 'emsesp', 8: 'wolf', 9: 'kronoterm', 10: 'ebusd', 11: 'samsung', 12: 'luxtronik', 15: 'stiebel_isg' };
   for (const [i, p] of Object.entries(expect)) {
     const s = setups[i]; const st = stub(s.states('heat'), s.registry || {});
     check(st.preset === p, `stub preset ${i} = ${p} (got ${st.preset})`);
@@ -1206,6 +1206,47 @@
     o = await lux('heat', { [`sensor.${px}_status`]: 'evu' }); check(/mode-blocked|mode-idle/.test(o.mode), `Luxtronik status evu is blocked (${o.mode})`);
     o = await lux('heat', { [`select.${px}_heating_mode`]: 'Party' }); check(/party/.test(o.prog || ''), `Luxtronik heating mode Party shows the party chip (${o.prog})`);
     o = await lux('heat', { [`select.${px}_heating_mode`]: 'Holidays' }); check(/holiday/.test(o.prog || ''), `Luxtronik heating mode Holidays shows the holiday chip (${o.prog})`);
+  }
+
+  // 13d. Stiebel Eltron ISG (integration stiebel_eltron_isg): entities by translation key, hardware that is not installed left out, mode derived from the flags
+  {
+    const s = setups[15]; const reg = s.registry;
+    const hass = (scen, extra = {}) => hassOf(toStates({ ...s.states(scen), ...extra }), reg);
+    const sid = (tk) => isgId('sensor', tk); const bid = (tk) => isgId('binary_sensor', tk);
+    const r = C._resolve(s.config, hass('heat')); const e = r.entities;
+    check(HFC_PRESETS.stiebel_isg.tested !== true && r.ready && r.prefix === '', 'Stiebel ISG is detected through translation keys and marked untested');
+    check(e.compressor === bid('compressor_on') && e.defrost === bid('evaporator_defrost') && e.valve === bid('is_heating_water') && e.mode === undefined, `Stiebel ISG compressor, defrost and hot water flag, no mode entity (${e.compressor})`);
+    check(e.flow === sid('flow_temperature_wp1') && e.return === sid('return_temperature_wp1') && e.volume === sid('volume_stream_wp1') && e.outdoor === sid('outdoor_temperature'), 'Stiebel ISG heat pump 1 flow, return, flow rate and outdoor temperature');
+    check(e.power === sid('current_power_consumption') && e.dhw_top === sid('actual_temperature_water') && e.dhw_target === sid('target_temperature_water') && e.buffer_top === sid('actual_temperature_buffer'), 'Stiebel ISG power, hot water with target, buffer');
+    check(e.hc_flow === sid('actual_temperature_hk1') && e.hc_setpoint === sid('target_temperature_hk1') && e.hc_pump === bid('heating_circuit_1_pump') && e.hc_pressure === sid('heater_pressure'), 'Stiebel ISG heating circuit 1 and the system pressure');
+    check(e.room === sid('actual_room_temperature_hk1') && e.room_target === sid('target_room_temperature_hk1') && e.program === isgId('select', 'operation_mode'), 'Stiebel ISG room temperature with target and the operating mode select');
+    check(e.source_in === undefined && e.brine_pressure === undefined && e.solar_collector === undefined && e.hot_gas === sid('hot_gas_temperature_wp1') && e.circulation === bid('circulation_pump') && e.heater === bid('nhz_stages_running'),
+      'Stiebel ISG: heat source and solar collector that read unavailable are left out, refrigerant circuit, circulation pump and heater are mapped');
+    const two = C._resolve({ ...s.config, hc_count: 2 }, hass('heat')).entities;
+    check(two.hc2_flow === undefined && two.hc2_pump === undefined && two.hc2_pressure === undefined, 'Stiebel ISG: circuit 2 that reads unavailable is not mapped');
+    const two2 = C._resolve({ ...s.config, hc_count: 2 }, hass('heat', { [sid('actual_temperature_hk2')]: ['31.0', '°C'], [sid('target_temperature_hk2')]: ['30.5', '°C'] })).entities;
+    check(two2.hc2_flow === sid('actual_temperature_hk2') && two2.hc2_setpoint === sid('target_temperature_hk2') && two2.hc2_pump === bid('heating_circuit_2_pump'), 'Stiebel ISG: an installed circuit 2 is mapped');
+    check(C.getStubConfig(hass('heat')).hc_count === undefined && C.getStubConfig(hass('heat')).source_type === undefined, 'Stiebel ISG stub leaves hc_count and source_type to the user for an air installation');
+    const brine = hass('heat', { [sid('source_temperature')]: ['3.4', '°C'], [sid('source_pressure')]: ['1.8', 'bar'] });
+    check(C.getStubConfig(brine).source_type === 'brine', 'Stiebel ISG stub: a reporting heat source temperature means brine');
+    const off = C._resolve(s.config, hass('heat', { [sid('outdoor_temperature')]: 'unavailable', [sid('actual_temperature_water')]: 'unavailable', [sid('flow_temperature_wp1')]: 'unavailable' }));
+    check(off.ready === false, 'Stiebel ISG waits while no sensor reports a value');
+    const t = r.tiles;
+    check(t.energy_heating?.total === sid('consumed_heating') && t.heat_heating?.total === sid('produced_heating') && t.heat_dhw?.total === sid('produced_water_heating')
+      && t.heat_cooling === undefined && t.energy_cooling === undefined, 'Stiebel ISG tiles: counters per use, the combined sensors first');
+    check(JSON.stringify(r.errors) === JSON.stringify([bid('error_status')]) && r.controls.length === 2 && r.details.includes(sid('compressor_heating')), 'Stiebel ISG error flag, quick controls and details');
+    const isg = async (scen, extra = {}) => {
+      const card = mount(s.config, hass(scen, extra)); await wait(20);
+      const q = (id) => card.shadowRoot.getElementById(id);
+      const out = { mode: q('chip-mode').className, flow: q('t-vl')?.textContent, rl: q('t-rl')?.textContent, hc: q('t-hc')?.textContent,
+        prog: q('chip-program')?.className, err: q('chip-err').classList.contains('on'), fan: q('fan').classList.contains('on') };
+      card.remove(); return out;
+    };
+    let o = await isg('heat');
+    check(/mode-heat/.test(o.mode) && /33\.8/.test(o.flow) && /29\.4/.test(o.rl) && /28\.9/.test(o.hc) && o.fan && !o.err, `Stiebel ISG heating: VL 33.8, RL 29.4, circuit 28.9 (${JSON.stringify(o)})`);
+    o = await isg('dhw'); check(/mode-dhw/.test(o.mode), `Stiebel ISG hot water flag is hot water (${o.mode})`);
+    o = await isg('defrost'); check(/mode-defrost/.test(o.mode), `Stiebel ISG defrost flag (${o.mode})`);
+    o = await isg('idle'); check(/mode-idle/.test(o.mode) && o.err && /eco/.test(o.prog || ''), `Stiebel ISG standby with the error flag and the eco program (${JSON.stringify(o)})`);
   }
 
   // 14. outdoor unit drawings: style per preset, manufacturer variants, fans and snowflakes, loop symbol for ground sources
