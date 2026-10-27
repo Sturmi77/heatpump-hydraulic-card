@@ -11,13 +11,13 @@ There are two different things people call "translating":
 
 All of it lives in [`dist/heatpump-hydraulic-card.js`](../dist/heatpump-hydraulic-card.js), near the top, in three places:
 
-| Constant | Content | Size today |
+| Constant | Content | Size |
 |---|---|---|
 | `HFC_LANGUAGES` | The name of the language, written in that language (`pl: 'Polski'`). It appears in the language list of the editor. | one line |
-| `HFC_I18N` | Texts on the card: titles, modes, tile names, tooltips and the detail drawer. | 149 texts |
-| `HFC_EDITOR` | Labels and help texts of the visual editor. | 167 texts |
+| `HFC_I18N` | Texts on the card: titles, modes, tile names, tooltips and the detail drawer. | about 150 texts |
+| `HFC_EDITOR` | Labels and help texts of the visual editor. | about 170 texts |
 
-The English block (`en`) is the reference. Entity names that come from your integration, the state texts of presets and the values themselves are not part of this and are shown as they are.
+`npm run i18n:check` prints the exact numbers. The English block (`en`) is the reference. Entity names that come from your integration, the state texts of presets and the values themselves are not part of this and are shown as they are.
 
 ## Add a language
 
