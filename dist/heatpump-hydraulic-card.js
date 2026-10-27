@@ -689,6 +689,8 @@ const HFC_PRESETS = {
   kronoterm: {
     name: 'Kronoterm',
     tested: true,
+    // The main circulation pump (register 2038, `main_pump_status`) belongs to the heat pump and runs for heating, hot water and defrost.
+    primary_pump: true,
     // The hot water heat pumps of the Kronoterm DHW cloud have neither, so only heating heat pumps are detected.
     detect: (ctx) => (ctx.key('kronoterm', 'sensor', 'working_function') || ctx.key('kronoterm', 'sensor', 'hp_outlet_temperature') ? '' : undefined),
     entities: (p, i, ctx) => {
@@ -908,6 +910,8 @@ const HFC_PRESETS = {
   samsung: {
     name: 'Samsung EHS (esphome-samsung-nasa)',
     tested: true,
+    // The primary water pump (0x4089) belongs to the heat pump (outdoor unit of the Mono, hydro unit of the Split) and runs for hot water, too.
+    primary_pump: true,
     auto_circuits: false,
     // The 3-way valve (0x4067) and the error code (0x8235) together: a plain "3-way valve" alone could be any ESPHome node.
     detect: (ctx) => {

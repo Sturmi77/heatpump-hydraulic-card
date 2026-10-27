@@ -2078,6 +2078,40 @@
     check(C._formSchema({}).schema.flatMap(function keysOf(n) { return n.schema ? n.schema.flatMap(keysOf) : [n.name]; }).includes('primary_pump'), 'editor offers the primary pump in the heat pump');
   }
 
+  // 18o. primary pump of the Samsung and Kronoterm presets: the pump of the heat pump stands on the flow pipe
+  {
+    const mountSetup = async (name, scenario = 'heat', extra = {}) => {
+      const s = setups.find((x) => x.name === name);
+      const c = mount({ ...s.config, ...extra }, hassOf(toStates(s.states(scenario)), s.registry || {}, s.energy, s)); await wait(20);
+      return c;
+    };
+    const q = (c, sel) => c.shadowRoot.querySelector(sel);
+    for (const name of ['Samsung EHS', 'Kronoterm ADAPT']) {
+      let card = await mountSetup(name);
+      check(ok(card) && !!q(card, '#impeller-primary'), `${name}: the preset draws the primary pump of the heat pump`);
+      check(q(card, '#impeller-primary').classList.contains('on'), `${name}: the primary pump turns while heating`);
+      const box = q(card, '#hp-box').getBBox(); const pump = q(card, '#impeller-primary').parentNode.querySelector('circle.pump').getBBox();
+      check(pump.x >= box.x + box.width && pump.x + pump.width <= 402 && pump.y < 250 && pump.y + pump.height > 250, `${name}: the pump sits on the flow pipe between the heat pump block and the valve`);
+      card.remove();
+      card = await mountSetup(name, 'dhw');
+      check(q(card, '#impeller-primary').classList.contains('on'), `${name}: the primary pump turns for hot water, too`);
+      card.remove();
+      card = await mountSetup(name, 'idle');
+      check(!q(card, '#impeller-primary').classList.contains('on'), `${name}: the primary pump stands still in standby`);
+      card.remove();
+      card = await mountSetup(name, 'heat', { primary_pump: false });
+      check(!q(card, '#impeller-primary') && !!q(card, 'circle.pump[cx="720"]'), `${name}: primary_pump: false draws the pump in the circuit again`);
+      card.remove();
+    }
+    let card = await mountSetup('Samsung EHS');
+    check(!q(card, 'circle.pump[cx="720"]'), 'Samsung: the single direct circuit has no pump of its own');
+    card.remove();
+    card = await mountSetup('Kronoterm ADAPT');
+    check(!!q(card, 'circle.pump[cx="720"]'), 'Kronoterm: the loop pump stays in the circuit next to the primary pump');
+    card.remove();
+    check(Object.entries(HFC_PRESETS).filter(([, p]) => p.primary_pump).map(([k]) => k).sort().join() === 'heishamon,kronoterm,samsung', 'presets with a primary pump: HeishaMon, Kronoterm, Samsung');
+  }
+
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
   {
     const s = setups[0];

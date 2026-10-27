@@ -338,7 +338,7 @@ What you get:
 - tiles: energy, heat and COP today from the template sensors of `example.yaml`, totals from the NASA counters
 - details: total energy consumed and produced, compressor frequency, discharge temperature, expansion valve
 
-Samsung has no "current activity" value: like HeishaMon, the card shows heating while the compressor runs, hot water when the valve is on the tank, and defrost from the defrost sensor. The primary water pump runs for hot water as well, so the heating circuit follows the valve. Some values are not fitted on every unit (no flow sensor, no wattmeter); they stay unknown. Without a wattmeter, add `power` from a meter of your own.
+Samsung has no "current activity" value: like HeishaMon, the card shows heating while the compressor runs, hot water when the valve is on the tank, and defrost from the defrost sensor. The primary water pump belongs to the heat pump and runs for hot water as well, so the card draws it on the flow pipe next to the heat pump block (`primary_pump: false` draws the pump in the circuit again) and the heating circuit follows the valve. Some values are not fitted on every unit (no flow sensor, no wattmeter); they stay unknown. Without a wattmeter, add `power` from a meter of your own.
 
 ### Vaillant aroTHERM (ebusd) – checked on one real installation; more feedback welcome
 ```yaml
@@ -377,6 +377,7 @@ What you get:
 - electrical power and heat output, giving a live COP
 - hot water tank temperature and target: the tank sensor and current setpoint with Modbus, the DHW thermostat with the Cloud API
 - the hot water circulator as the diverter valve, the DHW circulation pump, the reserve source as the backup heater
+- the main circulation pump of the heat pump, drawn on the flow pipe next to the heat pump block (`primary_pump: false` removes it); the loop pumps stay in their circuits
 - loops 1 to 4 as heating circuits with their pumps and flow temperatures (`hc_count: 2` and more); room temperature and target from the thermostat of the first circuit
 - heating system pressure (the measured pressure needs Kronoterm 1.7.3 or newer with the Cloud API; 1.7.2 and older report the setting of the low-pressure alarm under the same name), the error/warning sensor, ECO mode as the eco chip
 - tiles: electricity today in total and per heating, hot water and heater (Cloud API), week, month and year from the electricity counter, COP total from the SCOP, compressor starts for heating and hot water
