@@ -534,6 +534,8 @@ const HFC_PRESETS = {
       const curve = ctx.state(`sensor.${m}heating_mode`) === 'compensation curve';
       return {
         compressor: `sensor.${m}compressor_freq`,
+        // The fan runs on for about a minute after the compressor stops.
+        fan_speed: `sensor.${m}fan1_motor_speed`,
         valve: `sensor.${m}threeway_valve_state`,
         defrost: [`binary_sensor.${m}defrosting_state`, `switch.${m}defrosting_state`],
         heater: [`binary_sensor.${m}internal_heater_state`, `sensor.${m}internal_heater_state`],
@@ -981,7 +983,7 @@ const HFC_LANGUAGES = { en: 'English', de: 'Deutsch' };
 const HFC_I18N = {
   en: {
     not_found: 'No entities of this preset found. Check the integration and the prefix, or open the card editor.',
-    title: 'Heat pump', heat_pump: 'Heat pump', dhw: 'Hot water', buffer: 'Buffer', heating_circuit: 'Heating circuit',
+    title: 'Heat pump', heat_pump: 'Heat pump', dhw: 'Hot water', buffer: 'Buffer', series_tank: 'Series buffer', heating_circuit: 'Heating circuit',
     house: 'Rooms', room: 'Room', room_target: 'Room target', running: 'running', compressor_off: 'Compressor off', source_in: 'Air inlet', outdoor: 'Outdoor',
     energy_missing: 'Energy dashboard: no power sensor for {sources}; energy counters alone cannot show live flow.',
     brine_in: 'Brine in', brine_out: 'Brine out', well_in: 'Well in', well_out: 'Well out',
@@ -999,7 +1001,7 @@ const HFC_I18N = {
     brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', pressure_normal: 'normal', pressure_warning: 'warning', pressure_critical: 'critical',
     timeline_title: 'Last {h} hours', timeline_gap: 'No data', timeline_aria: 'Operating mode of the last {h} hours. Arrow keys select a period.',
     programs: { eco: 'Eco', night: 'Night', party: 'Party', holiday: 'Holiday' },
-    valve_heating: 'Heating', valve_cooling: 'Cooling', pv: 'PV', battery: 'Battery', grid: 'Grid',
+    valve_heating: 'Heating', valve_cooling: 'Cooling', bypass: 'Bypass', pv: 'PV', battery: 'Battery', grid: 'Grid',
     stat_cop_heating: 'COP heating today', stat_cop_dhw: 'COP DHW today', stat_energy: 'Energy today',
     stat_starts: 'Starts today', stat_spread: 'Spread', stat_volume: 'Flow rate', stat_heat: 'Heat output', pv_share: 'PV',
     tiles: {
@@ -1021,7 +1023,7 @@ const HFC_I18N = {
   },
   de: {
     not_found: 'Keine Entitäten dieser Voreinstellung gefunden. Integration und Präfix prüfen oder den Karteneditor öffnen.',
-    title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', dhw: 'Warmwasser', buffer: 'Puffer', heating_circuit: 'Heizkreis',
+    title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', dhw: 'Warmwasser', buffer: 'Puffer', series_tank: 'Reihenpuffer', heating_circuit: 'Heizkreis',
     house: 'Wohnräume', room: 'Raum', room_target: 'Raum-Soll', running: 'läuft', compressor_off: 'Verdichter aus', source_in: 'Luft-Eintritt', outdoor: 'Außen',
     energy_missing: 'Energie-Dashboard: kein Leistungssensor für {sources}; Energiezähler allein zeigen keinen aktuellen Fluss.',
     brine_in: 'Sole ein', brine_out: 'Sole aus', well_in: 'Brunnen ein', well_out: 'Brunnen aus',
@@ -1039,7 +1041,7 @@ const HFC_I18N = {
     brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', pressure_normal: 'normal', pressure_warning: 'Warnung', pressure_critical: 'kritisch',
     timeline_title: 'Letzte {h} Stunden', timeline_gap: 'Keine Daten', timeline_aria: 'Betriebsart der letzten {h} Stunden. Mit den Pfeiltasten einen Zeitraum wählen.',
     programs: { eco: 'Eco', night: 'Nacht', party: 'Party', holiday: 'Urlaub' },
-    valve_heating: 'Heizen', valve_cooling: 'Kühlen', pv: 'PV', battery: 'Akku', grid: 'Netz',
+    valve_heating: 'Heizen', valve_cooling: 'Kühlen', bypass: 'Bypass', pv: 'PV', battery: 'Akku', grid: 'Netz',
     stat_cop_heating: 'COP Heizen heute', stat_cop_dhw: 'COP WW heute', stat_energy: 'Strom heute',
     stat_starts: 'Starts heute', stat_spread: 'Spreizung', stat_volume: 'Volumenstrom', stat_heat: 'Wärmeleistung', pv_share: 'PV',
     tiles: {
@@ -1090,7 +1092,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animation speed', source_spread: 'Show source spread',
     theme: 'Card theme', theme_auto: 'Automatic (dashboard)', theme_night: 'Night', theme_contrast: 'High contrast', fullscreen: 'Full-screen button',
     wall_timeout: 'Hide controls after (seconds, 0 = never)',
-    hc_return_label: 'Show circuit return temperature', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
+    hc_return_label: 'Show circuit return temperature', series_buffer: 'Series buffer in the return', series_bypass: 'Series buffer with bypass valve (off: the circuits run in defrost)', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
     sec_hc2: 'Heating circuit 2', sec_hc3: 'Heating circuit 3', sec_hc4: 'Heating circuit 4', sec_hc5: 'Heating circuit 5', sec_hc6: 'Heating circuit 6', sec_details: 'Details: operation', sec_refrigerant: 'Details: refrigerant circuit', sec_cutouts: 'Details: cut-out counters',
     controls: 'Quick controls (switch, button, select, number …)', details_open: 'Details open by default',
     from_preset: 'Found by the preset',
@@ -1124,10 +1126,10 @@ const HFC_EDITOR = {
     brine_pressure_min: 'Brine pressure warning below', brine_pressure_crit: 'Brine pressure critical below', brine_pressure_max: 'Brine pressure warning above',
     hc_pressure_min: 'Heating pressure warning below', hc_pressure_crit: 'Heating pressure critical below', hc_pressure_max: 'Heating pressure warning above',
     sec_hp: 'Heat pump', sec_storage: 'Storage', sec_hc: 'Heating circuit & house', sec_power: 'Power sources', sec_stats: 'Statistics',
-    mode: 'Operating mode', status: 'Status / sub-state', compressor: 'Compressor running (binary or frequency)', defrost: 'Defrost active (binary)', power: 'Electrical power',
+    mode: 'Operating mode', status: 'Status / sub-state', compressor: 'Compressor running (binary or frequency)', defrost: 'Defrost active (binary)', fan_speed: 'Fan speed (rpm or binary)', power: 'Electrical power',
     heat: 'Heat output', flow: 'Flow temperature', return: 'Return temperature', volume: 'Flow rate heating side',
     source_volume: 'Flow rate source side', source_in: 'Source / air inlet temperature', outdoor: 'Outdoor temperature',
-    valve: 'Diverter valve on DHW (binary or Tank/Room)',
+    valve: 'Diverter valve on DHW (binary or Tank/Room)', bypass_valve: 'Series buffer bypass valve (on = bypass; default: defrost)',
     dhw_top: 'DHW tank top', dhw_middle: 'DHW tank middle', dhw_bottom: 'DHW tank bottom', dhw_target: 'DHW target', dhw_mode: 'DHW mode',
     circulation: 'Circulation pump', buffer_top: 'Buffer top', buffer_middle: 'Buffer middle', buffer_bottom: 'Buffer bottom', buffer_mode: 'Buffer mode',
     hc_flow: 'Circuit flow temperature', hc_return: 'Circuit return temperature', hc_setpoint: 'Circuit flow target',
@@ -1152,7 +1154,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animationsgeschwindigkeit', source_spread: 'Quellenspreizung anzeigen',
     theme: 'Kartendarstellung', theme_auto: 'Automatisch (Dashboard)', theme_night: 'Nacht', theme_contrast: 'Hoher Kontrast', fullscreen: 'Vollbild-Schaltfläche',
     wall_timeout: 'Bedienelemente ausblenden nach (Sekunden, 0 = nie)',
-    hc_return_label: 'Heizkreis-Rücklauf anzeigen', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
+    hc_return_label: 'Heizkreis-Rücklauf anzeigen', series_buffer: 'Reihenpuffer im Rücklauf', series_bypass: 'Reihenpuffer mit Bypass-Ventil (aus: die Heizkreise laufen beim Abtauen)', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
     sec_hc2: 'Heizkreis 2', sec_hc3: 'Heizkreis 3', sec_hc4: 'Heizkreis 4', sec_hc5: 'Heizkreis 5', sec_hc6: 'Heizkreis 6', sec_details: 'Details: Betrieb', sec_refrigerant: 'Details: Kältekreis', sec_cutouts: 'Details: Abschaltzähler',
     controls: 'Schnellbedienung (Schalter, Taste, Auswahl, Zahl …)', details_open: 'Details standardmäßig offen',
     from_preset: 'Von der Voreinstellung gefunden',
@@ -1186,10 +1188,10 @@ const HFC_EDITOR = {
     brine_pressure_min: 'Soledruck Warnung unter', brine_pressure_crit: 'Soledruck kritisch unter', brine_pressure_max: 'Soledruck Warnung über',
     hc_pressure_min: 'Heizungsdruck Warnung unter', hc_pressure_crit: 'Heizungsdruck kritisch unter', hc_pressure_max: 'Heizungsdruck Warnung über',
     sec_hp: 'Wärmepumpe', sec_storage: 'Speicher', sec_hc: 'Heizkreis & Haus', sec_power: 'Stromquellen', sec_stats: 'Kennzahlen',
-    mode: 'Betriebsart', status: 'Status / Unterzustand', compressor: 'Verdichter läuft (binär oder Frequenz)', defrost: 'Abtauen aktiv (binär)', power: 'Leistungsaufnahme',
+    mode: 'Betriebsart', status: 'Status / Unterzustand', compressor: 'Verdichter läuft (binär oder Frequenz)', defrost: 'Abtauen aktiv (binär)', fan_speed: 'Lüfterdrehzahl (U/min oder binär)', power: 'Leistungsaufnahme',
     heat: 'Wärmeleistung', flow: 'Vorlauftemperatur', return: 'Rücklauftemperatur', volume: 'Volumenstrom Heizseite',
     source_volume: 'Volumenstrom Quelle', source_in: 'Quelle / Luft-Eintritt', outdoor: 'Außentemperatur',
-    valve: 'Umschaltventil auf WW (binär oder Tank/Room)',
+    valve: 'Umschaltventil auf WW (binär oder Tank/Room)', bypass_valve: 'Bypass-Ventil Reihenpuffer (ein = Bypass; Standard: Abtauen)',
     dhw_top: 'WW-Speicher oben', dhw_middle: 'WW-Speicher Mitte', dhw_bottom: 'WW-Speicher unten', dhw_target: 'WW-Soll', dhw_mode: 'WW-Betriebsart',
     circulation: 'Zirkulationspumpe', buffer_top: 'Puffer oben', buffer_middle: 'Puffer Mitte', buffer_bottom: 'Puffer unten', buffer_mode: 'Puffer-Betriebsart',
     hc_flow: 'Heizkreis-Vorlauf', hc_return: 'Heizkreis-Rücklauf', hc_setpoint: 'Heizkreis-Vorlauf-Soll',
@@ -1207,8 +1209,8 @@ const HFC_MAX_HC = 6;
 const hfcHcCount = (config) => Math.min(Math.max(Math.round(+config?.hc_count) || 1, 1), HFC_MAX_HC);
 
 const HFC_ENTITY_GROUPS = {
-  sec_hp: ['mode', 'status', 'compressor', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater'],
-  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'dhw_heater', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'solar_collector', 'solar_pump'],
+  sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater'],
+  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'dhw_heater', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'bypass_valve', 'solar_collector', 'solar_pump'],
   sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_pressure', 'room', 'room_target', 'program'],
   // The room of circuit 1 is the house (room, room_target); circuits 2 to 6 show theirs in their status line.
   sec_hc2: ['hc2_flow', 'hc2_return', 'hc2_setpoint', 'hc2_mode', 'hc2_pump', 'hc2_volume', 'hc2_curve_offset', 'hc2_room', 'hc2_room_target'],
@@ -1226,7 +1228,7 @@ const HFC_DIAGNOSTIC_KEYS = [...new Set(Object.values(HFC_ENTITY_GROUPS).flat())
 // Entity domains usable as quick controls and the service each one calls.
 const HFC_CONTROL_DOMAINS = ['switch', 'input_boolean', 'light', 'fan', 'automation', 'button', 'input_button', 'script', 'scene',
   'select', 'input_select', 'water_heater', 'climate', 'number', 'input_number'];
-const HFC_BINARY_KEYS = ['compressor', 'valve', 'hc_pump', 'hc2_pump', 'hc3_pump', 'hc4_pump', 'hc5_pump', 'hc6_pump', 'circulation', 'defrost', 'heater', 'dhw_heater', 'buffer_heater', 'solar_pump'];
+const HFC_BINARY_KEYS = ['compressor', 'valve', 'hc_pump', 'hc2_pump', 'hc3_pump', 'hc4_pump', 'hc5_pump', 'hc6_pump', 'circulation', 'defrost', 'heater', 'dhw_heater', 'buffer_heater', 'bypass_valve', 'solar_pump'];
 // Climate and water heater entities keep their temperatures in attributes: the reading in `current_temperature`, the target in
 // `temperature`. Keys ending in _target or _setpoint read the target, so one thermostat can serve as dhw_top and dhw_target.
 const hfcTempAttr = (id, key) => (['climate', 'water_heater'].includes(String(id || '').split('.')[0])
@@ -1482,6 +1484,8 @@ class HeatpumpFlowCard extends HTMLElement {
               { name: 'language', selector: { select: { mode: 'dropdown', options: languageOptions } } },
               { name: 'fullscreen', selector: { boolean: {} } },
               { name: 'hc_return_label', selector: { boolean: {} } },
+              { name: 'series_buffer', selector: { boolean: {} } },
+              ...(config && config.series_buffer ? [{ name: 'series_bypass', selector: { boolean: {} } }] : []),
               ...['hc_name', 'hc2_name', 'hc3_name', 'hc4_name', 'hc5_name', 'hc6_name'].filter(keep).map((name) => ({ name, selector: { text: {} } })),
               { name: 'unit_style', selector: { select: { mode: 'dropdown', options: HFC_UNIT_STYLES.map((v) => ({ value: v, label: L[`unit_${v}`] })) } } },
               ...(config && (config.unit_style === 'vaillant' || ((!config.unit_style || config.unit_style === 'auto') && config.preset === 'vaillant'))
@@ -1564,6 +1568,12 @@ class HeatpumpFlowCard extends HTMLElement {
     }
     if (config.fullscreen !== undefined && config.fullscreen !== null && typeof config.fullscreen !== 'boolean') {
       throw new Error('fullscreen must be true or false');
+    }
+    if (config.series_buffer !== undefined && config.series_buffer !== null && typeof config.series_buffer !== 'boolean') {
+      throw new Error('series_buffer must be true or false');
+    }
+    if (config.series_bypass !== undefined && config.series_bypass !== null && typeof config.series_bypass !== 'boolean') {
+      throw new Error('series_bypass must be true or false');
     }
     if (config.primary_pump !== undefined && config.primary_pump !== null && typeof config.primary_pump !== 'boolean') {
       throw new Error('primary_pump must be true or false');
@@ -2157,6 +2167,8 @@ class HeatpumpFlowCard extends HTMLElement {
       // A tank with only a lower sensor (e.g. HeishaMon's single sensor near the bottom) is still drawn.
       dhw: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_mode'].some((k) => this._has(k)),
       buffer,
+      // A series buffer sits in the return; a parallel buffer (with its own sensors) wins.
+      series: !!this._config.series_buffer && !buffer && (this._noBypass() ? 'fixed' : 'valve'),
       // A direct system still has a circuit: use the heat-pump flow/return when no circuit-specific sensors exist.
       hc: this._has('hc_flow') || this._has('hc_mode') || this._has('hc_pump') || (!buffer && (this._has('flow') || this._has('return'))),
       house: this._has('room') || this._has('room_target'),
@@ -2265,7 +2277,6 @@ class HeatpumpFlowCard extends HTMLElement {
           <defs>
             <linearGradient id="g-dhw" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-dhw-top"/>${this._has('dhw_middle') ? '<stop offset="50%" id="g-dhw-middle"/>' : ''}<stop offset="100%" id="g-dhw-bottom"/></linearGradient>
             <linearGradient id="g-buf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-buf-top"/>${this._has('buffer_middle') ? '<stop offset="50%" id="g-buf-middle"/>' : ''}<stop offset="100%" id="g-buf-bottom"/></linearGradient>
-            <linearGradient id="g-rad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-rad-top"/><stop offset="100%" id="g-rad-bottom"/></linearGradient>
             <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
           </defs>
 
@@ -2280,7 +2291,7 @@ class HeatpumpFlowCard extends HTMLElement {
           ${pipePair('rl-dhw', 'M520 215 H400 Q380 215 380 235 V380', P.dhw)}
           ${pipePair('rl-buf', 'M520 495 H400 Q380 495 380 475 V380')}
           ${pipePair('rl', 'M380 380 H290')}
-          ${P.buffer ? '' : `${pipePair('byp-vl', 'M520 360 H640')}${pipePair('byp-rl', 'M640 495 H520')}`}
+          ${P.buffer ? '' : P.series ? this._seriesSvg() : `${pipePair('byp-vl', 'M520 360 H640')}${pipePair('byp-rl', 'M640 495 H520')}`}
           ${showHc ? Array.from({ length: this._hcCount }, (_, n) => this._circuitSvg(n + 1)).join('') : ''}
           ${this._sourceSvg()}
 
@@ -2848,6 +2859,32 @@ class HeatpumpFlowCard extends HTMLElement {
   _updateDrawer() {
     if (!this._$('drawer-body')) return;
     this._drawerRows().forEach(([, rows]) => rows.forEach(([id, , , value]) => this._txt(`d-${id}`, value())));
+  }
+
+  // Series buffer in the return of the heating circuits with a 3-way valve (A: bypass from the flow, B: circuit return, AB: buffer).
+  // Normally B–AB is open: the circuit return runs through the buffer. In defrost (or with the bypass valve entity on) A–AB opens
+  // and the flow runs straight into the buffer, past the circuits, so the heat pump defrosts from the buffer water.
+  // series_bypass: false: a series buffer without a bypass valve.
+  _noBypass() { return this._config.series_bypass === false; }
+
+  _seriesSvg() {
+    const e = this._e; const i = this._i;
+    const pp = (id, d) => `<path class="pipe" id="p-${id}" d="${d}"/><path class="flow" id="f-${id}" d="${d}"/>`;
+    const de = (k) => (e[k] ? `data-entity="${this._esc(e[k])}"` : '');
+    // Without a bypass valve the return always flows through the buffer.
+    if (this._noBypass()) {
+      return `${pp('byp-vl', 'M520 360 H600')}${pp('sb-vl', 'M600 360 H640')}${pp('sb-b', 'M640 495 H582')}${pp('byp-rl', 'M582 495 H520')}
+      <rect class="tank" id="sb-tank" x="450" y="452" width="116" height="86" rx="20"/>
+      <text class="small series-title" x="508" y="499" text-anchor="middle">${this._esc(i.series_tank)}</text>`;
+    }
+    return `${pp('byp-vl', 'M520 360 H600')}${pp('sb-vl', 'M600 360 H640')}${pp('sb-a', 'M600 360 V477')}${pp('sb-b', 'M640 495 H618')}${pp('byp-rl', 'M582 495 H520')}
+      <g class="tap" ${de(e.bypass_valve ? 'bypass_valve' : 'defrost')}>
+        <rect class="tank" id="sb-tank" x="450" y="452" width="116" height="86" rx="20"/>
+        <text class="small series-title" x="508" y="499" text-anchor="middle">${this._esc(i.series_tank)}</text>
+        <circle class="valve" cx="600" cy="495" r="18"/>
+        <path class="valve-arrow" id="sb-arrow" d="M614 495 H586 M593 488 L586 495 L593 502"/>
+        <text class="small" id="t-bypass" x="600" y="534" text-anchor="middle"></text>
+      </g>`;
   }
 
   // Heating circuit n (1-3). Circuits 2 and 3 sit below circuit 1, fed by risers from its flow and return.
@@ -3541,7 +3578,13 @@ class HeatpumpFlowCard extends HTMLElement {
     // The dash speed is proportional to the flow rate: 1000 l/h is one dash cycle per second, sniffing a few l/h crawls.
     const dur = Number.isFinite(vol) && vol > 0 ? Math.min(Math.max(1000 / vol, 0.4), 30) : (modOk ? 2.6 - mod * 1.8 : 2);
     this.style.setProperty('--hfc-dur', scaled(dur));
-    const fanDur = running ? (modOk ? 2.4 - mod * 1.9 : Math.min(Math.max(2.4 - (power || 0) / 1500, 0.5), 2.4)) : 0;
+    // A fan speed entity wins: the fan runs on after the compressor stops. Numeric values are rpm, else on/off.
+    // An unavailable or unknown fan entity (integration offline, Home Assistant restart) counts as missing.
+    const fanKnown = this._has('fan_speed') && !['unavailable', 'unknown'].includes(String(this._s('fan_speed')).toLowerCase());
+    const fanRpm = fanKnown ? this._n('fan_speed') : NaN;
+    const fanOn = fanKnown ? (Number.isFinite(fanRpm) ? fanRpm > 0 : this._on('fan_speed')) : running;
+    const fanDur = !fanOn ? 0 : Number.isFinite(fanRpm) ? Math.min(Math.max(2.4 - fanRpm / 500, 0.5), 2.4)
+      : (modOk ? 2.4 - mod * 1.9 : Math.min(Math.max(2.4 - (power || 0) / 1500, 0.5), 2.4));
     this.style.setProperty('--hfc-fan', scaled(fanDur));
     this.style.setProperty('--hfc-pump', scaled(modOk ? 1.8 - mod * 1.2 : 1.2));
     this.style.setProperty('--hfc-electrical', scaled(1.1));
@@ -3568,6 +3611,16 @@ class HeatpumpFlowCard extends HTMLElement {
     pipe('vl-dhw', flowDhw); pipe('rl-dhw', flowDhw);
     pipe('vl-buf', flowHeat); pipe('rl-buf', flowHeat);
     pipe('byp-vl', flowHeat); pipe('byp-rl', flowHeat);
+    // Series buffer: the bypass valve follows its own entity, else the defrost signal, and then stops the circuits.
+    // Without a bypass valve (series_bypass: false) the circuits keep running in defrost.
+    const bypass = !!P.series && !this._noBypass() && (this._has('bypass_valve') ? this._on('bypass_valve') : defrost);
+    if (P.series) {
+      stroke('sb-vl', cFlow); stroke('sb-a', cFlow); stroke('sb-b', cRet);
+      pipe('sb-vl', flowHeat && !bypass); pipe('sb-a', flowHeat && bypass); pipe('sb-b', flowHeat && !bypass);
+      this._$('sb-arrow')?.setAttribute('d', bypass ? 'M600 481 V495 H586 M593 488 L586 495 L593 502' : 'M614 495 H586 M593 488 L586 495 L593 502');
+      this._$('sb-tank')?.style.setProperty('fill', `color-mix(in oklch, ${cRet} 30%, var(--card-background-color, #fff))`);
+      this._txt('t-bypass', bypass ? i.bypass : '');
+    }
     this._cls('coil', toDhw);
 
     if (P.hc || this._hcCount > 1) {
@@ -3578,7 +3631,7 @@ class HeatpumpFlowCard extends HTMLElement {
         const s = n === 1 ? '' : String(n);
         const cMode = this._norm(this._maps.hc, this._s(k('mode')));
         // Circuit pump, else circuit mode, else assume the circuit runs whenever the heat pump heats or cools.
-        const hcOn = this._has(k('pump')) ? this._on(k('pump')) : (this._has(k('mode')) ? ['heating', 'cooling'].includes(cMode) : flowHeat);
+        const hcOn = !bypass && (this._has(k('pump')) ? this._on(k('pump')) : (this._has(k('mode')) ? ['heating', 'cooling'].includes(cMode) : flowHeat));
         // Without circuit sensors fall back to the buffer / main loop temperatures.
         const tHc = pick(this._n(k('flow')), this._n('buffer_top'), tFlow);
         const tHcR = pick(this._n(k('return')), this._n('buffer_bottom'), tRet);
@@ -3639,7 +3692,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._txt('t-vol', this._has('volume') && flowLoop && Number.isFinite(vol) ? `${this._fmt(vol, 0)} l/h` : '');
 
     // heat pump
-    this._cls('fan', running); this._cls('fan2', running);
+    this._cls('fan', fanOn); this._cls('fan2', fanOn);
     this._cls('snow', defrost && this._sourceType === 'air'); this._cls('snow2', defrost && this._sourceType === 'air'); this._cls('vapour', defrost && this._sourceType === 'air'); this._cls('hp-box', running);
     const hpBox = this._$('hp-box');
     if (hpBox) {
@@ -3841,6 +3894,7 @@ HeatpumpFlowCard.styles = `
   text { fill: var(--primary-text-color); font-family: var(--ha-font-family-body, inherit); }
   .tap { cursor: pointer; }
   .small { font-size: calc(15px * var(--k2, 1)); fill: var(--hfc-muted); }
+  .series-title { font-size: 14px; fill: var(--primary-text-color); }
   .room-temp { font-weight: 600; fill: var(--primary-text-color); }
   .pipe-label { font-size: calc(15px * var(--kp, 1)); font-weight: 600; }
   .vol-label { font-size: 13px; fill: var(--hfc-muted); }
@@ -4161,7 +4215,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       errors: this._config.errors !== undefined ? this._config.errors : this._presetErrors,
       error_ok_text: (this._config.error_ok !== undefined ? this._config.error_ok : this._presetErrorOk).join(', '), tiles_custom: custom,
       animations: this._config.animations || 'auto', flow_speed: this._config.flow_speed ?? 1, source_spread: this._config.source_spread !== false,
-      theme: this._config.theme || 'auto', fullscreen: this._config.fullscreen !== false };
+      theme: this._config.theme || 'auto', fullscreen: this._config.fullscreen !== false, series_bypass: this._config.series_bypass !== false };
     if (this._config.controls === undefined && !r.presetControls.length) delete data.controls;
     if (custom && tiles.editable) data.tiles = tiles.value;
     this._priceShown = custom;
