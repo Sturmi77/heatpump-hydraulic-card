@@ -1,2 +1,0 @@
-- Vaillant (myPyllant): the preset is found when the entity ids end in a number (`sensor.home_energy_manager_state_2`, as Home Assistant adds it to an id that was already taken). Before, the home was not detected and every entity of the preset showed as "not found". The plain id wins over the numbered one, and the same tolerance applies to all entities of the preset (#120).
-- Vaillant (myPyllant): without zone sensors the zone thermostat (`climate.<home>_zone_…`) serves as room temperature and target; zone sensors still win (#120).
