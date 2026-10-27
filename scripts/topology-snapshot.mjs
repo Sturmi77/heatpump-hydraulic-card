@@ -42,8 +42,10 @@ const run = async () => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
     await page.goto(`${pathToFileURL(resolve(root, 'test/topology.html')).href}?dump`);
     await page.waitForFunction(() => ['DUMPED', 'FAIL'].includes(document.getElementById('result').textContent), null, { timeout: 600_000 });
-    if ((await page.textContent('#result')) !== 'DUMPED') throw new Error(await page.textContent('#log'));
-    return JSON.parse(await page.textContent('#dump'));
+    // One read without a time limit: the dump is several megabytes.
+    const out = await page.evaluate(() => ['result', 'log', 'dump'].map((id) => document.getElementById(id).textContent));
+    if (out[0] !== 'DUMPED') throw new Error(out[1]);
+    return JSON.parse(out[2]);
   } finally {
     await browser.close();
   }

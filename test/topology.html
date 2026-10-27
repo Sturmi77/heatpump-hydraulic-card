@@ -68,8 +68,9 @@
   // Geometry: the attributes that place and shape an element. Everything else (class, style, colours, labels, text) is state.
   const GEO = new Set(['d', 'x', 'y', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height', 'points', 'transform',
     'viewBox', 'dx', 'dy', 'textLength', 'lengthAdjust', 'text-anchor', 'offset']);
-  // Placed or shortened by measured text widths, which depend on the fonts of the browser: only their presence is recorded.
-  // The room line of a circuit drops its target where it does not fit; the target is its own text, the room value a tspan.
+  // Placed or shortened by measured text widths, which depend on the fonts of the browser: the position is recorded as present,
+  // the text not at all. The room line of a circuit drops its target where it does not fit; the target is its own text, the
+  // room value a tspan and still recorded.
   const measuredX = (el) => /^t-hc-(mode|room)\d*$/.test(el.id);
   const measuredText = (el, root) => {
     if (/^t-hc-room\d*$/.test(el.id)) return true;
@@ -93,7 +94,7 @@
         else if (a.name === 'style') { if (style(a.value)) s.push(`style=${style(a.value)}`); } else s.push(`${a.name}=${a.value}`);
       }
       const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('');
-      if (own.trim()) s.push(`"${measuredText(el, root) ? '*' : own}"`);
+      if (own.trim() && !measuredText(el, root)) s.push(`"${own}"`);
       geo.push(`${name} ${g.join(' ')}`);
       state.push(`${name} ${s.join(' ')}`);
     }
