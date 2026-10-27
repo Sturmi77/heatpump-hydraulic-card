@@ -828,6 +828,89 @@ const HFC_PRESETS = {
     program_map: { Automatic: 'none', Off: 'none', 'Second heatsource': 'none', Party: 'party', Holidays: 'holiday' },
   },
 
+  // Stiebel Eltron heat pumps with an ISG (WPM 3, WPM 3i, WPMsystem, LWZ; Tecalor) through the "Stiebel Eltron ISG" integration
+  // (pail23, HACS, domain stiebel_eltron_isg, Modbus TCP). Built from the integration source (2026.9), not tested on an installation:
+  // every entity carries its key as translation key, so entity ids and the HA language do not matter (a French Home Assistant calls the
+  // heat pump flow sensor_..._temperature_de_depart_pac1). The integration creates the sensors of the whole controller family, also those of
+  // hardware that is not installed; they read unavailable. Optional parts (buffer, solar, heat source, refrigerant circuit, circuits 2 and 3)
+  // are therefore mapped only where they report a number. There is no operating mode entity (the select is the program), so the card
+  // derives the mode from the compressor, the defrost flag and the hot water flag; cooling is not shown.
+  stiebel_isg: {
+    name: 'Stiebel Eltron ISG (WPM, LWZ) / Tecalor',
+    auto_circuits: false,
+    source_type: (e) => (e.source_in || e.brine_pressure ? 'brine' : 'air'),
+    detect: (ctx) => (['outdoor_temperature', 'actual_temperature_water', 'flow_temperature'].some((tk) => ctx.key('stiebel_eltron_isg', 'sensor', tk)) ? '' : undefined),
+    // While the Modbus connection is down every sensor is unavailable and the optional parts cannot be told apart: wait for a value.
+    ready: (ctx) => ['outdoor_temperature', 'actual_temperature_water', 'flow_temperature']
+      .some((tk) => Number.isFinite(parseFloat(ctx.state(ctx.key('stiebel_eltron_isg', 'sensor', tk))))),
+    entities: (p, i, ctx) => {
+      const k = (domain, ...tks) => tks.map((tk) => ctx.key('stiebel_eltron_isg', domain, tk)).filter(Boolean);
+      const s = (...tks) => k('sensor', ...tks);
+      const b = (...tks) => k('binary_sensor', ...tks);
+      // Hardware that is not installed reads unavailable: such an entity is left out.
+      const reading = (ids) => ids.filter((id) => Number.isFinite(parseFloat(ctx.state(id))));
+      const n = i.hc;
+      // Circuit 1 always exists; circuits 2 and 3 count when they report a flow temperature.
+      const circuit = n === 1 || reading(s(`actual_temperature_hk${n}`)).length > 0;
+      const roomActual = reading(n === 1 ? s('actual_room_temperature_hk1', 'actual_temperature_fek', 'actual_temperature') : s(`actual_room_temperature_hk${n}`));
+      const roomTarget = reading(n === 1 ? s('target_room_temperature_hk1', 'target_temperature_fek', 'target_temperature') : s(`target_room_temperature_hk${n}`));
+      return {
+        compressor: b('compressor_on', 'heat_pump_1_on'),
+        defrost: b('evaporator_defrost'),
+        // The hot water flag of the operating status stands for the diverter valve.
+        valve: b('is_heating_water'),
+        // Only the WPMsystem reports the inverter power (kW).
+        power: reading(s('current_power_consumption')),
+        flow: s('flow_temperature_wp1', 'flow_temperature_wp', 'flow_temperature'),
+        return: s('return_temperature_wp1', 'return_temperature'),
+        volume: s('volume_stream_wp1', 'volume_stream'),
+        outdoor: s('outdoor_temperature'),
+        source_in: reading(s('source_temperature')),
+        brine_pressure: reading(s('source_pressure')),
+        heater: b('nhz_stages_running', 'emergency_heating_1_2', 'emergency_heating_1', 'electric_reheating'),
+        dhw_top: s('actual_temperature_water'),
+        dhw_target: s('target_temperature_water'),
+        circulation: b('circulation_pump'),
+        buffer_top: reading(s('actual_temperature_buffer')),
+        solar_collector: reading(s('solar_collector_temperature')),
+        ...(circuit ? {
+          hc_flow: s(`actual_temperature_hk${n}`),
+          hc_setpoint: s(`target_temperature_hk${n}`),
+          hc_pump: b(`heating_circuit_${n}_pump`, `pump_on_hk${n}`),
+        } : {}),
+        ...(n === 1 ? { room: roomActual, room_target: roomTarget, hc_pressure: reading(s('heater_pressure')) } : { hc_room: roomActual, hc_room_target: roomTarget }),
+        program: k('select', 'operation_mode'),
+        compressor_speed: reading(s('compressor_speed')),
+        hot_gas: reading(s('hot_gas_temperature_wp1', 'hot_gas_temperature')),
+        high_pressure: reading(s('high_pressure_wp1', 'high_pressure')),
+        low_pressure: reading(s('low_pressure_wp1', 'low_pressure')),
+        starts_total: reading(s('compressor_starts')),
+        aux_hours: reading(s('nhz_1_2_runtime', 'electrical_booster_heating')),
+      };
+    },
+    // Counters per use. The combined sensors (day and total) come first: the plain totals count whole kWh only.
+    tiles: (p, i, ctx) => {
+      const s = (...tks) => tks.map((tk) => ctx.key('stiebel_eltron_isg', 'sensor', tk)).filter((id) => id && Number.isFinite(parseFloat(ctx.state(id))));
+      return {
+        energy_heating: { total: s('consumed_heating', 'consumed_heating_total') },
+        energy_dhw: { total: s('consumed_water_heating', 'consumed_water_heating_total') },
+        heat_heating: { total: s('produced_heating', 'produced_heating_total') },
+        heat_dhw: { total: s('produced_water_heating', 'produced_water_heating_total') },
+        heat_cooling: { total: s('produced_cooling_total') },
+        starts: { total: s('compressor_starts') },
+        aux_hours: { total: s('nhz_1_2_runtime', 'electrical_booster_heating') },
+      };
+    },
+    errors: (p, i, ctx) => [ctx.key('stiebel_eltron_isg', 'binary_sensor', 'error_status')].filter(Boolean),
+    controls: (p, i, ctx) => [ctx.key('stiebel_eltron_isg', 'select', 'operation_mode'), ctx.key('stiebel_eltron_isg', 'number', 'comfort_water_temperature_target')].filter(Boolean),
+    details: (p, i, ctx) => ['compressor_heating', 'compressor_heating_water', 'compressor_heating_hp_1', 'cooling_runtime', 'nhz_1_runtime', 'nhz_2_runtime',
+      'electrical_booster_heating', 'electrical_booster_heating_water', 'solar_runtime', 'efficiency_heating_1_12_m', 'efficiency_dhw_1_12_m',
+      'efficiency_cooling_1_12_m', 'sg_ready_state']
+      .map((tk) => ctx.key('stiebel_eltron_isg', 'sensor', tk)).filter((id) => id && Number.isFinite(parseFloat(ctx.state(id)))),
+    // Operating mode select (WPM: emergency, ready, program, comfort, eco, water_heating; LWZ adds automatic and manual). Only eco has a chip.
+    program_map: { emergency: 'none', ready: 'none', program: 'none', comfort: 'none', eco: 'eco', water_heating: 'none', automatic: 'none', manual: 'none' },
+  },
+
   // Vaillant aroTHERM / aroTHERM plus (HMU) on the eBUS via ebusd and its Home Assistant MQTT discovery.
   // Entity ids are <topic prefix>_<circuit>_<message>[_<field>]; Home Assistant may put the device name in front
   // (sensor.heating_ebusd_hmu_…), so every lookup accepts a leading part. Circuits: hmu (outdoor unit), vwzio (hydraulic
