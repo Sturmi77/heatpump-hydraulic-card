@@ -651,8 +651,8 @@ const HFC_PRESETS = {
         hc_pressure: s('system_pressure'),
         room: s('room_temperature'),
         room_target: sm ? ctx.key('wolf_smartset', 'number', 'day_temperature_mixer_circuit_1') : s('day_temperature'),
-        // wolf_smartset has no party or holiday parameter yet.
-        program: sm ? undefined : s('holiday_mode'),
+        // wolf_smartset: the mixer circuit demand (Anforderung Mischerkreis, 36000400001) carries the time program and the party, holiday and eco modes.
+        program: sm ? s('mixer_circuit_demand') : s('holiday_mode'),
         hours: s('compressor_operating_hours'),
         aux_hours: s('e_heating_operating_hours'),
       };
@@ -682,7 +682,9 @@ const HFC_PRESETS = {
       at_abschaltung: 'off', rt_abschaltung: 'off', at_frostschutz: 'frost', rt_frostschutz: 'frost', warmwasservorrang: 'idle',
       'AT Abschaltung': 'off', 'RT Abschaltung': 'off', 'AT Frostschutz': 'frost', 'RT Frostschutz': 'frost',
     },
-    program_map: { aktiviert: 'holiday', deaktiviert: 'none' },
+    // wolflink holiday mode (aktiviert, deaktiviert); wolf_smartset mixer circuit demand: "Automatik aus" is the setback outside the heating
+    // time program, "Automatik ein" the normal operation. Partymodus, Urlaubsmodus and Sparbetrieb match the card's default patterns.
+    program_map: { aktiviert: 'holiday', deaktiviert: 'none', 'Automatik ein': 'none', 'Automatik aus': 'night' },
     running_states: ['Betrieb'],
     // Keys are the raw status texts: wolflink slugs (vorspulen) and wolf_smartset texts (Vorspülen).
     status_labels: {

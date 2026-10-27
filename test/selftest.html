@@ -449,7 +449,7 @@
       `wolf_smartset circuit: flow, system-tab pump, mode, pressure and the number as room target (${e.hc_pump} / ${e.room_target})`);
     check(e.hours === 'sensor.heizgerat_betriebsstunden_verdichter' && e.aux_hours === 'sensor.heizgerat_betriebsstunden_e_heizung' && e.buffer_top === 'sensor.heizgerat_sammlertemperatur',
       'wolf_smartset hours counters and the manual buffer line');
-    check(e.room === undefined && e.program === undefined, `wolf_smartset: no room sensor, no program (${e.room} / ${e.program})`);
+    check(e.room === undefined && e.program === 'sensor.bedienmodul_bm_2_0_anforderung_mischerkreis', `wolf_smartset: no room sensor, program from the mixer circuit demand (${e.room} / ${e.program})`);
     // one mixer circuit only: a second circuit maps nothing instead of repeating circuit 1 (both branches)
     const two = C._resolve({ ...ws.config, hc_count: 2 }, hassS('heat')).entities;
     const twoL = C._resolve({ ...wl.config, hc_count: 2 }, hassOf(toStates(wl.states('heat')), wl.registry)).entities;
@@ -1051,6 +1051,15 @@
       check(off._e.dhw_target === adjId && off._n('dhw_target') === 10 && off._hass.states[numId].state === '48',
         `DHW off: target 10 °C from the sensor, number stays 48 (${off._n('dhw_target')} / ${off._hass.states[numId].state})`);
       off.remove();
+      // the mixer circuit demand as program: Automatik aus is the setback outside the time program, Automatik ein shows no chip
+      const demand = 'sensor.bedienmodul_bm_2_0_anforderung_mischerkreis';
+      check((await prog(ws, 'heat', { [demand]: 'Automatik aus' }))[0] === 'night', 'Automatik aus shows the night chip');
+      check((await prog(ws, 'heat', { [demand]: 'Automatik ein' }))[0] === '', 'Automatik ein shows no chip');
+      for (const [raw, kind] of [['Partymodus', 'party'], ['Urlaubsmodus', 'holiday'], ['Sparbetrieb', 'eco']]) {
+        check((await prog(ws, 'heat', { [demand]: raw }))[0] === kind, `${raw} is ${kind} through the default patterns`);
+      }
+      const wl = setups.find((x) => x.name === 'Wolf CHA');
+      check(C._resolve(wl.config, hassWith(wl, 'heat')).entities.program === 'sensor.zuhause_holiday_mode', 'wolflink still maps program to holiday_mode');
     }
 
     // solar thermal

@@ -1,1 +1,2 @@
 - Wolf (`wolf_smartset`): the DHW target comes from the sensor `set_dhw_temperature_adjusted`, the effective target that drops to 10 °C while hot water is off; the number `set_dhw_temperature` is the fallback. Before, the card showed the configured value while hot water was off.
+- Wolf (`wolf_smartset`): the heating program chip comes from the mixer circuit demand (`mixer_circuit_demand`): "Automatik aus" shows night, party, holiday and Sparbetrieb (eco) are recognised. Confirmed on the reference installation for "Automatik ein" and "Automatik aus".
