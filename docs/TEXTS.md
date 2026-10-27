@@ -44,6 +44,7 @@ details
 sec_operation
 sec_hydraulic
 sec_refrigerant
+sec_cutouts
 sec_more
 diagnostic_copy
 diagnostic_copied
@@ -73,6 +74,7 @@ valve_heating
 valve_cooling
 bypass
 pv
+pv_boost
 battery
 grid
 stat_cop_heating
@@ -92,6 +94,9 @@ hours
 starts_total
 aux_hours
 energy_total
+cutout_high_pressure
+cutout_low_pressure
+cutout_temperature
 env_energy
 heat_total
 cop_total
@@ -162,6 +167,7 @@ room
 brine_pressure
 hc_pressure
 pv_share
+pv_boost_share
 pv_production
 solar_thermal
 cost
