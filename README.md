@@ -170,6 +170,8 @@ preset: lambda
 ```
 That's it. The card finds your entities itself, including the 2nd heating stage as backup heater, total starts, energy and heat, and the refrigerant circuit values for the details drawer (`sensor.<prefix>_hp1_…` with legacy naming, or `sensor.hp1_…` with the new naming). If you have several heat pumps or the detection picks the wrong one, set the prefix explicitly (`prefix: eu08l`) or the unit numbers (`index: {hp: 2, hc: 2}`).
 
+With the E-Manager enabled in the integration, the card also shows when it asks the heat pump to take up PV surplus (the E-Manager setpoint above 0): a "PV surplus" chip, hatched "Heating · PV surplus" periods in the timeline (`timeline: true`) and the tile `pv_boost_share`. See `pv_boost` under "Entity keys".
+
 PV, battery and grid come from your Energy dashboard automatically, as long as it has power sensors configured (Settings → Dashboards → Energy). If you already have sensors for the heat pump's share of PV, battery and grid, or want a room average, add them yourself; own `pv` / `battery` / `grid` sensors replace the Energy dashboard:
 ```yaml
 type: custom:heatpump-flow-card
@@ -560,7 +562,7 @@ Everything can be set in the **UI editor**. With a preset, the editor shows whet
 | `stats` | Extra tiles `[{entity, name, unit, decimals}]`, added after the default tiles or after `tiles`; also with `tap_action`, `hold_action`, `double_tap_action`. |
 
 **Entity keys:**
-- **Heat pump:** `mode`, `status`, `compressor` (binary, or frequency/speed > 0), `defrost` (binary), `power` (W or kW), `heat` (kW or W), `flow`, `return`, `volume`, `source_volume`, `source_in`, `source_out`, `brine_pressure` (bar, kPa, Pa, hPa, MPa or psi), `outdoor`, `valve` (binary, or a state like `Tank`/`DHW`), `heater` (backup / inline heater)
+- **Heat pump:** `mode`, `status`, `compressor` (binary, or frequency/speed > 0), `defrost` (binary), `power` (W or kW), `heat` (kW or W), `flow`, `return`, `volume`, `source_volume`, `source_in`, `source_out`, `brine_pressure` (bar, kPa, Pa, hPa, MPa or psi), `outdoor`, `valve` (binary, or a state like `Tank`/`DHW`), `heater` (backup / inline heater), `pv_boost` (PV surplus mode: binary, or a power above 0, see below)
 - **Storage:** `dhw_top`, `dhw_middle`, `dhw_bottom`, `dhw_target`, `dhw_mode`, `circulation`, `dhw_heater`, `buffer_top`, `buffer_middle`, `buffer_bottom`, `buffer_mode`, `buffer_heater`, `solar_collector`, `solar_pump` (needs the DHW tank)
 - **Heating circuit and house:** `hc_flow`, `hc_return`, `hc_setpoint`, `hc_mode`, `hc_pump`, `hc_volume`, `hc_curve_offset` (shift of the heating curve in K, see HeishaMon; also `hc2_` to `hc6_`), `hc_pressure` (bar, kPa, Pa, hPa, MPa or psi), `room`, `room_target`, `program` (eco, night, party, holiday)
 - **Direct systems:** without a buffer and without circuit-specific temperature sensors, circuit 1 uses the heat pump's `flow` and `return` and remains connected in the schematic.
@@ -568,6 +570,7 @@ Everything can be set in the **UI editor**. With a preset, the editor shows whet
 - **Circuits 2 to 6:** the same keys with `hc2_` to `hc6_` (`hc2_flow`, `hc6_pump`, …)
 - **Room of circuits 2 to 6:** `hc2_room` to `hc6_room` and `hc2_room_target` to `hc6_room_target`, for example a room sensor of its own on each floor. They appear in the status line under the emitter of their circuit, "Heating · Room 21.4 °C · Target 22.0", as a part of their own that opens the room sensor (or the target without one). Without a room sensor the target stands alone ("Room target 22.0 °C"); where mode and room do not fit side by side (long mode texts, narrow cards), the target is left out. `room` and `room_target` stay the room of circuit 1, shown in the house. Presets do not fill these keys yet.
 - **Heaters** (`heater`, `dhw_heater`, `buffer_heater`): binary or on/off, a power value (on above 0) or a stage number (1-3)
+- **PV surplus mode** (`pv_boost`): any heat pump or energy manager that raises the heating to take up PV surplus (a PV surplus switch, an SG Ready state turned into on/off, or a power such as the setpoint of the Lambda E-Manager) can feed it. The entity counts as active when it is on or reports a value above 0. The card then shows a "PV surplus" chip next to the mode, turns the heating periods of the timeline in which it was active into "Heating · PV surplus" (hatched), and offers the tile `pv_boost_share` (share of the heating time in PV surplus mode today, yesterday and this week, from the recorder history). The Lambda preset maps the E-Manager setpoint (`emgr_power_consumption_setpoint`) automatically; it needs the E-Manager in the integration. Example for another system: `entities: { pv_boost: binary_sensor.heat_pump_pv_mode }`.
 - **Power sources (W):** `pv`, `battery`, `grid` – the heat pump's power from each source. Optional: without them the card uses the Energy dashboard.
 - **Sums:** `power`, `heat`, `pv`, `battery` and `grid` also accept a list of entities. The card adds the values of the members that report a number (W and kW mixed); the first entity opens on tap and stands for the key in the editor warnings. Example: two meters for compressor and heater rod, `power: [sensor.heat_pump_meter_power, sensor.heater_meter_power]`.
 - **Statistics:** `cop_heating_today`, `cop_dhw_today`, `energy_today`, `pv_share_today`, `starts_today`
@@ -630,6 +633,7 @@ Periods: `now`, `today`, `yesterday`, `week`, `month`, `year`, `total`. A tile i
 | Starts and runtime | `starts`, `cycles_heating`, `cycles_dhw`, `cycles_cooling`, `defrosts`, `hours`, `hours_per_start`, `load_classes`, `aux_hours`, `aux_starts` |
 | Live | `spread`, `volume`, `heat_estimated`, `power`, `heat_live`, `compressor_speed`, `source_spread`, `outdoor`, `dhw_top`, `room`, `brine_pressure`, `hc_pressure`, `pv_share` |
 | Other | `pv_production`, `solar_thermal` (ViCare), `cost` |
+| PV surplus | `pv_boost_share` (needs `pv_boost`; periods `today`, `yesterday`, `week`) |
 
 What the presets provide:
 - **Lambda:** COP heating/DHW/cooling per day, month, year and in total; electricity and heat per mode including defrost and standby; starts, heating/DHW/cooling cycles and defrosts per day and yesterday.

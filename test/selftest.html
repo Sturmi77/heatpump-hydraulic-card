@@ -699,7 +699,7 @@
   {
     const s = setups[0];
     const { rows, t } = await tilesOf(s, s.config.tiles);
-    check(rows.length === 7 && rows[0][0] === 'COP heating · today' && rows[6][0] === 'Electricity heating · week', `Lambda tile order (${rows.map((r) => r[0]).join(' | ')})`);
+    check(rows.length === 8 && rows[0][0] === 'COP heating · today' && rows[6][0] === 'Electricity heating · week' && rows[7][0] === 'PV surplus share of heating · today', `Lambda tile order (${rows.map((r) => r[0]).join(' | ')})`);
     check(t['COP heating · today'] === '5.05', `legacy entity as today (${t['COP heating · today']})`);
     check(t['COP heating · month'] === '4.62', `preset period entity (${t['COP heating · month']})`);
     check(t['Electricity · today'] === '5.1 kWh · 24 % PV', `energy with PV share (${t['Electricity · today']})`);
@@ -1249,7 +1249,61 @@
     o = await isg('idle'); check(/mode-idle/.test(o.mode) && o.err && /eco/.test(o.prog || ''), `Stiebel ISG standby with the error flag and the eco program (${JSON.stringify(o)})`);
   }
 
-  // 13e. valve_map: raw valve states that do not follow "on = hot water" (a zone valve with 1 = heating, 0 = hot water, #109)
+  // 13e. PV surplus mode (pv_boost): chip, heating periods of the timeline, share tile, Lambda preset
+  {
+    const s = setups[0]; const sp = 'sensor.eu08l_emgr_power_consumption_setpoint';
+    const hass = (scen, extra = {}) => hassOf(toStates({ ...s.states(scen), ...extra }), {}, null, {});
+    const chip = async (value, cfg = {}) => {
+      const card = mount({ ...s.config, ...cfg }, hass('heat', value === undefined ? {} : { [sp]: value })); await wait(20);
+      const on = card.shadowRoot.getElementById('chip-pv').classList.contains('on'); const text = card.shadowRoot.getElementById('chip-pv').textContent;
+      card.remove(); return { on, text };
+    };
+    const r = C._resolve(s.config, hass('heat'));
+    check(HFC_PRESETS.lambda.entities('eu08l', { hp: 1, dhw: 1, buffer: 1, hc: 1 }).pv_boost === sp && r.entities.pv_boost === sp, 'Lambda preset maps the E-Manager setpoint as pv_boost');
+    let o = await chip(); check(o.on && /PV surplus/.test(o.text), `a setpoint above 0 shows the PV surplus chip (${JSON.stringify(o)})`);
+    o = await chip(['0', 'W']); check(!o.on, 'a setpoint of 0 shows no chip');
+    o = await chip('unavailable'); check(!o.on, 'an unavailable entity shows no chip');
+    const bin = await (async () => {
+      const card = mount({ ...s.config, entities: { ...s.config.entities, pv_boost: 'input_boolean.heatpump_boost' } }, hass('dhw')); await wait(20);
+      const on = card.shadowRoot.getElementById('chip-pv').classList.contains('on'); card.remove(); return on;
+    })();
+    check(bin, 'a binary entity that is on shows the chip as well');
+    // timeline: heating periods split by the history of the PV entity
+    const iso = (ms) => new Date(ms).toISOString();
+    const mode = Object.keys(toStates(s.states('heat'))).find((k) => /eu08l_hp1_operating_state$/.test(k));
+    const mock = (extra) => (h) => ({ ...h, callWS: (m) => {
+      if (m.type !== 'history/history_during_period') return h.callWS(m);
+      const start = Date.parse(m.start_time); const end = m.end_time ? Date.parse(m.end_time) : Date.now(); const out = {};
+      m.entity_ids.forEach((id) => {
+        if (id === mode) out[id] = [{ state: 'STBY', last_updated: iso(start) }, { state: 'CH', last_updated: iso(start + (end - start) / 8) }, { state: 'STBY', last_updated: iso(start + (end - start) * 7 / 8) }];
+        if (id === sp) out[id] = extra(start, end);
+      });
+      return Promise.resolve(out);
+    } });
+    const pvHist = (start, end) => [{ state: '0', last_updated: iso(start) }, { state: '1800', last_updated: iso(start + (end - start) * 2 / 8) }, { state: '0', last_updated: iso(start + (end - start) * 4 / 8) }];
+    let c = mount({ ...s.config, timeline: true, timeline_marks: false }, mock(pvHist)(hass('heat'))); await wait(80);
+    const kinds = [...c.shadowRoot.querySelectorAll('#timeline .seg')].map((x) => [...x.classList].find((k) => k.startsWith('k-')));
+    check(kinds.join() === 'k-idle,k-heat,k-pv,k-heat,k-idle', `the PV surplus part of the heating period is its own period (${kinds})`);
+    check(/Heating · PV surplus/.test(c.shadowRoot.querySelector('#timeline .tl-legend').textContent), 'the legend names it');
+    c.shadowRoot.querySelectorAll('#timeline .seg')[2].dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    check(/^Heating · PV surplus · \d\d:\d\d–\d\d:\d\d · /.test(c.shadowRoot.getElementById('tl-detail').textContent), `a tap shows start, end and duration (${c.shadowRoot.getElementById('tl-detail').textContent})`);
+    c.remove();
+    c = mount({ ...s.config, timeline: true, timeline_marks: false }, mock(() => [{ state: '0', last_updated: iso(0) }])(hass('heat'))); await wait(80);
+    check(![...c.shadowRoot.querySelectorAll('#timeline .seg')].some((x) => x.classList.contains('k-pv')), 'without a PV period the timeline has no PV surplus kind');
+    c.remove();
+    // share tile: yesterday, 24 h of history, heating 6 h to 21 h of it, PV surplus 6 h to 12 h of it
+    const share = async (period) => {
+      const card = mount({ ...s.config, tiles: [`pv_boost_share:${period}`] }, mock(pvHist)(hass('heat'))); await wait(80);
+      const rows = tileRows(card); card.remove(); return rows;
+    };
+    let rows = await share('yesterday');
+    check(rows.length === 1 && rows[0][0] === 'PV surplus share of heating · yesterday' && rows[0][1] === '33 %', `share of the heating time in PV surplus mode (${JSON.stringify(rows)})`);
+    check(C._tileOptions({ ...s.config }, r, hass('heat')).options.some((x) => x.value.startsWith('pv_boost_share')), 'the editor offers the share tile where a PV surplus entity exists');
+    const vi = setups[2]; const hv = hassOf(toStates(vi.states('heat')), vi.registry);
+    check(!C._tileOptions(vi.config, C._resolve(vi.config, hv), hv).options.some((x) => x.value.startsWith('pv_boost_share')), 'no share tile without a PV surplus entity');
+  }
+
+  // 13f. valve_map: raw valve states that do not follow "on = hot water" (a zone valve with 1 = heating, 0 = hot water, #109)
   {
     const s = setups[5]; const reg = s.registry || {};
     const valveId = 'sensor.panasonic_heat_pump_main_threeway_valve_state';
