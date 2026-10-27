@@ -78,6 +78,10 @@ Release gate:
 
 Pump counters remain follow-up work in [#31](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/31): the open presets do not currently provide verified, unambiguous entity semantics and units for heating-circuit or source-pump hours/starts. No guessed mappings are shipped. The tester and preset meta issues will be updated after the separate Samsung contribution is ready to merge.
 
+## Storage topology
+
+Combined/layered storage ([#50](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/50)), the wood stove ([#36](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/36)) and a second heat generator ([#51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51)) share one plan: [TOPOLOGY.md](TOPOLOGY.md). Weighted by prevalence, the card already covers about three quarters of installations, and combined storage plus a boiler in series bring it to about 90 %. The plan therefore starts with what helps in every case – a geometry snapshot test with a generated combination test, then one flow model – and adds combined storage (phase 1) and the boiler in series (once a hybrid installation has supplied data) as fixed slots. An internal component model for the drawing is decided only before the rarer variants (wood stove, boiler in parallel), when further hydraulic requests justify it.
+
 ## Larger feature priority
 
 | Rank | Issue | Impact | Effort | Reason / dependency |
@@ -90,6 +94,6 @@ Pump counters remain follow-up work in [#31](https://github.com/Sturmi77/heatpum
 
 - [#3 History replay](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/3): benefit is unproven and implementation is XL.
 - Remaining brand drawings in [#5](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/5): one brand per issue when original references are available.
-- [#36 wood-stove topology](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/36): separate large layout/integration work.
+- [#36 wood-stove topology](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/36): phase 2 of the [storage topology plan](TOPOLOGY.md).
 - [#32 DHW standby-loss analysis](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/32) and [#34 circulation time windows](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/34): require robust time-window semantics and real entity samples.
 - [#15 Video promotion](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/15): operational work after a stable patch release and HACS default listing.
