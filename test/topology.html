@@ -75,8 +75,10 @@
     if (/^t-hc-room\d*$/.test(el.id)) return true;
     const m = /^t-hc(\d*)$/.exec(el.id); return !!m && !!root.getElementById(`t-hc-now${m[1]}`);
   };
-  // Inline styles set by script are serialised by each browser in its own way: declarations sorted, spaces normalised.
-  const style = (value) => value.split(';').map((d) => d.trim().replace(/\s*:\s*/, ':').replace(/\s+/g, ' ')).filter(Boolean).sort().join('; ');
+  // Inline styles set by script are serialised by each browser in its own way: declarations sorted, spaces normalised, and the
+  // depth of a transform origin (Firefox adds "0px") left out.
+  const style = (value) => value.split(';').map((d) => d.trim().replace(/\s*:\s*/, ':').replace(/\s+/g, ' ').replace(/^(transform-origin:\S+ \S+) 0px$/, '$1'))
+    .filter(Boolean).sort().join('; ');
   const describe = (card) => {
     const root = card.shadowRoot;
     const svg = root.getElementById('svg');
@@ -121,8 +123,9 @@
   const record = (key, d) => {
     const h = `${hash(d.geo)} ${hash(d.state)}`;
     results[key] = dump ? { h, ...d } : h;
-    // Kept in full only for the first changed case.
-    if (!dump && base && key in base && base[key] !== h && !Object.keys(full).length) full[key] = d;
+    // Kept in full only for the first changed case of each setup or storage strategy, at most three.
+    const group = key.split(' ').slice(0, 2).join(' ');
+    if (!dump && base && key in base && base[key] !== h && Object.keys(full).length < 3 && !Object.keys(full).some((k) => k.startsWith(`${group} `))) full[key] = d;
   };
 
   /* ---------- 1. demo installations ---------- */
@@ -317,7 +320,7 @@
     return;
   }
   check(!!base, 'snapshot baseline test/topology-snapshot.js is loaded');
-  // The first changed case is written out in full, so it can be compared with `topology-snapshot.mjs --out` of another state.
+  // The first changed cases are written out in full, so they can be compared with `topology-snapshot.mjs --out` of another state.
   let changed = '';
   if (base) {
     for (const [key, value] of Object.entries(results)) {
@@ -325,7 +328,7 @@
       const [g, s] = value.split(' '); const [bg, bs] = base[key].split(' ');
       check(g === bg, `snapshot: geometry of ${key} changed`);
       check(s === bs, `snapshot: state of ${key} changed`);
-      if (!changed && full[key]) changed =`\n\nFirst changed case, ${key}:\n${(g !== bg ? full[key].geo : full[key].state).join('\n')}`;
+      if (full[key]) changed += `\n\nChanged case ${key} (${g !== bg ? 'geometry' : 'state'}):\n${(g !== bg ? full[key].geo : full[key].state).join('\n')}`;
     }
     for (const key of Object.keys(base)) if (!(key in results)) check(false, `snapshot: case ${key} is gone (update the baseline)`);
   }
