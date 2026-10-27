@@ -1,10 +1,11 @@
-// Snapshot baseline of test/topology.html (docs/TOPOLOGY.md, stage 0a).
+// Snapshot baseline of test/topology.html (see CONTRIBUTING.md, "Topology test and drawing snapshot").
 //
 //   node scripts/topology-snapshot.mjs --update          writes test/topology-snapshot.js from the current card
 //   node scripts/topology-snapshot.mjs --out before.json  writes the full descriptions of every case
 //   node scripts/topology-snapshot.mjs --diff before.json after.json
 //                                                        lists the cases that differ and their first differing lines
 //
+// Runs in Chromium; HFC_BROWSER=firefox runs --out in Firefox to compare the two browsers.
 // A change that must not alter the drawing (a refactor) leaves the baseline as it is. A change that alters the drawing on
 // purpose updates the baseline in the same pull request; --out before and after the change shows what moved.
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -33,9 +34,9 @@ const diff = (a, b) => {
 };
 
 const run = async () => {
-  const { chromium } = await import('playwright');
-  const executablePath = process.env.HFC_CHROMIUM || undefined;
-  const browser = await chromium.launch({ executablePath });
+  const playwright = await import('playwright');
+  const firefox = process.env.HFC_BROWSER === 'firefox';
+  const browser = firefox ? await playwright.firefox.launch() : await playwright.chromium.launch({ executablePath: process.env.HFC_CHROMIUM || undefined });
   try {
     // Same browser locale as the Playwright tests, so the baseline does not depend on the system language.
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
