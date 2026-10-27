@@ -852,6 +852,11 @@ const HFC_PRESETS = {
 /* ------------------------------------------------------------------ */
 /* Translations                                                        */
 /* ------------------------------------------------------------------ */
+// Built-in languages: one entry here, one block in HFC_I18N (card texts) and one in HFC_EDITOR (editor labels), see
+// docs/TRANSLATING.md. The value is the name of the language in that language. A language may be translated in part:
+// every missing text falls back to English. `npm run i18n:check` verifies the blocks.
+const HFC_LANGUAGES = { en: 'English', de: 'Deutsch' };
+
 const HFC_I18N = {
   en: {
     not_found: 'No entities of this preset found. Check the integration and the prefix, or open the card editor.',
@@ -945,6 +950,9 @@ const hfcTextMerge = (...parts) => {
   }));
   return out;
 };
+
+// The built-in text of a language on top of English, so a translation in progress never leaves a gap.
+const hfcBuiltin = (table, lang) => hfcTextMerge(table.en, lang === 'en' ? null : table[lang]);
 
 const HFC_EDITOR = {
   en: {
@@ -1216,10 +1224,11 @@ class HeatpumpFlowCard extends HTMLElement {
   // Form schema. With a config, circuit fields and groups are limited to hc_count.
   static _formSchema(config, tiles) {
     const lang = (document.querySelector('home-assistant')?.hass?.locale?.language || navigator.language || 'en').slice(0, 2);
-    const L = HFC_EDITOR[lang] || HFC_EDITOR.en;
+    const L = hfcBuiltin(HFC_EDITOR, lang);
     const hcCount = config ? hfcHcCount(config) : HFC_MAX_HC;
-    const customLanguages = Object.keys(config?.texts || {}).filter((v) => !['en', 'de'].includes(v));
-    const languageOptions = [{ value: 'auto', label: 'Auto' }, { value: 'de', label: 'Deutsch' }, { value: 'en', label: 'English' },
+    const customLanguages = Object.keys(config?.texts || {}).filter((v) => !(v in HFC_LANGUAGES));
+    const languageOptions = [{ value: 'auto', label: 'Auto' },
+      ...Object.entries(HFC_LANGUAGES).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label)),
       ...customLanguages.map((value) => ({ value, label: value }))];
     const keep = (name) => { const m = /^hc([2-6])_/.exec(name); return !m || +m[1] <= hcCount; };
     const groups = Object.entries(HFC_ENTITY_GROUPS).filter(([sec]) => keep(sec.replace('sec_', '') + '_'));
@@ -1296,7 +1305,7 @@ class HeatpumpFlowCard extends HTMLElement {
       ],
       // Keys of circuits 2 to 6 reuse the labels of circuit 1 (hc2_flow → hc_flow, hc2_room → room).
       computeLabel: (s) => L[s.name] || L[String(s.name).replace(/^hc[2-6]_/, 'hc_')] || L[String(s.name).replace(/^hc[2-6]_/, '')]
-        || (HFC_I18N[lang] || HFC_I18N.en).det[s.name] || s.name,
+        || hfcBuiltin(HFC_I18N, lang).det[s.name] || s.name,
       L,
     };
   }
