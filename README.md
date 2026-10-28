@@ -51,9 +51,11 @@ Additional real-installation reports with manual entity mappings are tracked sep
 
 ## Current status
 
-The current release is **[0.13.0](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.13.0)**. Its HACS, quality, Chromium and Firefox checks pass, including 1,189 browser self-tests. The shipped presets and features are covered with simulated data; Lambda, HeishaMon, Samsung and Kronoterm (Cloud API) have also been confirmed on real installations.
+The current release is **[0.13.1](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.13.1)**. Its HACS, quality, Chromium and Firefox checks pass, including 1,211 browser self-tests. The shipped presets and features are covered with simulated data; Lambda, HeishaMon, Samsung and Kronoterm (Cloud API) have also been confirmed on real installations.
 
-Release 0.13.0 adds the presets **Stiebel Eltron ISG** (also Tecalor) and **Bosch/Buderus Home Comfort**, and the `wolf_smartset` integration for the Wolf preset. New in the schematic: the primary pump of the heat pump on the flow pipe (`primary_pump`), the fan speed (`fan_speed`), a series buffer with a defrost bypass valve (`series_buffer`), the heating curve shift above the circuit pump (`hc_curve_offset`) and the **PV surplus mode** (`pv_boost`: chip, its own period in the timeline and a share tile, mapped for the Lambda E-Manager). New options and tiles: `valve_map` for valves that do not follow "on = hot water", the tile `dhw_loss` (standby loss of the hot-water tank in K/h) and power sources that are left out when the installation does not have them. Languages beyond English and German can now be contributed as built-in languages ([docs/TRANSLATING.md](docs/TRANSLATING.md)). The new presets are listed as untested above. Real-installation feedback for Viessmann (ViCare, Open3E), Vaillant, EMS-ESP, Bosch/Buderus Home Comfort, Wolf, Luxtronik and Stiebel Eltron is therefore the highest-priority follow-up; reports from additional HeishaMon models and generations remain welcome. Please use the [tester issue](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) or the [preset feedback form](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/new?template=preset_feedback.yml) and review the diagnostic report for private entity names before posting it.
+Release 0.13.1 fixes findings from the first testers of 0.13.0: heating circuit 1 is drawn when there is a buffer and no entity of the circuit, the Vaillant (myPyllant) preset finds a home whose entity ids end in a number and uses the zone thermostat as room temperature, and the Wolf (`wolf_smartset`) preset takes the effective DHW target and the heating program from the mixer circuit demand.
+
+Release 0.13.0 added the presets **Stiebel Eltron ISG** (also Tecalor) and **Bosch/Buderus Home Comfort**, and the `wolf_smartset` integration for the Wolf preset. New in the schematic: the primary pump of the heat pump on the flow pipe (`primary_pump`), the fan speed (`fan_speed`), a series buffer with a defrost bypass valve (`series_buffer`), the heating curve shift above the circuit pump (`hc_curve_offset`) and the **PV surplus mode** (`pv_boost`: chip, its own period in the timeline and a share tile, mapped for the Lambda E-Manager). New options and tiles: `valve_map` for valves that do not follow "on = hot water", the tile `dhw_loss` (standby loss of the hot-water tank in K/h) and power sources that are left out when the installation does not have them. Languages beyond English and German can now be contributed as built-in languages ([docs/TRANSLATING.md](docs/TRANSLATING.md)). The new presets are listed as untested above. Real-installation feedback for Viessmann (ViCare, Open3E), Vaillant, EMS-ESP, Bosch/Buderus Home Comfort, Wolf, Luxtronik and Stiebel Eltron is therefore the highest-priority follow-up; reports from additional HeishaMon models and generations remain welcome. Please use the [tester issue](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) or the [preset feedback form](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/new?template=preset_feedback.yml) and review the diagnostic report for private entity names before posting it.
 
 The completed release history and the prioritized post-0.13.0 backlog are maintained in the [development plan](docs/ROADMAP.md).
 
@@ -249,14 +251,14 @@ It maps the refrigeration-circuit mode, compressor and diverter valve; system el
 type: custom:heatpump-flow-card
 preset: vaillant
 ```
-The home name prefix is detected from `sensor.<home>_energy_manager_state`.
+The home name prefix is detected from `sensor.<home>_energy_manager_state`. An entity id that ends in a number (`…_energy_manager_state_2`, which Home Assistant adds to an id that was already taken) is found as well; where both exist, the plain id wins. If the detection picks the wrong home or fails, set `prefix: <home>` (the part of the entity ids before the name of the entity).
 
 What you get:
 - the energy manager state (standby, heating, DHW, cooling) as the mode
 - system flow temperature
 - DHW tank and buffer
 - circuit 0 flow, setpoint and state
-- zone room temperature and target
+- zone room temperature and target; without zone sensors the zone thermostat (`climate.<home>_zone_…`) serves as room temperature and target
 - device power and heating efficiency
 - trouble codes
 
