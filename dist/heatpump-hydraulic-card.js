@@ -1086,7 +1086,7 @@ const HFC_LANGUAGES = { en: 'English', de: 'Deutsch' };
 const HFC_I18N = {
   en: {
     not_found: 'No entities of this preset found. Check the integration and the prefix, or open the card editor.',
-    title: 'Heat pump', heat_pump: 'Heat pump', dhw: 'Hot water', buffer: 'Buffer', series_tank: 'Series buffer', heating_circuit: 'Heating circuit',
+    title: 'Heat pump', heat_pump: 'Heat pump', dhw: 'Hot water', buffer: 'Buffer', series_tank: 'Series buffer', combined_tank: 'Combined storage', heating_zone: 'Heating', heating_circuit: 'Heating circuit',
     house: 'Rooms', room: 'Room', room_target: 'Room target', running: 'running', compressor_off: 'Compressor off', source_in: 'Air inlet', outdoor: 'Outdoor',
     energy_missing: 'Energy dashboard: no power sensor for {sources}; energy counters alone cannot show live flow.',
     brine_in: 'Brine in', brine_out: 'Brine out', well_in: 'Well in', well_out: 'Well out',
@@ -1126,7 +1126,7 @@ const HFC_I18N = {
   },
   de: {
     not_found: 'Keine Entitäten dieser Voreinstellung gefunden. Integration und Präfix prüfen oder den Karteneditor öffnen.',
-    title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', dhw: 'Warmwasser', buffer: 'Puffer', series_tank: 'Reihenpuffer', heating_circuit: 'Heizkreis',
+    title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', dhw: 'Warmwasser', buffer: 'Puffer', series_tank: 'Reihenpuffer', combined_tank: 'Kombispeicher', heating_zone: 'Heizung', heating_circuit: 'Heizkreis',
     house: 'Wohnräume', room: 'Raum', room_target: 'Raum-Soll', running: 'läuft', compressor_off: 'Verdichter aus', source_in: 'Luft-Eintritt', outdoor: 'Außen',
     energy_missing: 'Energie-Dashboard: kein Leistungssensor für {sources}; Energiezähler allein zeigen keinen aktuellen Fluss.',
     brine_in: 'Sole ein', brine_out: 'Sole aus', well_in: 'Brunnen ein', well_out: 'Brunnen aus',
@@ -1195,7 +1195,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animation speed', source_spread: 'Show source spread',
     theme: 'Card theme', theme_auto: 'Automatic (dashboard)', theme_night: 'Night', theme_contrast: 'High contrast', fullscreen: 'Full-screen button',
     wall_timeout: 'Hide controls after (seconds, 0 = never)',
-    hc_return_label: 'Show circuit return temperature', series_buffer: 'Series buffer in the return', series_bypass: 'Series buffer with bypass valve (off: the circuits run in defrost)', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
+    hc_return_label: 'Show circuit return temperature', storage: 'Storage', storage_separate: 'Separate hot-water tank and buffer', storage_combined: 'Combined storage (one tank, hot-water zone on top)', series_buffer: 'Series buffer in the return', series_bypass: 'Series buffer with bypass valve (off: the circuits run in defrost)', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
     sec_hc2: 'Heating circuit 2', sec_hc3: 'Heating circuit 3', sec_hc4: 'Heating circuit 4', sec_hc5: 'Heating circuit 5', sec_hc6: 'Heating circuit 6', sec_details: 'Details: operation', sec_refrigerant: 'Details: refrigerant circuit', sec_cutouts: 'Details: cut-out counters',
     controls: 'Quick controls (switch, button, select, number …)', details_open: 'Details open by default',
     from_preset: 'Found by the preset',
@@ -1258,7 +1258,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animationsgeschwindigkeit', source_spread: 'Quellenspreizung anzeigen',
     theme: 'Kartendarstellung', theme_auto: 'Automatisch (Dashboard)', theme_night: 'Nacht', theme_contrast: 'Hoher Kontrast', fullscreen: 'Vollbild-Schaltfläche',
     wall_timeout: 'Bedienelemente ausblenden nach (Sekunden, 0 = nie)',
-    hc_return_label: 'Heizkreis-Rücklauf anzeigen', series_buffer: 'Reihenpuffer im Rücklauf', series_bypass: 'Reihenpuffer mit Bypass-Ventil (aus: die Heizkreise laufen beim Abtauen)', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
+    hc_return_label: 'Heizkreis-Rücklauf anzeigen', storage: 'Speicher', storage_separate: 'Getrennter Warmwasserspeicher und Puffer', storage_combined: 'Kombispeicher (ein Speicher, Warmwasserzone oben)', series_buffer: 'Reihenpuffer im Rücklauf', series_bypass: 'Reihenpuffer mit Bypass-Ventil (aus: die Heizkreise laufen beim Abtauen)', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
     sec_hc2: 'Heizkreis 2', sec_hc3: 'Heizkreis 3', sec_hc4: 'Heizkreis 4', sec_hc5: 'Heizkreis 5', sec_hc6: 'Heizkreis 6', sec_details: 'Details: Betrieb', sec_refrigerant: 'Details: Kältekreis', sec_cutouts: 'Details: Abschaltzähler',
     controls: 'Schnellbedienung (Schalter, Taste, Auswahl, Zahl …)', details_open: 'Details standardmäßig offen',
     from_preset: 'Von der Voreinstellung gefunden',
@@ -1350,6 +1350,8 @@ const HFC_ACTIONS = ['tap_action', 'hold_action', 'double_tap_action'];
 const HFC_LAYOUTS = ['default', 'compact', 'wide', 'wall'];
 const HFC_ANIMATIONS = ['auto', 'always', 'off'];
 const HFC_THEMES = ['auto', 'night', 'contrast'];
+// Storage: a hot-water tank and a buffer, or one combined (layered) tank with the hot-water zone on top (docs/TOPOLOGY.md, phase 1).
+const HFC_STORAGES = ['separate', 'combined'];
 // Drawing of the outdoor unit: `auto` takes the style of the preset; `unit_size` picks the Vaillant aroTHERM plus class.
 const HFC_UNIT_STYLES = ['auto', 'generic', 'lambda', 'vaillant', 'panasonic', 'viessmann', 'bosch', 'saunier', 'samsung'];
 const HFC_UNIT_SIZES = ['small', 'medium', 'large'];
@@ -1597,8 +1599,9 @@ class HeatpumpFlowCard extends HTMLElement {
               { name: 'language', selector: { select: { mode: 'dropdown', options: languageOptions } } },
               { name: 'fullscreen', selector: { boolean: {} } },
               { name: 'hc_return_label', selector: { boolean: {} } },
-              { name: 'series_buffer', selector: { boolean: {} } },
-              ...(config && config.series_buffer ? [{ name: 'series_bypass', selector: { boolean: {} } }] : []),
+              { name: 'storage', selector: { select: { mode: 'dropdown', options: HFC_STORAGES.map((v) => ({ value: v, label: L[`storage_${v}`] })) } } },
+              ...(config && config.storage === 'combined' ? [] : [{ name: 'series_buffer', selector: { boolean: {} } }]),
+              ...(config && config.series_buffer && config.storage !== 'combined' ? [{ name: 'series_bypass', selector: { boolean: {} } }] : []),
               ...['hc_name', 'hc2_name', 'hc3_name', 'hc4_name', 'hc5_name', 'hc6_name'].filter(keep).map((name) => ({ name, selector: { text: {} } })),
               { name: 'unit_style', selector: { select: { mode: 'dropdown', options: HFC_UNIT_STYLES.map((v) => ({ value: v, label: L[`unit_${v}`] })) } } },
               ...(config && (config.unit_style === 'vaillant' || ((!config.unit_style || config.unit_style === 'auto') && config.preset === 'vaillant'))
@@ -1688,6 +1691,11 @@ class HeatpumpFlowCard extends HTMLElement {
     if (config.series_bypass !== undefined && config.series_bypass !== null && typeof config.series_bypass !== 'boolean') {
       throw new Error('series_bypass must be true or false');
     }
+    if (config.storage !== undefined && config.storage !== null && !HFC_STORAGES.includes(config.storage)) {
+      throw new Error(`storage must be one of: ${HFC_STORAGES.join(', ')}`);
+    }
+    // One tank holds hot water and the heating zone; a second buffer in the return cannot be drawn with it.
+    if (config.storage === 'combined' && config.series_buffer) throw new Error('storage: combined cannot be used with series_buffer');
     if (config.primary_pump !== undefined && config.primary_pump !== null && typeof config.primary_pump !== 'boolean') {
       throw new Error('primary_pump must be true or false');
     }
@@ -2318,12 +2326,17 @@ class HeatpumpFlowCard extends HTMLElement {
   // Which optional blocks exist – the SVG is rebuilt only when this changes.
   _layoutSignature() {
     if (!this._hass || !this._e) return '';
-    const buffer = this._has('buffer_top') || this._has('buffer_mode');
+    // A combined storage is one tank with the hot-water zone on top and the heating zone below: drawn without sensors, and to the
+    // circuits it is a buffer that decouples them from the heat pump.
+    const combined = this._config.storage === 'combined';
+    const buffer = combined || this._has('buffer_top') || this._has('buffer_mode');
+    const dhw = combined || ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_mode'].some((k) => this._has(k));
     const parts = {
+      combined,
       power: this._powerMode(),
       sources: `${this._powerMode() === 'energy' ? [this._energy.solar.length, this._energy.battery.length, this._energy.grid.length].join() : ''}|${this._srcKeys().join()}`,
       // A tank with only a lower sensor (e.g. HeishaMon's single sensor near the bottom) is still drawn.
-      dhw: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_mode'].some((k) => this._has(k)),
+      dhw,
       buffer,
       // A series buffer sits in the return; a parallel buffer (with its own sensors) wins.
       series: !!this._config.series_buffer && !buffer && (this._noBypass() ? 'fixed' : 'valve'),
@@ -2341,7 +2354,7 @@ class HeatpumpFlowCard extends HTMLElement {
       heaters: ['heater', 'dhw_heater', 'buffer_heater'].map((k) => (this._has(k) ? 1 : 0)).join(''),
       middle: [this._has('dhw_middle') ? 1 : 0, this._has('buffer_middle') ? 1 : 0].join(''),
       pressure: [this._sourceType === 'brine' && this._has('brine_pressure') ? 1 : 0, this._has('hc_pressure') ? 1 : 0].join(''),
-      solar: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_mode'].some((k) => this._has(k)) && (this._has('solar_collector') || this._has('solar_pump')),
+      solar: dhw && (this._has('solar_collector') || this._has('solar_pump')),
       controls: this._controlList().map((c) => c.entity).join(),
       drawer: this._drawerRows().map(([s, r]) => s + r.map((x) => x[0]).join('.')).join('|'),
       lang: this._lang,
@@ -2440,6 +2453,7 @@ class HeatpumpFlowCard extends HTMLElement {
           <defs>
             <linearGradient id="g-dhw" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-dhw-top"/>${this._has('dhw_middle') ? '<stop offset="50%" id="g-dhw-middle"/>' : ''}<stop offset="100%" id="g-dhw-bottom"/></linearGradient>
             <linearGradient id="g-buf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-buf-top"/>${this._has('buffer_middle') ? '<stop offset="50%" id="g-buf-middle"/>' : ''}<stop offset="100%" id="g-buf-bottom"/></linearGradient>
+            ${P.combined ? `<linearGradient id="g-cs" x1="0" y1="0" x2="0" y2="1">${this._combinedSensors().map(([k, y]) => `<stop offset="${(((y - 40) / 480) * 100).toFixed(1)}%" id="g-cs-${k}"/>`).join('') || `<stop offset="0%" stop-color="${this._tankColor(NaN)}"/>`}</linearGradient>` : ''}
             <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
           </defs>
 
@@ -2488,11 +2502,15 @@ class HeatpumpFlowCard extends HTMLElement {
               <text class="small" id="t-valve" x="446" y="254"></text>
             </g>
             <g class="tap" ${de(['dhw_top', 'dhw_middle', 'dhw_bottom'].find((k) => e[k]) || 'dhw_top')}>
-              <text class="tank-title" x="580" y="30" text-anchor="middle">${this._esc(i.dhw)}</text>
-              <rect class="tank" x="520" y="40" width="120" height="200" rx="26" fill="url(#g-dhw)"/>
+              ${P.combined ? `<text class="tank-title" x="580" y="30" text-anchor="middle">${this._esc(i.combined_tank)}</text>
+              <rect class="tank" id="cs-tank" x="520" y="40" width="120" height="480" rx="26" fill="url(#g-cs)"/>
+              <path class="zone-line" d="M528 280 H632"/>
+              <text class="small zone-title on-tank" x="580" y="62" text-anchor="middle">${this._esc(i.dhw)}</text>`
+    : `<text class="tank-title" x="580" y="30" text-anchor="middle">${this._esc(i.dhw)}</text>
+              <rect class="tank" x="520" y="40" width="120" height="200" rx="26" fill="url(#g-dhw)"/>`}
               <path class="coil" id="coil" d="M520 80 H600 L540 100 H600 L540 120 H600 L540 140 H600 L540 160 H600 L540 180 H600 L540 200 H520"/>
               <text class="tank-temp" id="t-dhw-top" x="580" y="112" text-anchor="middle"></text>
-              <text class="small" id="t-dhw-mode" x="580" y="262" text-anchor="middle"></text>
+              <text class="small${P.combined ? ' on-tank' : ''}" id="t-dhw-mode" x="580" y="262" text-anchor="middle"></text>
             </g>
             ${this._has('dhw_middle') ? `<g class="tap" ${de('dhw_middle')}><text class="tank-sub" id="t-dhw-middle" x="580" y="166" text-anchor="middle"></text></g>` : ''}
             <g class="tap" ${de('dhw_bottom')}><text class="tank-sub" id="t-dhw-bottom" x="580" y="222" text-anchor="middle"></text></g>
@@ -2500,9 +2518,10 @@ class HeatpumpFlowCard extends HTMLElement {
             ${P.circ ? `<g class="tap" ${de('circulation')}><text class="small circ" id="t-circ" x="650" y="60">↻ ${this._esc(i.circulation)}</text></g>` : ''}` : ''}
 
           ${P.buffer ? `
-            <g class="tap" ${de('buffer_top')}>
-              <text class="tank-title" x="580" y="310" text-anchor="middle">${this._esc(i.buffer)}</text>
-              <rect class="tank" x="520" y="320" width="120" height="200" rx="26" fill="url(#g-buf)"/>
+            <g class="tap" ${de(P.combined ? (['buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode'].find((k) => e[k]) || 'buffer_top') : 'buffer_top')}>
+              ${P.combined ? `<text class="small zone-title on-tank" x="580" y="304" text-anchor="middle">${this._esc(i.heating_zone)}</text>`
+    : `<text class="tank-title" x="580" y="310" text-anchor="middle">${this._esc(i.buffer)}</text>
+              <rect class="tank" x="520" y="320" width="120" height="200" rx="26" fill="url(#g-buf)"/>`}
               <text class="tank-temp" id="t-buf-top" x="580" y="392" text-anchor="middle"></text>
               <text class="small" id="t-buf-mode" x="580" y="542" text-anchor="middle"></text>
             </g>
@@ -3035,6 +3054,12 @@ class HeatpumpFlowCard extends HTMLElement {
   // and the flow runs straight into the buffer, past the circuits, so the heat pump defrosts from the buffer water.
   // series_bypass: false: a series buffer without a bypass valve.
   _noBypass() { return this._config.series_bypass === false; }
+
+  // Combined storage: the six storage sensors are heights in one tank, top to bottom, at the y of their labels.
+  _combinedSensors() {
+    return [['dhw_top', 112], ['dhw_middle', 166], ['dhw_bottom', 222], ['buffer_top', 392], ['buffer_middle', 446], ['buffer_bottom', 502]]
+      .filter(([k]) => this._has(k));
+  }
 
   _seriesSvg() {
     const e = this._e; const i = this._i;
@@ -4117,11 +4142,15 @@ class HeatpumpFlowCard extends HTMLElement {
       this._$('g-buf-top').setAttribute('stop-color', this._tankColor(top));
       if (this._has('buffer_middle')) this._$('g-buf-middle')?.setAttribute('stop-color', this._tankColor(this._n('buffer_middle')));
       this._$('g-buf-bottom').setAttribute('stop-color', this._tankColor(bot));
-      this._txt('t-buf-top', this._t(top));
+      // A combined storage may have no sensor in its heating zone: the zone then stays without a value.
+      this._txt('t-buf-top', P.combined && !this._has('buffer_top') ? '' : this._t(top));
       this._txt('t-buf-middle', this._has('buffer_middle') ? `${i.middle} ${this._t(this._n('buffer_middle'))}` : '');
       this._txt('t-buf-bottom', this._has('buffer_bottom') ? `${i.bottom} ${this._t(this._n('buffer_bottom'))}` : '');
       this._txt('t-buf-mode', this._has('buffer_mode') ? this._modeLabel(bufMode, this._s('buffer_mode')) : '');
     }
+
+    // Combined storage: one gradient over every sensor at its height.
+    if (P.combined) this._combinedSensors().forEach(([k]) => this._$(`g-cs-${k}`)?.setAttribute('stop-color', this._tankColor(this._n(k))));
 
     // house
     if (P.house) {
@@ -4311,6 +4340,9 @@ HeatpumpFlowCard.styles = `
   .tank { stroke: var(--divider-color, rgba(127,127,127,.4)); stroke-width: 2; }
   .tank-temp { font-size: calc(26px * var(--kt, 1)); font-weight: 700; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.45); stroke-width: 4px; stroke-linejoin: round; }
   .tank-sub { font-size: 14px; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.35); stroke-width: 3px; }
+  .on-tank { fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.35); stroke-width: 3px; }
+  .zone-title { font-weight: 600; }
+  .zone-line { fill: none; stroke: rgba(255,255,255,.8); stroke-width: 2; stroke-dasharray: 6 5; }
   .house-temp { font-size: calc(26px * var(--kt, 1)); font-weight: 700; }
   .house-sub { font-size: calc(14px * var(--k2, 1)); }
   .coil { fill: none; stroke: rgba(255,255,255,.55); stroke-width: 3; stroke-linejoin: round; opacity: .25; }
@@ -4579,7 +4611,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       errors: this._config.errors !== undefined ? this._config.errors : this._presetErrors,
       error_ok_text: (this._config.error_ok !== undefined ? this._config.error_ok : this._presetErrorOk).join(', '), tiles_custom: custom,
       animations: this._config.animations || 'auto', flow_speed: this._config.flow_speed ?? 1, source_spread: this._config.source_spread !== false,
-      theme: this._config.theme || 'auto', fullscreen: this._config.fullscreen !== false, series_bypass: this._config.series_bypass !== false };
+      theme: this._config.theme || 'auto', fullscreen: this._config.fullscreen !== false, series_bypass: this._config.series_bypass !== false,
+      storage: this._config.storage || 'separate' };
     if (this._config.controls === undefined && !r.presetControls.length) delete data.controls;
     if (custom && tiles.editable) data.tiles = tiles.value;
     this._priceShown = custom;

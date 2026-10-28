@@ -763,5 +763,38 @@ setups.push({
     tiles: ['cop_heating:total', 'cop_dhw:total', 'energy_heating:total', 'heat_heating:total', 'spread', 'hc_pressure'],
   },
 });
+// Combined (layered) storage (#50): one tank, hot-water zone on top with three sensors, heating zone below with two, solar thermal.
+const combinedStates = (s) => ({
+  'sensor.cs_mode': { heat: 'Heating', dhw: 'Hot water', defrost: 'Defrost', idle: 'Standby' }[s],
+  'sensor.cs_flow': [{ heat: '36.4', dhw: '53.0', defrost: '21.5', idle: '31' }[s], '°C'],
+  'sensor.cs_return': [{ heat: '31.2', dhw: '47.1', defrost: '25.0', idle: '30.5' }[s], '°C'],
+  'sensor.cs_power': [{ heat: '1350', dhw: '1900', defrost: '850', idle: '4' }[s], 'W'],
+  'sensor.cs_volume': [{ heat: '1100', dhw: '1150', defrost: '1000', idle: '0' }[s], 'L/h'],
+  'binary_sensor.cs_valve': s === 'dhw' ? 'on' : 'off',
+  'sensor.cs_top': [{ heat: '50.2', dhw: '48.5', defrost: '49.8', idle: '51.0' }[s], '°C'],
+  'sensor.cs_upper': [{ heat: '47.0', dhw: '44.0', defrost: '46.5', idle: '47.5' }[s], '°C'],
+  'sensor.cs_middle': [{ heat: '41.5', dhw: '38.0', defrost: '40.8', idle: '42.0' }[s], '°C'],
+  'sensor.cs_lower': [{ heat: '34.8', dhw: '33.5', defrost: '30.2', idle: '33.0' }[s], '°C'],
+  'sensor.cs_bottom': [{ heat: '30.1', dhw: '29.8', defrost: '26.0', idle: '29.5' }[s], '°C'],
+  'binary_sensor.cs_hc_pump': s === 'idle' ? 'off' : 'on',
+  'sensor.cs_collector': [{ heat: '55.0', dhw: '68.5', defrost: '9.0', idle: '41.0' }[s], '°C'],
+  'binary_sensor.cs_solar_pump': s === 'heat' || s === 'dhw' ? 'on' : 'off',
+  'sensor.cs_outdoor': ['1.5', '°C'], 'sensor.cs_room': ['21.3', '°C'], 'sensor.cs_room_target': ['21', '°C'],
+});
+setups.push({
+  name: 'Combined storage', sub: 'no preset: one layered tank with hot-water and heating zone, five sensors, solar thermal',
+  states: combinedStates,
+  config: {
+    title: 'Heat pump', storage: 'combined', hc_type: 'radiator',
+    entities: {
+      mode: 'sensor.cs_mode', flow: 'sensor.cs_flow', return: 'sensor.cs_return', power: 'sensor.cs_power', volume: 'sensor.cs_volume',
+      valve: 'binary_sensor.cs_valve', dhw_top: 'sensor.cs_top', dhw_middle: 'sensor.cs_upper', dhw_bottom: 'sensor.cs_middle',
+      buffer_top: 'sensor.cs_lower', buffer_bottom: 'sensor.cs_bottom', hc_pump: 'binary_sensor.cs_hc_pump',
+      solar_collector: 'sensor.cs_collector', solar_pump: 'binary_sensor.cs_solar_pump',
+      outdoor: 'sensor.cs_outdoor', room: 'sensor.cs_room', room_target: 'sensor.cs_room_target',
+    },
+    mode_map: { Heating: 'heating', 'Hot water': 'dhw', Defrost: 'defrost', Standby: 'idle' },
+  },
+});
 
 const scenarios = [['heat', 'Heating'], ['dhw', 'Hot water'], ['defrost', 'Defrost'], ['idle', 'Standby + error']];
