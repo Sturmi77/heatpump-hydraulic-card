@@ -1086,7 +1086,7 @@ const HFC_LANGUAGES = { en: 'English', de: 'Deutsch' };
 const HFC_I18N = {
   en: {
     not_found: 'No entities of this preset found. Check the integration and the prefix, or open the card editor.',
-    title: 'Heat pump', heat_pump: 'Heat pump', dhw: 'Hot water', buffer: 'Buffer', series_tank: 'Series buffer', combined_tank: 'Combined storage', heating_zone: 'Heating', heating_circuit: 'Heating circuit',
+    title: 'Heat pump', heat_pump: 'Heat pump', dhw: 'Hot water', buffer: 'Buffer', series_tank: 'Series buffer', combined_tank: 'Combined storage', heating_zone: 'Heating', fresh_water_station: 'Fresh-water station', heating_circuit: 'Heating circuit',
     house: 'Rooms', room: 'Room', room_target: 'Room target', running: 'running', compressor_off: 'Compressor off', source_in: 'Air inlet', outdoor: 'Outdoor',
     energy_missing: 'Energy dashboard: no power sensor for {sources}; energy counters alone cannot show live flow.',
     brine_in: 'Brine in', brine_out: 'Brine out', well_in: 'Well in', well_out: 'Well out',
@@ -1126,7 +1126,7 @@ const HFC_I18N = {
   },
   de: {
     not_found: 'Keine Entitäten dieser Voreinstellung gefunden. Integration und Präfix prüfen oder den Karteneditor öffnen.',
-    title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', dhw: 'Warmwasser', buffer: 'Puffer', series_tank: 'Reihenpuffer', combined_tank: 'Kombispeicher', heating_zone: 'Heizung', heating_circuit: 'Heizkreis',
+    title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', dhw: 'Warmwasser', buffer: 'Puffer', series_tank: 'Reihenpuffer', combined_tank: 'Kombispeicher', heating_zone: 'Heizung', fresh_water_station: 'Frischwasserstation', heating_circuit: 'Heizkreis',
     house: 'Wohnräume', room: 'Raum', room_target: 'Raum-Soll', running: 'läuft', compressor_off: 'Verdichter aus', source_in: 'Luft-Eintritt', outdoor: 'Außen',
     energy_missing: 'Energie-Dashboard: kein Leistungssensor für {sources}; Energiezähler allein zeigen keinen aktuellen Fluss.',
     brine_in: 'Sole ein', brine_out: 'Sole aus', well_in: 'Brunnen ein', well_out: 'Brunnen aus',
@@ -1195,7 +1195,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animation speed', source_spread: 'Show source spread',
     theme: 'Card theme', theme_auto: 'Automatic (dashboard)', theme_night: 'Night', theme_contrast: 'High contrast', fullscreen: 'Full-screen button',
     wall_timeout: 'Hide controls after (seconds, 0 = never)',
-    hc_return_label: 'Show circuit return temperature', storage: 'Storage', storage_separate: 'Separate hot-water tank and buffer', storage_combined: 'Combined storage (one tank, hot-water zone on top)', series_buffer: 'Series buffer in the return', series_bypass: 'Series buffer with bypass valve (off: the circuits run in defrost)', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
+    hc_return_label: 'Show circuit return temperature', storage: 'Storage', storage_separate: 'Separate hot-water tank and buffer', storage_combined: 'Combined storage (one tank, hot-water zone on top)', dhw_type: 'Hot-water preparation', dhw_type_coil: 'Tank with heat-exchanger coil', dhw_type_fresh_water: 'Fresh-water station (on the buffer or the combined storage)', dhw_type_tank_in_tank: 'Tank in tank (combined storage)', series_buffer: 'Series buffer in the return', series_bypass: 'Series buffer with bypass valve (off: the circuits run in defrost)', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
     sec_hc2: 'Heating circuit 2', sec_hc3: 'Heating circuit 3', sec_hc4: 'Heating circuit 4', sec_hc5: 'Heating circuit 5', sec_hc6: 'Heating circuit 6', sec_details: 'Details: operation', sec_refrigerant: 'Details: refrigerant circuit', sec_cutouts: 'Details: cut-out counters',
     controls: 'Quick controls (switch, button, select, number …)', details_open: 'Details open by default',
     from_preset: 'Found by the preset',
@@ -1258,7 +1258,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animationsgeschwindigkeit', source_spread: 'Quellenspreizung anzeigen',
     theme: 'Kartendarstellung', theme_auto: 'Automatisch (Dashboard)', theme_night: 'Nacht', theme_contrast: 'Hoher Kontrast', fullscreen: 'Vollbild-Schaltfläche',
     wall_timeout: 'Bedienelemente ausblenden nach (Sekunden, 0 = nie)',
-    hc_return_label: 'Heizkreis-Rücklauf anzeigen', storage: 'Speicher', storage_separate: 'Getrennter Warmwasserspeicher und Puffer', storage_combined: 'Kombispeicher (ein Speicher, Warmwasserzone oben)', series_buffer: 'Reihenpuffer im Rücklauf', series_bypass: 'Reihenpuffer mit Bypass-Ventil (aus: die Heizkreise laufen beim Abtauen)', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
+    hc_return_label: 'Heizkreis-Rücklauf anzeigen', storage: 'Speicher', storage_separate: 'Getrennter Warmwasserspeicher und Puffer', storage_combined: 'Kombispeicher (ein Speicher, Warmwasserzone oben)', dhw_type: 'Warmwasserbereitung', dhw_type_coil: 'Speicher mit Wärmetauscher-Wendel', dhw_type_fresh_water: 'Frischwasserstation (am Puffer oder Kombispeicher)', dhw_type_tank_in_tank: 'Tank im Tank (Kombispeicher)', series_buffer: 'Reihenpuffer im Rücklauf', series_bypass: 'Reihenpuffer mit Bypass-Ventil (aus: die Heizkreise laufen beim Abtauen)', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
     sec_hc2: 'Heizkreis 2', sec_hc3: 'Heizkreis 3', sec_hc4: 'Heizkreis 4', sec_hc5: 'Heizkreis 5', sec_hc6: 'Heizkreis 6', sec_details: 'Details: Betrieb', sec_refrigerant: 'Details: Kältekreis', sec_cutouts: 'Details: Abschaltzähler',
     controls: 'Schnellbedienung (Schalter, Taste, Auswahl, Zahl …)', details_open: 'Details standardmäßig offen',
     from_preset: 'Von der Voreinstellung gefunden',
@@ -1352,6 +1352,8 @@ const HFC_ANIMATIONS = ['auto', 'always', 'off'];
 const HFC_THEMES = ['auto', 'night', 'contrast'];
 // Storage: a hot-water tank and a buffer, or one combined (layered) tank with the hot-water zone on top (docs/TOPOLOGY.md, phase 1).
 const HFC_STORAGES = ['separate', 'combined'];
+// How the tap water is heated: a coil in the tank, a fresh-water station on the storage, or a tank in the combined storage.
+const HFC_DHW_TYPES = ['coil', 'fresh_water', 'tank_in_tank'];
 // Drawing of the outdoor unit: `auto` takes the style of the preset; `unit_size` picks the Vaillant aroTHERM plus class.
 const HFC_UNIT_STYLES = ['auto', 'generic', 'lambda', 'vaillant', 'panasonic', 'viessmann', 'bosch', 'saunier', 'samsung'];
 const HFC_UNIT_SIZES = ['small', 'medium', 'large'];
@@ -1600,6 +1602,7 @@ class HeatpumpFlowCard extends HTMLElement {
               { name: 'fullscreen', selector: { boolean: {} } },
               { name: 'hc_return_label', selector: { boolean: {} } },
               { name: 'storage', selector: { select: { mode: 'dropdown', options: HFC_STORAGES.map((v) => ({ value: v, label: L[`storage_${v}`] })) } } },
+              { name: 'dhw_type', selector: { select: { mode: 'dropdown', options: HFC_DHW_TYPES.filter((v) => v !== 'tank_in_tank' || (config && config.storage === 'combined')).map((v) => ({ value: v, label: L[`dhw_type_${v}`] })) } } },
               ...(config && config.storage === 'combined' ? [] : [{ name: 'series_buffer', selector: { boolean: {} } }]),
               ...(config && config.series_buffer && config.storage !== 'combined' ? [{ name: 'series_bypass', selector: { boolean: {} } }] : []),
               ...['hc_name', 'hc2_name', 'hc3_name', 'hc4_name', 'hc5_name', 'hc6_name'].filter(keep).map((name) => ({ name, selector: { text: {} } })),
@@ -1696,6 +1699,10 @@ class HeatpumpFlowCard extends HTMLElement {
     }
     // One tank holds hot water and the heating zone; a second buffer in the return cannot be drawn with it.
     if (config.storage === 'combined' && config.series_buffer) throw new Error('storage: combined cannot be used with series_buffer');
+    if (config.dhw_type !== undefined && config.dhw_type !== null && !HFC_DHW_TYPES.includes(config.dhw_type)) {
+      throw new Error(`dhw_type must be one of: ${HFC_DHW_TYPES.join(', ')}`);
+    }
+    if (config.dhw_type === 'tank_in_tank' && config.storage !== 'combined') throw new Error('dhw_type: tank_in_tank needs storage: combined');
     if (config.primary_pump !== undefined && config.primary_pump !== null && typeof config.primary_pump !== 'boolean') {
       throw new Error('primary_pump must be true or false');
     }
@@ -2330,9 +2337,14 @@ class HeatpumpFlowCard extends HTMLElement {
     // circuits it is a buffer that decouples them from the heat pump.
     const combined = this._config.storage === 'combined';
     const buffer = combined || this._has('buffer_top') || this._has('buffer_mode');
-    const dhw = combined || ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_mode'].some((k) => this._has(k));
+    const dhwType = this._config.dhw_type || 'coil';
+    // A fresh-water station next to separate storages needs a parallel buffer; without one the tank with its coil is drawn.
+    const station = dhwType === 'fresh_water' && !combined && buffer;
+    const dhw = combined || station || ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_mode'].some((k) => this._has(k));
     const parts = {
       combined,
+      dhwType: station || combined ? dhwType : 'coil',
+      station,
       power: this._powerMode(),
       sources: `${this._powerMode() === 'energy' ? [this._energy.solar.length, this._energy.battery.length, this._energy.grid.length].join() : ''}|${this._srcKeys().join()}`,
       // A tank with only a lower sensor (e.g. HeishaMon's single sensor near the bottom) is still drawn.
@@ -2354,7 +2366,7 @@ class HeatpumpFlowCard extends HTMLElement {
       heaters: ['heater', 'dhw_heater', 'buffer_heater'].map((k) => (this._has(k) ? 1 : 0)).join(''),
       middle: [this._has('dhw_middle') ? 1 : 0, this._has('buffer_middle') ? 1 : 0].join(''),
       pressure: [this._sourceType === 'brine' && this._has('brine_pressure') ? 1 : 0, this._has('hc_pressure') ? 1 : 0].join(''),
-      solar: dhw && (this._has('solar_collector') || this._has('solar_pump')),
+      solar: dhw && !station && (this._has('solar_collector') || this._has('solar_pump')),
       controls: this._controlList().map((c) => c.entity).join(),
       drawer: this._drawerRows().map(([s, r]) => s + r.map((x) => x[0]).join('.')).join('|'),
       lang: this._lang,
@@ -2462,10 +2474,10 @@ class HeatpumpFlowCard extends HTMLElement {
             ${SRC.map(([id, , , d]) => `<path class="eflow ${id}" id="ef-${id}" d="${d}"/>`).join('')}
             ${SRC.map(([id, x, label, , key]) => this._source(id, x, label, this._srcEntity(key))).join('')}` : ''}
 
-          ${pipePair('vl', P.dhw ? 'M290 250 H402' : 'M290 250 H400 Q420 250 420 270 V338 Q420 360 442 360 H520')}
-          ${pipePair('vl-dhw', 'M420 232 V102 Q420 80 442 80 H520', P.dhw)}
-          ${pipePair('vl-buf', 'M420 268 V338 Q420 360 442 360 H520', P.dhw)}
-          ${pipePair('rl-dhw', 'M520 215 H400 Q380 215 380 235 V380', P.dhw)}
+          ${pipePair('vl', P.dhw && !P.station ? 'M290 250 H402' : 'M290 250 H400 Q420 250 420 270 V338 Q420 360 442 360 H520')}
+          ${pipePair('vl-dhw', 'M420 232 V102 Q420 80 442 80 H520', P.dhw && !P.station)}
+          ${pipePair('vl-buf', 'M420 268 V338 Q420 360 442 360 H520', P.dhw && !P.station)}
+          ${pipePair('rl-dhw', 'M520 215 H400 Q380 215 380 235 V380', P.dhw && !P.station)}
           ${pipePair('rl-buf', 'M520 495 H400 Q380 495 380 475 V380')}
           ${pipePair('rl', 'M380 380 H290')}
           ${P.buffer ? '' : P.series ? this._seriesSvg() : `${pipePair('byp-vl', 'M520 360 H640')}${pipePair('byp-rl', 'M640 495 H520')}`}
@@ -2495,7 +2507,8 @@ class HeatpumpFlowCard extends HTMLElement {
           ${this._sourceType === 'air' ? `<g class="tap" ${de(e.source_in ? 'source_in' : 'source_volume')}><text class="small" id="t-src-in" x="170" y="450" text-anchor="middle"></text></g>${this._has('outdoor') ? `<g class="tap" ${de('outdoor')}><text class="small" id="t-outdoor-hp" x="170" y="472" text-anchor="middle"></text></g>` : ''}` : ''}
           ${this._heaterSvg('heater', 'inline')}
 
-          ${P.dhw ? `
+          ${P.station ? this._stationSvg() : ''}
+          ${P.dhw && !P.station ? `
             <g class="tap" ${de(e.valve ? 'valve' : 'dhw_mode')}>
               <circle class="valve" cx="420" cy="250" r="18"/>
               <path class="valve-arrow" id="valve-arrow" d="M420 262 V240 M412 248 L420 240 L428 248"/>
@@ -2508,7 +2521,9 @@ class HeatpumpFlowCard extends HTMLElement {
               <text class="small zone-title on-tank" x="580" y="62" text-anchor="middle">${this._esc(i.dhw)}</text>`
     : `<text class="tank-title" x="580" y="30" text-anchor="middle">${this._esc(i.dhw)}</text>
               <rect class="tank" x="520" y="40" width="120" height="200" rx="26" fill="url(#g-dhw)"/>`}
-              <path class="coil" id="coil" d="M520 80 H600 L540 100 H600 L540 120 H600 L540 140 H600 L540 160 H600 L540 180 H600 L540 200 H520"/>
+              ${P.dhwType === 'coil' ? '<path class="coil" id="coil" d="M520 80 H600 L540 100 H600 L540 120 H600 L540 140 H600 L540 160 H600 L540 180 H600 L540 200 H520"/>' : ''}
+              ${P.dhwType === 'tank_in_tank' ? '<rect class="inner-tank" id="inner-tank" x="540" y="72" width="80" height="188" rx="18"/>' : ''}
+              ${P.dhwType === 'fresh_water' ? `${pipePair('fws-a', 'M640 206 H654')}${pipePair('fws-b', 'M640 226 H654')}${this._stationArt(652, 196, 56, 40)}` : ''}
               <text class="tank-temp" id="t-dhw-top" x="580" y="112" text-anchor="middle"></text>
               <text class="small${P.combined ? ' on-tank' : ''}" id="t-dhw-mode" x="580" y="262" text-anchor="middle"></text>
             </g>
@@ -2520,7 +2535,7 @@ class HeatpumpFlowCard extends HTMLElement {
           ${P.buffer ? `
             <g class="tap" ${de(P.combined ? (['buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode'].find((k) => e[k]) || 'buffer_top') : 'buffer_top')}>
               ${P.combined ? `<text class="small zone-title on-tank" x="580" y="304" text-anchor="middle">${this._esc(i.heating_zone)}</text>`
-    : `<text class="tank-title" x="580" y="310" text-anchor="middle">${this._esc(i.buffer)}</text>
+    : `<text class="tank-title" x="${P.station ? 512 : 580}" y="310" text-anchor="${P.station ? 'end' : 'middle'}">${this._esc(i.buffer)}</text>
               <rect class="tank" x="520" y="320" width="120" height="200" rx="26" fill="url(#g-buf)"/>`}
               <text class="tank-temp" id="t-buf-top" x="580" y="392" text-anchor="middle"></text>
               <text class="small" id="t-buf-mode" x="580" y="542" text-anchor="middle"></text>
@@ -3061,6 +3076,28 @@ class HeatpumpFlowCard extends HTMLElement {
       .filter(([k]) => this._has(k));
   }
 
+  // Fresh-water station (dhw_type: fresh_water): a plate heat exchanger that heats the tap water from the storage; the tap side is not drawn.
+  _stationArt(x, y, w, h) {
+    const plates = Array.from({ length: Math.floor((w - 12) / 10) + 1 }, (_, n) => `M${x + 6 + n * 10} ${y + 8} V${y + h - 8}`).join(' ');
+    return `<rect class="fws" id="fws" x="${x}" y="${y}" width="${w}" height="${h}" rx="8"/><path class="fws-plates" d="${plates}"/>`;
+  }
+
+  // Without a hot-water tank: the fresh-water station stands on the parallel buffer and draws from its top. There is no diverter
+  // valve; hot-water operation heats the top of the buffer (docs/TOPOLOGY.md, default D2).
+  _stationSvg() {
+    const e = this._e; const i = this._i;
+    const de = (k) => (e[k] ? `data-entity="${this._esc(e[k])}"` : '');
+    const pp = (id, d) => `<path class="pipe" id="p-${id}" d="${d}"/><path class="flow" id="f-${id}" d="${d}"/>`;
+    return `${pp('fws-a', 'M612 320 V212')}${pp('fws-b', 'M592 212 V320')}
+      <g class="tap" ${de(['dhw_top', 'dhw_middle', 'dhw_bottom'].find((k) => e[k]) || 'dhw_mode')}>
+        <text class="tank-title" x="580" y="122" text-anchor="middle">${this._esc(i.fresh_water_station)}</text>
+        ${this._stationArt(526, 132, 108, 80)}
+        <text class="house-temp" id="t-dhw-top" x="580" y="182" text-anchor="middle"></text>
+        <text class="small" id="t-dhw-mode" x="580" y="100" text-anchor="middle"></text>
+      </g>
+      ${this._parts.circ ? `<g class="tap" ${de('circulation')}><text class="small circ" id="t-circ" x="650" y="60">↻ ${this._esc(i.circulation)}</text></g>` : ''}`;
+  }
+
   _seriesSvg() {
     const e = this._e; const i = this._i;
     const pp = (id, d) => `<path class="pipe" id="p-${id}" d="${d}"/><path class="flow" id="f-${id}" d="${d}"/>`;
@@ -3330,7 +3367,13 @@ class HeatpumpFlowCard extends HTMLElement {
     const temps = sensors.map((k) => this._e[k]);
     const run = this._timelineIds();
     if (!temps.length || sensors[0] !== keys[0] || !run) return null;
-    return { temps, run, extra: ['dhw_heater', 'solar_pump'].filter((k) => this._has(k)).map((k) => this._e[k]) };
+    // A fresh-water station on the buffer has no tank of its own. In a combined storage the circuits draw heat from the same
+    // tank, so their pumps must be known and every window with a running circuit pump is left out (docs/TOPOLOGY.md, D3).
+    const combined = this._config.storage === 'combined';
+    if (this._parts?.station) return null;
+    const pumps = combined ? Array.from({ length: this._hcCount }, (_, n) => this._hk(n + 1, 'pump')).filter((k) => this._has(k)) : [];
+    if (combined && !pumps.length) return null;
+    return { temps, run, extra: ['dhw_heater', 'solar_pump', ...pumps].filter((k) => this._has(k)).map((k) => this._e[k]) };
   }
 
   // Loss over the last HFC_LOSS.hours from the recorder history, cached like the other recorder queries.
@@ -3930,6 +3973,9 @@ class HeatpumpFlowCard extends HTMLElement {
       'vl-buf': heatLoop, 'rl-buf': heatLoop, 'byp-vl': heatLoop, 'byp-rl': heatLoop,
     };
     if (P.series) Object.assign(pipes, { 'sb-vl': heatLoop && !bypass, 'sb-a': heatLoop && bypass, 'sb-b': heatLoop && !bypass });
+    // A fresh-water station on the buffer has no diverter valve: hot-water operation heats the buffer along the heating path.
+    // Its own pipes do not animate, because the card does not know when water is drawn.
+    if (P.station) Object.assign(pipes, { 'rl-buf': heatLoop || flowDhw });
     // Per circuit: `pump` turns the impeller, `on` moves the water through it (the two differ only in the shared loop).
     const circuits = demand.map(({ mode, own }, x) => {
       const n = x + 1; const s = n === 1 ? '' : String(n);
@@ -4015,6 +4061,11 @@ class HeatpumpFlowCard extends HTMLElement {
       this._txt('t-bypass', bypass ? i.bypass : '');
     }
     this._cls('coil', F.coil);
+    // Fresh-water station: hot from the top of the storage, cooled back.
+    if (P.dhwType === 'fresh_water') {
+      const top = P.station ? 'buffer_top' : 'dhw_top'; const bottom = P.station ? 'buffer_bottom' : 'dhw_bottom';
+      stroke('fws-a', this._vlColor(this._n(top))); stroke('fws-b', this._rlColor(this._n(bottom)));
+    }
 
     if (P.hc || this._hcCount > 1) {
       const pick = (...v) => v.find((x) => Number.isFinite(x)) ?? NaN;
@@ -4343,6 +4394,9 @@ HeatpumpFlowCard.styles = `
   .on-tank { fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.35); stroke-width: 3px; }
   .zone-title { font-weight: 600; }
   .zone-line { fill: none; stroke: rgba(255,255,255,.8); stroke-width: 2; stroke-dasharray: 6 5; }
+  .inner-tank { fill: rgba(255,255,255,.12); stroke: rgba(255,255,255,.85); stroke-width: 2; }
+  .fws { fill: color-mix(in oklch, ${hfcVar('tank-warm')} 35%, var(--card-background-color, #fff)); stroke: var(--divider-color, rgba(127,127,127,.4)); stroke-width: 2; }
+  .fws-plates { fill: none; stroke: var(--hfc-muted); stroke-width: 2; opacity: .25; }
   .house-temp { font-size: calc(26px * var(--kt, 1)); font-weight: 700; }
   .house-sub { font-size: calc(14px * var(--k2, 1)); }
   .coil { fill: none; stroke: rgba(255,255,255,.55); stroke-width: 3; stroke-linejoin: round; opacity: .25; }
@@ -4612,7 +4666,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       error_ok_text: (this._config.error_ok !== undefined ? this._config.error_ok : this._presetErrorOk).join(', '), tiles_custom: custom,
       animations: this._config.animations || 'auto', flow_speed: this._config.flow_speed ?? 1, source_spread: this._config.source_spread !== false,
       theme: this._config.theme || 'auto', fullscreen: this._config.fullscreen !== false, series_bypass: this._config.series_bypass !== false,
-      storage: this._config.storage || 'separate' };
+      storage: this._config.storage || 'separate', dhw_type: this._config.dhw_type || 'coil' };
     if (this._config.controls === undefined && !r.presetControls.length) delete data.controls;
     if (custom && tiles.editable) data.tiles = tiles.value;
     this._priceShown = custom;

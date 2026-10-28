@@ -10,7 +10,8 @@
      is reduced to two fingerprints – the geometry of the schematic and its state (which pipe flows, classes, colours, texts) – and
      compared with test/topology-snapshot.js. A refactor that must not change what users see keeps both fingerprints.
   2. Combinations: the storage strategies the card draws (direct, parallel buffer, series buffer with and without bypass valve,
-     combined storage) × hot-water tank (none, tank, tank with solar; a combined storage always holds it) × primary pump × 1–6 heating circuits; source type, emitters, heaters, power
+     combined storage) × hot-water tank (none, tank, tank with solar; a combined storage always holds it) × primary pump × 1–6 heating circuits,
+     plus the hot-water preparations (fresh-water station on the buffer or the combined storage, tank in tank); source type, emitters, heaters, power
      sources and layout rotate through the cases. Each combination is checked for the same invariants: it renders, every pipe ends
      at another pipe or a component, a flowing pipe never ends at a closed one, components do not overlap, everything stays inside
      the drawing, and the schematic is one tab stop with labelled parts.
@@ -154,6 +155,9 @@
   const combos = [];
   // A combined storage always holds the hot water.
   for (const storage of STORAGE) for (const dhw of DHW.filter((x) => storage !== 'combined' || x !== 'none')) for (const primary of [false, true]) for (let hcs = 1; hcs <= 6; hcs++) combos.push({ storage, dhw, primary, hcs });
+  // Hot-water preparation (dhw_type), appended for the same reason: a fresh-water station on the parallel buffer or the combined
+  // storage ("fws"), a tank in the combined storage ("tit").
+  for (const [storage, dhw] of [['parallel', 'fws'], ['combined', 'fws'], ['combined', 'tit']]) for (const primary of [false, true]) for (let hcs = 1; hcs <= 6; hcs++) combos.push({ storage, dhw, primary, hcs });
 
   // A synthetic installation without preset: every entity is mapped by hand, so the case shows exactly the parts it names.
   const installation = (c, idx) => {
@@ -167,6 +171,8 @@
     if (c.dhw === 'solar') Object.assign(ent, { solar_collector: 'sensor.t_collector', solar_pump: 'binary_sensor.t_solar_pump' });
     if (['parallel', 'combined'].includes(c.storage)) Object.assign(ent, { buffer_top: 'sensor.t_buffer_top', buffer_bottom: 'sensor.t_buffer_bottom' });
     if (c.storage === 'combined') config.storage = 'combined';
+    if (c.dhw === 'fws') config.dhw_type = 'fresh_water';
+    if (c.dhw === 'tit') config.dhw_type = 'tank_in_tank';
     if (c.storage.startsWith('series')) config.series_buffer = true;
     if (c.storage === 'series-fixed') config.series_bypass = false;
     if (c.primary) config.primary_pump = true;
@@ -254,7 +260,7 @@
     });
   };
   const at = (s, e) => `${s.el.id}@${Math.round(e.at.x)},${Math.round(e.at.y)}`;
-  const COMPONENTS = '#hp-box, rect.tank, circle.valve, circle.pump, rect.radiator, rect.screed, rect.collector, path.house';
+  const COMPONENTS = '#hp-box, rect.tank, rect.fws, circle.valve, circle.pump, rect.radiator, rect.screed, rect.collector, path.house';
   // Components that sit on each other by design: the solar collector lies on the roof of the house.
   const ON_TOP = [['collector', 'house']];
   const kind = (el) => el.id || el.getAttribute('class');
