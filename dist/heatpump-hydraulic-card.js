@@ -622,6 +622,7 @@ const HFC_PRESETS = {
   // `device` option, which limits every registry lookup to one device, must stay unset for it.
   wolf: {
     name: 'Wolf (wolflink, wolf_smartset)',
+    tested: true,
     // Both integrations also serve gas and oil boilers; only heat pumps report a compressor status (Verdichterstatus).
     // wolf_smartset wins when both are installed (its README asks to disable wolflink for the same account anyway).
     detect: (ctx) => {

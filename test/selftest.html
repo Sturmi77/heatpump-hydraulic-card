@@ -173,7 +173,7 @@
   {
     const wolfPrefix = (states, registry) => HFC_PRESETS.wolf.detect(C._ctx(hassOf(toStates(states), registry), undefined, { hp: 1, dhw: 1, buffer: 1, hc: 1 }));
     const w = setups[8].states('heat');
-    check(HFC_PRESETS.wolf.tested !== true, 'Wolf preset stays marked untested');
+    check(HFC_PRESETS.wolf.tested === true, 'Wolf preset is marked real-installation tested');
     check(wolfPrefix(w, setups[8].registry) === 'zuhause', `Wolf prefix zuhause (got ${wolfPrefix(w, setups[8].registry)})`);
     const renamed = Object.fromEntries(Object.entries(w).map(([k, v]) => [k.replace('sensor.zuhause_', 'sensor.wolf_cha_07_'), v]));
     const renamedReg = Object.fromEntries(Object.keys(renamed).map((id) => [id, { platform: 'wolflink' }]));
@@ -431,7 +431,7 @@
     const without = (o, id) => Object.fromEntries(Object.entries(o).filter(([k]) => k !== id));
     const hassS = (scen) => hassOf(toStates(ws.states(scen)), ws.registry, null, ws);
     const r = C._resolve(ws.config, hassS('heat')); const e = r.entities;
-    check(r.ready && r.prefix === '' && HFC_PRESETS.wolf.tested !== true, `wolf_smartset detected with prefix '' and still untested (${r.prefix} / ${r.ready})`);
+    check(r.ready && r.prefix === '' && HFC_PRESETS.wolf.tested === true, `wolf_smartset detected with prefix '' and marked real-installation tested (${r.prefix} / ${r.ready})`);
     check(C.getStubConfig(hassS('heat')).preset === 'wolf', 'stub config picks the wolf preset for wolf_smartset');
     check(e.mode === 'sensor.heizgerat_betriebsart_heizgerat' && e.status === 'sensor.heizgerat_verdichterstatus' && e.compressor === 'sensor.heizgerat_verdichterfrequenz'
       && e.compressor_speed === 'sensor.heizgerat_aktuelle_leistungsvorgabe_verdichter', `wolf_smartset mode, status and compressor (${e.mode} / ${e.status} / ${e.compressor})`);
@@ -646,7 +646,7 @@
     check(options.includes('heat_heating:total') && options.includes('heat:month') && !options.some((v) => /^(cop_(heating|dhw|cooling|total)|spf)/.test(v)),
       `Wolf heat tiles without COP tiles (${options.join(',')})`);
     const preset = C._formSchema({}).schema[0].selector.select.options.find((o) => o.value === 'wolf');
-    check(preset && /untested/.test(preset.label), `Wolf in the preset dropdown, marked untested (${preset && preset.label})`);
+    check(preset && !/untested/.test(preset.label), `Wolf in the preset dropdown without the untested marker (${preset && preset.label})`);
   }
 
   // Direct systems use the heat-pump flow/return for their circuit and never leave the bypass pipes open.

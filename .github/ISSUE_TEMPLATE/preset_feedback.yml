@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        The Viessmann (ViCare, Open3E), Vaillant, EMS-ESP, Bosch/Buderus Home Comfort, Wolf, Luxtronik and Stiebel Eltron ISG presets are built from the integrations' source code and have **not yet been tested on real installations** – your feedback is exactly what is needed. "It works" reports are welcome too!
+        The Viessmann (ViCare, Open3E), Vaillant, EMS-ESP, Bosch/Buderus Home Comfort, Luxtronik and Stiebel Eltron ISG presets are built from the integrations' source code and have **not yet been tested on real installations** – your feedback is exactly what is needed. "It works" reports are welcome too, also for Wolf with the core `wolflink` integration (the preset is confirmed with `wolf_smartset`).
         If your card version shows a document button in the header, use it to copy a diagnostic report. It stays local until you paste it. Entity ids may contain names, so review and remove anything private first.
   - type: dropdown
     id: kind
