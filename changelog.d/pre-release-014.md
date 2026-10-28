@@ -1,0 +1,2 @@
+- The `dhw_loss` tile with a combined storage needs the pump of every heating circuit; with one circuit unmonitored it is not offered, because that circuit could draw heat from the tank unnoticed.
+- New demo setups "Combined storage, tank in tank" and "Combined storage, fresh-water station".

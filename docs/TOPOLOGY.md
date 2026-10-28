@@ -252,7 +252,7 @@ Shipped separately as the tile `dhw_loss` (cool-down in K/h from verified standb
 | --- | --- | --- | --- |
 | 1 | 0a safety net (snapshot + combination harness) – **done** ([#111](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/111)) | patch | – |
 | 2 | 0b flow model, no visual change – **done** ([#111](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/111)) | minor, right after a release, short contributor freeze | step 1 |
-| 3 | Phase 1 combined storage and `dhw_type` as fixed slots | next minor | step 2 |
+| 3 | Phase 1 combined storage and `dhw_type` as fixed slots – **done** ([#133](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/133), 0.14.0) | next minor | step 2 |
 | 4 | Phase 3a boiler in series as a fixed slot | when data is available | step 2, reviewed diagnostic report |
 | 5 | Decision point: fixed slots or component refactor (0c/0d) for the tail | – | requests after steps 3–4 |
 | 6 | Phase 2 wood stove, boiler in parallel | following minors | step 5 |
@@ -269,15 +269,17 @@ Planned after 0a and 0b were merged (28 October 2026). Each item is one pull req
 
 | Sprint | Item | Content | Effort | Coverage | Input needed |
 | --- | --- | --- | --- | --- | --- |
-| 1 | [#124](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/124) one water loop | without a parallel buffer, circuits and heat pump flow together in the flow model; the combination test runs every state for every storage strategy | S–M, 1 d | – (correctness) | none |
-| 1 | Phase 1a combined storage | `storage: combined` with a coil for hot water, demo setup, combination test extended by the fourth storage strategy | S–M, 1–2 d | about 78 % | none, defaults D1 and D4 |
-| 2 | Phase 1b `dhw_type` | `coil`, `fresh_water`, `tank_in_tank` in the combined storage, and `fresh_water` on a parallel buffer | S–M, 1 d | about 85 % | none, default D2 |
-| 2 | `dhw_loss` with combined storage | standby windows with running circuit pumps are left out | S, 0.5 d | – | none, default D3 |
-| 2 | Data for phase 3a | ask for a diagnostic report of a hybrid installation in [#51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51) and the call for testers [#1](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) | – | – | user reports |
+| 1 | [#124](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/124) one water loop – **done** ([#130](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/130)) | without a parallel buffer, circuits and heat pump flow together in the flow model; the combination test runs every state for every storage strategy | S–M, 1 d | – (correctness) | none |
+| 1 | Phase 1a combined storage – **done** ([#131](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/131), landed with [#133](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/133)) | `storage: combined` with a coil for hot water, demo setup, combination test extended by the fourth storage strategy | S–M, 1–2 d | about 78 % | none, defaults D1 and D4 |
+| 2 | Phase 1b `dhw_type` – **done** ([#132](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/132), landed with [#133](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/133)) | `coil`, `fresh_water`, `tank_in_tank` in the combined storage, and `fresh_water` on a parallel buffer | S–M, 1 d | about 85 % | none, default D2 |
+| 2 | `dhw_loss` with combined storage – **done** (with #132; the pump of every circuit is required since the pre-release review) | standby windows with running circuit pumps are left out | S, 0.5 d | – | none, default D3 |
+| 2 | Data for phase 3a – **requested** ([comment in #51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51#issuecomment-6470468181)) | ask for a diagnostic report of a hybrid installation in [#51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51) and the call for testers [#1](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) | – | – | user reports |
 | 3 | Phase 3a boiler in series | fixed slot on the flow pipe, once a reviewed report is there | M, 2 d | about 90 % | **blocked** until a report arrives |
 | – | Decision point | fixed slots or component refactor for the tail, by the criteria above | – | – | requests beyond the catalogue |
 
 Sprints 1 and 2 bring the card from about 73 % to about 85 % of installations in roughly 4–5 working days. Phase 3a follows when its data exists; until then the decision point is not reached.
+
+**Status (0.14.0):** sprints 1 and 2 are done and ship with 0.14.0. No input arrived for the open questions, so defaults D1 to D4 apply as planned; D5 holds (0a/0b ship as an internal entry). Two decisions were taken while testing the edge cases ([#134](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/134)): cooling runs through the heating zone of a combined storage (see phase 1), and the first stretch of flow and return that feeds several circuits is a pipe of its own. Phase 3a stays blocked until a hybrid installation sends its data.
 
 **Planned defaults** (used when no input arrives; each can be changed later without breaking configurations):
 

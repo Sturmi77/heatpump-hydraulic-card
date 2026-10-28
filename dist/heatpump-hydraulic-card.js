@@ -3411,12 +3411,14 @@ class HeatpumpFlowCard extends HTMLElement {
     const run = this._timelineIds();
     if (!temps.length || sensors[0] !== keys[0] || !run) return null;
     // A fresh-water station on the buffer has no tank of its own. In a combined storage the circuits draw heat from the same
-    // tank, so their pumps must be known and every window with a running circuit pump is left out (docs/TOPOLOGY.md, D3).
+    // tank, so the pump of every circuit must be known and every window with a running circuit pump is left out (docs/TOPOLOGY.md,
+    // D3): one unmonitored circuit could draw heat that would count as standby loss.
     const combined = this._config.storage === 'combined';
     // Both come from the configuration, so the editor's tile probe, which has no rendered parts, decides like the card.
     if (this._station()) return null;
-    const pumps = combined ? Array.from({ length: this._hcCount ?? hfcHcCount(this._config) }, (_, n) => this._hk(n + 1, 'pump')).filter((k) => this._has(k)) : [];
-    if (combined && !pumps.length) return null;
+    const circuits = combined ? Array.from({ length: this._hcCount ?? hfcHcCount(this._config) }, (_, n) => this._hk(n + 1, 'pump')) : [];
+    const pumps = circuits.filter((k) => this._has(k));
+    if (pumps.length < circuits.length) return null;
     return { temps, run, extra: ['dhw_heater', 'solar_pump', ...pumps].filter((k) => this._has(k)).map((k) => this._e[k]) };
   }
 

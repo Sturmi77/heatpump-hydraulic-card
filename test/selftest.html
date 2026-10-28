@@ -2902,6 +2902,36 @@
     } finally { delete HFC_PRESETS.__valvetest; }
   }
 
+  // 18x. before 0.14.0: a preset with a combined storage, own texts for the storage parts, the standby loss with several circuits
+  {
+    const q = (c, id) => c.shadowRoot.getElementById(id);
+    // Lambda: the hot-water tank and buffer sensors of the preset become heights in one tank.
+    const s = setups[0];
+    let card = mount({ preset: 'lambda', storage: 'combined' }, hassOf(toStates(s.states('heat')), s.registry || {})); await wait(30);
+    const present = ['dhw_top', 'dhw_middle', 'dhw_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom'].filter((k) => card._has(k));
+    const stops = [...card.shadowRoot.querySelectorAll('#g-cs stop')].map((st) => st.id.replace('g-cs-', ''));
+    check(q(card, 'cs-tank') && card.shadowRoot.querySelectorAll('rect.tank').length === 1 && present.length >= 3 && stops.join() === present.join(),
+      `Lambda preset with a combined storage: one tank, one stop per preset sensor (${stops.join(', ')})`);
+    check(/°C/.test(q(card, 't-dhw-top').textContent) && /°C/.test(q(card, 't-buf-top').textContent), 'Lambda preset with a combined storage: tank and buffer temperatures in their zones');
+    card.remove();
+    // Own texts for the new storage parts.
+    const texts = { en: { combined_tank: 'Layered tank', heating_zone: 'Space heating', fresh_water_station: 'Tap water station' } };
+    const st = toStates({ 'sensor.f': ['35', '°C'], 'sensor.c': ['40', 'Hz'], 'sensor.t1': ['50', '°C'], 'sensor.t4': ['32', '°C'], 'binary_sensor.p1': 'on', 'binary_sensor.p2': 'off' });
+    const ents = { flow: 'sensor.f', compressor: 'sensor.c', dhw_top: 'sensor.t1', buffer_top: 'sensor.t4' };
+    card = mount({ entities: ents, storage: 'combined', texts }, hassOf(st)); await wait(20);
+    const titles = [...card.shadowRoot.querySelectorAll('.tank-title, .zone-title')].map((t) => t.textContent);
+    check(titles.includes('Layered tank') && titles.includes('Space heating'), `own texts for the combined storage and its heating zone (${titles.join(', ')})`);
+    card.remove();
+    card = mount({ entities: ents, dhw_type: 'fresh_water', texts }, hassOf(st)); await wait(20);
+    check([...card.shadowRoot.querySelectorAll('.tank-title')].some((t) => t.textContent === 'Tap water station'), 'own text for the fresh-water station');
+    card.remove();
+    // Standby loss with a combined storage needs the pump of every circuit (Codex review of #133).
+    const loss = (extra) => { const c = mount({ entities: { ...ents, ...extra }, storage: 'combined', hc_count: 2 }, hassOf(st)); const ids = c._lossIds(); c.remove(); return ids; };
+    check(loss({ hc_pump: 'binary_sensor.p1' }) === null, 'two circuits, one pump known: no standby-loss tile');
+    const both = loss({ hc_pump: 'binary_sensor.p1', hc2_pump: 'binary_sensor.p2' });
+    check(both && both.extra.includes('binary_sensor.p1') && both.extra.includes('binary_sensor.p2'), 'two circuits, both pumps known: both are part of the standby check');
+  }
+
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
   {
     const s = setups[0];
