@@ -2574,6 +2574,45 @@
     none.remove();
   }
 
+  // 18q. one water loop without a parallel buffer (#124): circuits and heat pump flow together, the diverter valve closes the heating side
+  {
+    const st = (extra = {}) => toStates({
+      'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.c': ['0', 'Hz'], 'binary_sensor.p': 'on', 'binary_sensor.p2': 'off',
+      'sensor.v': ['0', 'l/h'], 'binary_sensor.valve': 'off', 'sensor.top': ['48', '°C'], 'sensor.bt': ['33', '°C'], ...extra,
+    });
+    const ents = { flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c', volume: 'sensor.v', hc_pump: 'binary_sensor.p' };
+    const q = (c, id) => c.shadowRoot.getElementById(id);
+    const on = (c, id) => !!q(c, id)?.classList.contains('on');
+    // A circuit pump alone moves the water through the heat pump, but brings no heat to the emitter.
+    let card = mount({ entities: ents, hc_type: 'radiator' }, hassOf(st())); await wait(20);
+    check(['p-hc-vl', 'p-hc-rl', 'p-byp-vl', 'p-byp-rl', 'p-vl', 'p-rl'].every((id) => on(card, id)) && on(card, 'impeller'), 'direct: a running circuit pump moves the water through the heat pump');
+    check(!on(card, 'waves') && q(card, 't-vol').textContent === '', 'direct: the circuit pump alone brings no heat and shows no flow rate of the heat pump');
+    card.hass = hassOf(st({ 'binary_sensor.p': 'off' })); await wait(5);
+    check(!on(card, 'p-hc-vl') && !on(card, 'p-vl'), 'direct: everything stands still without a pump');
+    card.remove();
+    // Charging the tank: the diverter valve closes the heating side, the running circuit pump moves no water.
+    card = mount({ entities: { ...ents, valve: 'binary_sensor.valve', dhw_top: 'sensor.top' } }, hassOf(st({ 'sensor.c': ['40', 'Hz'], 'binary_sensor.valve': 'on' }))); await wait(20);
+    check(on(card, 'p-vl-dhw') && !on(card, 'p-vl-buf') && !on(card, 'p-byp-vl') && !on(card, 'p-hc-vl'), 'direct, hot water: the heating side stays closed');
+    check(on(card, 'impeller'), 'direct, hot water: the circuit pump still turns');
+    card.remove();
+    // Primary pump circulates, circuit pumps off: the water passes the circuits, their pumps stand still.
+    card = mount({ entities: ents, primary_pump: true }, hassOf(st({ 'binary_sensor.p': 'off', 'sensor.v': ['120', 'l/h'] }))); await wait(20);
+    check(on(card, 'p-byp-vl') && on(card, 'p-hc-vl') && on(card, 'p-hc-rl') && !on(card, 'impeller'), 'direct, primary pump: the water passes the circuit with its pump standing still');
+    card.remove();
+    // Several circuits: a circuit with its pump off stays still while another one runs.
+    card = mount({ entities: { ...ents, hc2_pump: 'binary_sensor.p2' }, hc_count: 2 }, hassOf(st({ 'sensor.c': ['40', 'Hz'] }))); await wait(20);
+    check(on(card, 'p-hc-vl') && !on(card, 'p-hc-up2') && !on(card, 'p-hc-body2'), 'direct, two circuits: the stopped circuit stays still while the other one runs');
+    card.remove();
+    // Series buffer: the pumped water also runs through the buffer.
+    card = mount({ entities: ents, series_buffer: true }, hassOf(st())); await wait(20);
+    check(on(card, 'p-sb-vl') && on(card, 'p-sb-b') && on(card, 'p-vl'), 'series buffer: a running circuit pump moves the water through buffer and heat pump');
+    card.remove();
+    // A parallel buffer decouples the loops: the circuit runs from the buffer, the heat pump side stands still.
+    card = mount({ entities: { ...ents, buffer_top: 'sensor.bt' }, hc_type: 'radiator' }, hassOf(st())); await wait(20);
+    check(on(card, 'p-hc-vl') && !on(card, 'p-vl') && !on(card, 'p-vl-buf') && on(card, 'waves'), 'parallel buffer: the circuit runs from the buffer alone');
+    card.remove();
+  }
+
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
   {
     const s = setups[0];
