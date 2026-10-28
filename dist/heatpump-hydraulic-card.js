@@ -1215,9 +1215,12 @@ const HFC_EDITOR = {
     warn_energy_sources: 'Energy dashboard: no power sensor for {sources}; energy counters alone cannot show live flow.',
     warn_temps: 'No flow or return temperature: no spread and no estimated heat output.',
     warn_heat: 'No heat output and no flow rate: no live COP.',
+    warn_valve: 'The diverter valve reports a number and has no valve states: the card reads 1 as hot water. If 1 means heating on this valve, set its states under Advanced.',
     preset_help: 'Found entities are filled in below. Pick another entity to override one, clear a field to hide it.',
     from_energy: 'Empty: taken from the Energy dashboard',
     errors: 'Error entities', error_ok_text: 'Text states that mean no error',
+    valve_dhw_text: 'Valve states for hot water', valve_heating_text: 'Valve states for heating',
+    valve_help: 'Comma-separated raw states of the valve entity, for example 0, 1 or Tank. Current state: {state}.',
     errors_help: 'Active for a number other than 0 or state on. Text needs the no-error states below; unknown, unavailable, off and empty are ignored.',
     error_ok_help: 'Comma-separated, case-insensitive; for example: No Error, OK. Any other known text then shows the error chip.',
     total_cop_help: 'Total heat, environmental energy and electricity must cover the same time range. Without total heat, COP uses environmental energy plus electricity.',
@@ -1278,9 +1281,12 @@ const HFC_EDITOR = {
     warn_energy_sources: 'Energie-Dashboard: kein Leistungssensor für {sources}; Energiezähler allein zeigen keinen aktuellen Fluss.',
     warn_temps: 'Kein Vor- oder Rücklauf: keine Spreizung und keine geschätzte Wärmeleistung.',
     warn_heat: 'Keine Wärmeleistung und kein Volumenstrom: kein Live-COP.',
+    warn_valve: 'Das Umschaltventil meldet eine Zahl und hat keine Ventilstellungen: Die Karte liest 1 als Warmwasser. Bedeutet 1 bei diesem Ventil Heizen, die Stellungen unter „Erweitert“ eintragen.',
     preset_help: 'Gefundene Entitäten sind unten eingetragen. Andere Entität wählen zum Überschreiben, Feld leeren zum Ausblenden.',
     from_energy: 'Leer: aus dem Energie-Dashboard',
     errors: 'Fehler-Entitäten', error_ok_text: 'Textzustände ohne Fehler',
+    valve_dhw_text: 'Ventilstellungen für Warmwasser', valve_heating_text: 'Ventilstellungen für Heizen',
+    valve_help: 'Kommagetrennte Rohwerte der Ventil-Entität, zum Beispiel 0, 1 oder Tank. Aktueller Zustand: {state}.',
     errors_help: 'Aktiv bei einer Zahl ungleich 0 oder Zustand on. Text braucht die fehlerfreien Zustände unten; unknown, unavailable, off und leer werden ignoriert.',
     error_ok_help: 'Kommagetrennt, ohne Beachtung der Groß-/Kleinschreibung; zum Beispiel: No Error, OK. Jeder andere bekannte Text zeigt dann den Fehler-Chip.',
     total_cop_help: 'Gesamtwärme, Umweltenergie und Gesamtstrom müssen denselben Zeitraum abdecken. Ohne Gesamtwärme nutzt der COP Umweltenergie plus Strom.',
@@ -1353,6 +1359,11 @@ const HFC_ANIMATIONS = ['auto', 'always', 'off'];
 const HFC_THEMES = ['auto', 'night', 'contrast'];
 // Storage: a hot-water tank and a buffer, or one combined (layered) tank with the hot-water zone on top (docs/TOPOLOGY.md, phase 1).
 const HFC_STORAGES = ['separate', 'combined'];
+// Sides of the diverter valve in a `valve_map`: dhw or heating, in any case and with the usual synonyms (#126).
+const HFC_VALVE_SIDES = { dhw: 'dhw', 'hot water': 'dhw', hot_water: 'dhw', hotwater: 'dhw', heating: 'heating', heat: 'heating' };
+const hfcValveSide = (v) => HFC_VALVE_SIDES[String(v ?? '').trim().toLowerCase()];
+// Value maps of a preset or the configuration, listed in the diagnostic report.
+const HFC_MAP_KEYS = ['valve_map', 'mode_map', 'dhw_mode_map', 'buffer_mode_map', 'hc_mode_map', 'program_map'];
 // How the tap water is heated: a coil in the tank, a fresh-water station on the storage, or a tank in the combined storage.
 const HFC_DHW_TYPES = ['coil', 'fresh_water', 'tank_in_tank'];
 // Drawing of the outdoor unit: `auto` takes the style of the preset; `unit_size` picks the Vaillant aroTHERM plus class.
@@ -1531,7 +1542,8 @@ class HeatpumpFlowCard extends HTMLElement {
   static getConfigForm() { return HeatpumpFlowCard._formSchema(); }
 
   // Form schema. With a config, circuit fields and groups are limited to hc_count.
-  static _formSchema(config, tiles) {
+  // opts.valve: a valve entity is mapped, so the editor offers its states for hot water and heating (valve_map, #126).
+  static _formSchema(config, tiles, opts = {}) {
     // The full locale first (pt-br), then its language (pt), like the card does; each table has its own set of languages.
     const locale = String(document.querySelector('home-assistant')?.hass?.locale?.language || navigator.language || 'en').toLowerCase().replace('_', '-');
     const langIn = (table) => (locale in table ? locale : locale.split('-')[0]);
@@ -1593,6 +1605,7 @@ class HeatpumpFlowCard extends HTMLElement {
               { name: 'power_sources', selector: { select: { mode: 'dropdown', options: [{ value: 'auto', label: L.ps_auto }, { value: 'manual', label: L.ps_manual }] } } },
               { name: 'errors', selector: { entity: { multiple: true } } },
               { name: 'error_ok_text', selector: { text: {} } },
+              ...(opts.valve ? [{ name: 'valve_dhw_text', selector: { text: {} } }, { name: 'valve_heating_text', selector: { text: {} } }] : []),
               { name: 'power_threshold', selector: { number: { min: 0, max: 2000, step: 10, mode: 'box', unit_of_measurement: 'W' } } },
               { name: 'animations', selector: { select: { mode: 'dropdown', options: HFC_ANIMATIONS.map((v) => ({ value: v, label: L[`animations_${v}`] })) } } },
               { name: 'flow_speed', selector: { number: { min: 0.2, max: 3, step: 0.1, mode: 'slider' } } },
@@ -1708,8 +1721,11 @@ class HeatpumpFlowCard extends HTMLElement {
       throw new Error('primary_pump must be true or false');
     }
     if (config.valve_map !== undefined && config.valve_map !== null) {
-      if (typeof config.valve_map !== 'object' || Array.isArray(config.valve_map) || Object.values(config.valve_map).some((v) => !['dhw', 'heating'].includes(v))) {
-        throw new Error('valve_map must map raw valve states to dhw or heating');
+      if (typeof config.valve_map !== 'object' || Array.isArray(config.valve_map)) throw new Error('valve_map must map raw valve states to dhw or heating');
+      const bad = Object.entries(config.valve_map).find(([, v]) => !hfcValveSide(v));
+      if (bad) {
+        const synonyms = Object.keys(HFC_VALVE_SIDES).filter((k) => !['dhw', 'heating'].includes(k)).join(', ');
+        throw new Error(`valve_map: "${bad[1]}" for the state "${bad[0]}" is neither dhw nor heating (also accepted: ${synonyms}, in any case)`);
       }
     }
     if (config.texts !== undefined && config.texts !== null) HeatpumpFlowCard._validateTexts(config.texts);
@@ -1777,8 +1793,8 @@ class HeatpumpFlowCard extends HTMLElement {
       dhw: { ...(preset?.dhw_mode_map || {}), ...(config.dhw_mode_map || {}) },
       buffer: { ...(preset?.buffer_mode_map || {}), ...(config.buffer_mode_map || {}) },
       hc: { ...(preset?.hc_mode_map || {}), ...(config.hc_mode_map || {}) },
-      // The keys are lower case, so a state matches whatever case the key was written in.
-      valve: Object.fromEntries(Object.entries({ ...(preset?.valve_map || {}), ...(config.valve_map || {}) }).map(([k, v]) => [String(k).toLowerCase(), v])),
+      // The keys are lower case, so a state matches whatever case the key was written in; the values are dhw or heating.
+      valve: Object.fromEntries(Object.entries({ ...(preset?.valve_map || {}), ...(config.valve_map || {}) }).map(([k, v]) => [String(k).toLowerCase(), hfcValveSide(v)])),
     };
     this._runningStates = config.running_states || preset?.running_states || [];
     this._statusLabels = preset?.status_labels || {};
@@ -1881,7 +1897,15 @@ class HeatpumpFlowCard extends HTMLElement {
       const attr = hfcTempAttr(id, key);
       return `- ${key}: ${id} = ${clean(st.state) || '(empty)'}${unit ? ` ${unit}` : ''}${attr ? ` (${attr} ${clean(st.attributes?.[attr]) || '(empty)'})` : ''}`;
     };
-    const keys = [...HFC_DIAGNOSTIC_KEYS, ...Object.keys(r.entities).filter((key) => !HFC_DIAGNOSTIC_KEYS.includes(key))];
+    const keys = [...HFC_DIAGNOSTIC_KEYS, ...Object.keys(r.entities).filter((key) => !HFC_DIAGNOSTIC_KEYS.includes(key) && !HFC_MAP_KEYS.includes(key))];
+    // Value maps of the preset and of the configuration, each with its source (#125): raw states and card modes only. Short maps
+    // list their entries, long ones (mostly from presets) their size. A map under `entities` never reaches the card.
+    const isMap = (m) => !!m && typeof m === 'object' && !Array.isArray(m) && Object.keys(m).length > 0;
+    const mapText = (m) => { const list = Object.entries(m); return list.length > 8 ? `${list.length} entries` : list.map(([k, v]) => `${clean(k)}=${clean(v)}`).join(', '); };
+    const mapLines = HFC_MAP_KEYS.flatMap((name) => [[r.preset?.[name], 'preset'], [config[name], 'configuration']]
+      .filter(([m]) => isMap(m)).map(([m, from]) => `- ${name}: ${mapText(m)} (${from})`));
+    const misplaced = HFC_MAP_KEYS.filter((name) => config.entities && typeof config.entities === 'object' && name in config.entities)
+      .map((name) => `- ${name} under entities: ignored, it belongs at the top level of the card configuration`);
     const lines = [
       'Heat Pump Hydraulic Card diagnostic report',
       'Privacy: entity ids can contain personal names. Review this text before sharing it.',
@@ -1900,6 +1924,9 @@ class HeatpumpFlowCard extends HTMLElement {
       '',
       'Entity mappings:',
       ...keys.flatMap((key) => (r.sums[key] ? r.sums[key].map((id, n) => entityLine(`${key} (sum ${n + 1})`, id)) : [entityLine(key, r.entities[key])])),
+      '',
+      'Maps:',
+      ...(mapLines.length || misplaced.length ? [...mapLines, ...misplaced] : ['- none']),
       '',
       'Error entities:',
       ...(r.errors?.length ? r.errors.map((id, n) => entityLine(`error_${n + 1}`, id)) : ['- none']),
@@ -4653,7 +4680,15 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     this._presetErrorOk = r.preset?.error_ok || [];
     const tiles = HeatpumpFlowCard._tileOptions(this._config, r, this._hass);
     this._tiles = tiles;
-    const { schema, computeLabel, L } = HeatpumpFlowCard._formSchema(this._config, tiles);
+    // Valve states (#126): the preset map with the configuration on top, shown as two lists of raw states.
+    const valveId = r.entities.valve;
+    const valveState = valveId ? this._hass.states[valveId]?.state : undefined;
+    this._presetValveMap = r.preset?.valve_map || {};
+    const valveMap = { ...this._presetValveMap, ...(this._config.valve_map || {}) };
+    const statesOf = (side) => Object.entries(valveMap).filter(([, v]) => hfcValveSide(v) === side).map(([k]) => k).join(', ');
+    this._valveText = { dhw: statesOf('dhw'), heating: statesOf('heating') };
+    this._valveShown = !!valveId;
+    const { schema, computeLabel, L } = HeatpumpFlowCard._formSchema(this._config, tiles, { valve: !!valveId });
     const own = this._config.entities || {};
     const shown = { ...this._fromPreset };
     Object.entries(own).forEach(([k, v]) => { if (v === null || v === 'none') delete shown[k]; else if (v) shown[k] = v; });
@@ -4666,6 +4701,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       if (!has('power')) warn.push(L.warn_power);
       if (!has('flow') || !has('return')) warn.push(L.warn_temps);
       if (!has('heat') && !has('volume')) warn.push(L.warn_heat);
+      // A numeric sensor as the valve without any map: 1 is read as hot water, which is wrong for valves that report 1 for heating.
+      if (valveId && valveId.startsWith('sensor.') && /^-?\d+(\.\d+)?$/.test(String(valveState ?? '').trim()) && !Object.keys(valveMap).length) warn.push(L.warn_valve);
     }
     if (this._config.power_sources !== 'manual' && this._energyMissing?.length) {
       const names = this._energyMissing.map((type) => ({ solar: L.pv, battery: L.battery, grid: L.grid }[type])).join(', ');
@@ -4687,6 +4724,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       if (s.name === 'price_entity') return L.price_help;
       if (s.name === 'errors') return L.errors_help;
       if (s.name === 'error_ok_text') return L.error_ok_help;
+      if (s.name === 'valve_dhw_text' || s.name === 'valve_heating_text') return L.valve_help.replace('{state}', valveState ?? '–');
       if (['energy_total', 'env_energy', 'heat_total'].includes(s.name)) return L.total_cop_help;
       if (s.name === 'language') return L.language_help;
       if (own[s.name] === undefined && this._fromPreset[s.name]) return L.from_preset;
@@ -4701,7 +4739,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       error_ok_text: (this._config.error_ok !== undefined ? this._config.error_ok : this._presetErrorOk).join(', '), tiles_custom: custom,
       animations: this._config.animations || 'auto', flow_speed: this._config.flow_speed ?? 1, source_spread: this._config.source_spread !== false,
       theme: this._config.theme || 'auto', fullscreen: this._config.fullscreen !== false, series_bypass: this._config.series_bypass !== false,
-      storage: this._config.storage || 'separate', dhw_type: this._config.dhw_type || 'coil' };
+      storage: this._config.storage || 'separate', dhw_type: this._config.dhw_type || 'coil',
+      valve_dhw_text: this._valveText.dhw, valve_heating_text: this._valveText.heating };
     if (this._config.controls === undefined && !r.presetControls.length) delete data.controls;
     if (custom && tiles.editable) data.tiles = tiles.value;
     this._priceShown = custom;
@@ -4741,6 +4780,21 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       if (this._config.controls === undefined && JSON.stringify(config.controls) === JSON.stringify(this._presetControls)) delete config.controls;
     }
     delete config.error_ok_text;
+    // Valve states (#126): untouched fields keep the YAML map as it is; edited ones write back only what differs from the preset.
+    delete config.valve_dhw_text; delete config.valve_heating_text;
+    // ha-form may drop a text field that was cleared, so a missing value counts as empty while the fields are shown.
+    const shown = this._valveShown;
+    const dhwText = shown ? value.valve_dhw_text ?? '' : this._valveText?.dhw ?? ''; const heatText = shown ? value.valve_heating_text ?? '' : this._valveText?.heating ?? '';
+    if (this._valveText && (dhwText !== this._valveText.dhw || heatText !== this._valveText.heating)) {
+      const list = (text) => String(text).split(',').map((state) => state.trim()).filter(Boolean);
+      const wanted = {};
+      list(dhwText).forEach((state) => { wanted[state] = 'dhw'; });
+      list(heatText).forEach((state) => { wanted[state] = 'heating'; });
+      const preset = Object.fromEntries(Object.entries(this._presetValveMap || {}).map(([k, v]) => [k.toLowerCase(), hfcValveSide(v)]));
+      const own = Object.fromEntries(Object.entries(wanted).filter(([state, side]) => preset[state.toLowerCase()] !== side));
+      if (Object.keys(own).length) config.valve_map = own; else delete config.valve_map;
+    } else if (this._config.valve_map !== undefined) config.valve_map = this._config.valve_map;
+    else delete config.valve_map;
     // The switch only knows on and off; a YAML list of marks stays as it is while the switch stays on.
     if (!value.timeline_marks) delete config.timeline_marks;
     else if (Array.isArray(this._config.timeline_marks)) config.timeline_marks = this._config.timeline_marks;
