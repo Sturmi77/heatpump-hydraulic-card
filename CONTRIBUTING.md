@@ -51,9 +51,7 @@ node scripts/topology-snapshot.mjs --diff before.json after.json
 
 If `test/topology-snapshot.js` conflicts after `main` was merged into a branch, do not merge it by hand: take either side and run `npm run topology:update` again.
 
-The flow logic lives in one method, `_flowModel()`: it decides the operating state, the open side of the diverter valve, the series-buffer bypass and which pipe, circuit and loop flows; `_update()` only draws it. A new hydraulic part adds its pipes there instead of new flags in the drawing code.
-
-Known gap (current behaviour, kept unchanged by the test): without a parallel buffer the heating circuits and the heat pump loop are one water loop, but the card animates them independently. A circuit pump that runs while the heat pump idles is drawn flowing while the pipes to the heat pump are not, and a primary pump that circulates while the circuit pumps are off animates the pipes up to the circuits only. The combination test therefore runs the circuits outside heating only behind a parallel buffer or together with the primary pump.
+The flow logic lives in one method, `_flowModel()`: it decides the operating state, the open side of the diverter valve, the series-buffer bypass and which pipe, circuit and loop flows; `_update()` only draws it. A new hydraulic part adds its pipes there instead of new flags in the drawing code. Without a parallel buffer the circuits and the heat pump are one water loop: the flow model moves them together, and each circuit has a `pump` (its impeller turns) apart from `on` (water flows through it).
 
 ## Pull requests without merge conflicts
 
