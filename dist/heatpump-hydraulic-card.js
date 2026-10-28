@@ -3841,10 +3841,11 @@ class HeatpumpFlowCard extends HTMLElement {
     this.dispatchEvent(e);
   }
 
-  /* ---------- update ---------- */
-  _update() {
-    if (!this._rendered || !this._hass) return;
-    const i = this._i;
+  /* ---------- flow model ---------- */
+  // One place decides how the water moves: the operating state of the heat pump, which side of the diverter valve is open, whether
+  // the series buffer is bypassed, and which pipe, circuit and loop flows. `_update` only draws it. A new hydraulic variant adds its
+  // paths here instead of new flags in the drawing code (docs/TOPOLOGY.md, stage 0b).
+  _flowModel() {
     const P = this._parts;
     const rawMode = this._s('mode');
     const status = this._s('status') || '';
@@ -3853,8 +3854,6 @@ class HeatpumpFlowCard extends HTMLElement {
     const bufMode = this._norm(this._maps.buffer, this._s('buffer_mode'));
     const power = this._w('power');
     const vol = this._lh('volume');
-    const tFlow = this._n('flow'); const tRet = this._n('return');
-    const spread = Number.isFinite(tFlow) && Number.isFinite(tRet) ? tFlow - tRet : NaN;
     // Compressor may be a binary sensor or a numeric one (frequency / speed > 0 means running).
     const compOn = this._has('compressor') && (this._on('compressor') || this._n('compressor') > 0);
     const running = compOn || power > this._threshold || this._runningStates.includes(status)
@@ -3881,6 +3880,54 @@ class HeatpumpFlowCard extends HTMLElement {
     const flowDhw = toDhw || (circ && valveDhw && !!P.dhw);
     const flowHeat = toHeat || (circ && !flowDhw);
     const flowLoop = flowDhw || flowHeat;
+    // Series buffer: the bypass valve follows its own entity, else the defrost signal, and then stops the circuits.
+    // Without a bypass valve (series_bypass: false) the circuits keep running in defrost.
+    const bypass = !!P.series && !this._noBypass() && (this._has('bypass_valve') ? this._on('bypass_valve') : defrost);
+
+    // Pipes by id (p-<id> and its flow f-<id>): the loop to the valve, then the open side of the valve.
+    const pipes = {
+      vl: flowLoop, rl: flowLoop, 'vl-dhw': flowDhw, 'rl-dhw': flowDhw,
+      'vl-buf': flowHeat, 'rl-buf': flowHeat, 'byp-vl': flowHeat, 'byp-rl': flowHeat,
+    };
+    if (P.series) Object.assign(pipes, { 'sb-vl': flowHeat && !bypass, 'sb-a': flowHeat && bypass, 'sb-b': flowHeat && !bypass });
+    // Circuits: own pump, else own mode, else they run whenever the heating side flows; a bypassed series buffer stops them all.
+    const circuits = [];
+    if (P.hc || this._hcCount > 1) {
+      for (let n = 1; n <= this._hcCount; n++) {
+        const k = (key) => this._hk(n, key);
+        const s = n === 1 ? '' : String(n);
+        const mode = this._norm(this._maps.hc, this._s(k('mode')));
+        const on = !bypass && (this._has(k('pump')) ? this._on(k('pump')) : (this._has(k('mode')) ? ['heating', 'cooling'].includes(mode) : flowHeat));
+        circuits.push({ n, mode, on });
+        [`hc-vl${s}`, `hc-body${s}`, `hc-rl${s}`, ...(n > 1 ? [`hc-up${s}`, `hc-down${s}`] : [])].forEach((id) => { pipes[id] = on; });
+      }
+    }
+    // Ground and water sources: the source loop runs with the compressor.
+    if (this._sourceType !== 'air') ['src', 'src-in', 'src-out'].forEach((id) => { pipes[id] = running; });
+    // Solar thermal: the collector loop runs with the solar pump.
+    const solar = !!P.solar && this._level('solar_pump') > 0;
+    if (P.solar) { pipes.sol = solar; pipes['sol-rl'] = solar; }
+
+    return {
+      rawMode, status, hp, dhwMode, bufMode, power, vol, running, defrost, cooling, valveDhw,
+      toDhw, toHeat, loop, circ, flowDhw, flowHeat, flowLoop, bypass,
+      // The heat pump's own primary pump runs with a flow rate, else with the hot-water or heating loop.
+      primaryPump: Number.isFinite(vol) ? vol > 0 : loop,
+      // The DHW coil heats while the valve charges the tank.
+      coil: toDhw,
+      solar, circuits, pipes,
+    };
+  }
+
+  /* ---------- update ---------- */
+  _update() {
+    if (!this._rendered || !this._hass) return;
+    const i = this._i;
+    const P = this._parts;
+    const F = this._flowModel();
+    const { rawMode, status, hp, dhwMode, bufMode, power, vol, running, defrost, cooling, toDhw, toHeat, loop, circ, flowLoop, bypass } = F;
+    const tFlow = this._n('flow'); const tRet = this._n('return');
+    const spread = Number.isFinite(tFlow) && Number.isFinite(tRet) ? tFlow - tRet : NaN;
 
     // Heat output: sensor, or estimated from flow rate × spread × 1.163 Wh/(l·K) for water.
     let heat = this._kw('heat');
@@ -3920,45 +3967,33 @@ class HeatpumpFlowCard extends HTMLElement {
     ['vl', 'vl-dhw', 'vl-buf', 'byp-vl'].forEach((id) => stroke(id, cFlow));
     ['rl', 'rl-dhw', 'rl-buf', 'byp-rl'].forEach((id) => stroke(id, cRet));
     const pipe = (id, on) => { this._cls(`p-${id}`, on); this._cls(`f-${id}`, on); };
-    pipe('vl', flowLoop); pipe('rl', flowLoop);
-    // The heat pump's own primary pump runs with a flow rate, else with the hot-water or heating loop. Its speed follows
-    // the flow rate, so a sniffing pump with a few l/h turns slowly.
-    this._cls('impeller-primary', Number.isFinite(vol) ? vol > 0 : loop);
+    Object.entries(F.pipes).forEach(([id, on]) => pipe(id, on));
+    // The primary pump's speed follows the flow rate, so a sniffing pump with a few l/h turns slowly.
+    this._cls('impeller-primary', F.primaryPump);
     const primary = this._$('impeller-primary');
     if (primary) primary.style.animationDuration = Number.isFinite(vol) && vol > 0 ? scaled(Math.min(Math.max(800 / vol, 0.6), 30)) : '';
-    pipe('vl-dhw', flowDhw); pipe('rl-dhw', flowDhw);
-    pipe('vl-buf', flowHeat); pipe('rl-buf', flowHeat);
-    pipe('byp-vl', flowHeat); pipe('byp-rl', flowHeat);
-    // Series buffer: the bypass valve follows its own entity, else the defrost signal, and then stops the circuits.
-    // Without a bypass valve (series_bypass: false) the circuits keep running in defrost.
-    const bypass = !!P.series && !this._noBypass() && (this._has('bypass_valve') ? this._on('bypass_valve') : defrost);
     if (P.series) {
       stroke('sb-vl', cFlow); stroke('sb-a', cFlow); stroke('sb-b', cRet);
-      pipe('sb-vl', flowHeat && !bypass); pipe('sb-a', flowHeat && bypass); pipe('sb-b', flowHeat && !bypass);
       this._$('sb-arrow')?.setAttribute('d', bypass ? 'M600 481 V495 H586 M593 488 L586 495 L593 502' : 'M614 495 H586 M593 488 L586 495 L593 502');
       this._$('sb-tank')?.style.setProperty('fill', `color-mix(in oklch, ${cRet} 30%, var(--card-background-color, #fff))`);
       this._txt('t-bypass', bypass ? i.bypass : '');
     }
-    this._cls('coil', toDhw);
+    this._cls('coil', F.coil);
 
     if (P.hc || this._hcCount > 1) {
       const pick = (...v) => v.find((x) => Number.isFinite(x)) ?? NaN;
       const k2 = this._hcCount > 1 ? parseFloat(getComputedStyle(this._$('svg')).getPropertyValue('--k2')) || 1 : 1;
-      for (let n = 1; n <= this._hcCount; n++) {
+      for (const { n, mode: cMode, on: hcOn } of F.circuits) {
         const k = (key) => this._hk(n, key);
         const s = n === 1 ? '' : String(n);
-        const cMode = this._norm(this._maps.hc, this._s(k('mode')));
-        // Circuit pump, else circuit mode, else assume the circuit runs whenever the heat pump heats or cools.
-        const hcOn = !bypass && (this._has(k('pump')) ? this._on(k('pump')) : (this._has(k('mode')) ? ['heating', 'cooling'].includes(cMode) : flowHeat));
         // Without circuit sensors fall back to the buffer / main loop temperatures.
         const tHc = pick(this._n(k('flow')), this._n('buffer_top'), tFlow);
         const tHcR = pick(this._n(k('return')), this._n('buffer_bottom'), tRet);
         const cHc = cMode === 'cooling' ? hfcVar('defrost') : this._vlColor(tHc);
         stroke(`hc-vl${s}`, cHc); stroke(`hc-body${s}`, cHc); stroke(`hc-rl${s}`, this._rlColor(tHcR));
-        if (n > 1) { stroke(`hc-up${s}`, cHc); stroke(`hc-down${s}`, this._rlColor(tHcR)); pipe(`hc-up${s}`, hcOn); pipe(`hc-down${s}`, hcOn); }
+        if (n > 1) { stroke(`hc-up${s}`, cHc); stroke(`hc-down${s}`, this._rlColor(tHcR)); }
         const rt = this._$(`g-rad${s}-top`); const rb = this._$(`g-rad${s}-bottom`);
         if (rt) { rt.setAttribute('stop-color', hcOn ? cHc : 'var(--disabled-text-color, #9e9e9e)'); rb.setAttribute('stop-color', hcOn ? this._rlColor(tHcR) : 'var(--disabled-text-color, #9e9e9e)'); }
-        [`hc-vl${s}`, `hc-body${s}`, `hc-rl${s}`].forEach((id) => pipe(id, hcOn));
         // The heating surface fades from the flow colour to the return colour; one colour when the temperatures do not differ.
         const grad = hcOn && cMode !== 'cooling' && Number.isFinite(tHc) && Number.isFinite(tHcR) && Math.abs(tHc - tHcR) >= 0.5;
         const ga = this._$(`g-hcb${s}-a`); const gm = this._$(`g-hcb${s}-m`); const gb = this._$(`g-hcb${s}-b`); const body = this._$(`p-hc-body${s}`);
@@ -3991,10 +4026,8 @@ class HeatpumpFlowCard extends HTMLElement {
     // solar thermal: collector temperature, loop animated while the solar pump runs
     if (P.solar) {
       const tc = this._n('solar_collector');
-      const on = this._level('solar_pump') > 0;
       stroke('sol', this._vlColor(tc)); stroke('sol-rl', this._rlColor(this._n('dhw_bottom')));
-      pipe('sol', on); pipe('sol-rl', on);
-      this._cls('coil-sol', on); this._cls('solar', on);
+      this._cls('coil-sol', F.solar); this._cls('solar', F.solar);
       this._txt('t-sol', Number.isFinite(tc) ? this._t(tc) : i.solar);
     }
 
@@ -4042,7 +4075,6 @@ class HeatpumpFlowCard extends HTMLElement {
       this._txt('t-src-spread', this._sourceSpread && running && Number.isFinite(sourceSpread) ? `ΔT ${this._fmt(sourceSpread)} K` : '');
       this._txt('t-src-vol', this._has('source_volume') && srcVol > 0 ? `${this._fmt(srcVol, 0)} l/h` : '');
       if (brine && this._has('brine_pressure')) this._updatePressure('brine_pressure', 'brine', 'pressure-brine', 't-brine-pressure', i.brine_pressure);
-      ['src', 'src-in', 'src-out'].forEach((id) => pipe(id, running));
     }
 
     // valve + tanks

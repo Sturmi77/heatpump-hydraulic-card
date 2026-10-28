@@ -29,6 +29,32 @@ For a faster loop, use `npm run test:chromium`, `npm run test:firefox`, or the i
 
 New setups and scenarios belong in `demo/setups.js`; assertions belong in `test/selftest.html`. Keep tests deterministic and independent of Home Assistant, the internet and real installations.
 
+### Topology test and drawing snapshot
+
+`test/topology.html` runs next to the self-test and guards the drawing and the flow logic:
+
+- **Snapshot.** Every demo setup in every layout and scenario, and every generated combination in every operating state, is reduced to two fingerprints – the geometry of the schematic and its state (which pipe flows, classes, colours, texts) – and compared with `test/topology-snapshot.js`. A refactor must leave both unchanged.
+- **Combinations.** The storage strategies the card draws (direct, parallel buffer, series buffer with and without bypass valve) × hot-water tank (none, tank, tank with solar thermal) × primary pump × 1–6 heating circuits, with source type, emitters, heaters, power sources and layout rotating through the cases. Each combination must render; every pipe must end at another pipe or a component; a flowing pipe must not end at a closed one; components must not overlap; the drawing must stay inside its view box; and the schematic must stay one tab stop with labelled parts.
+
+A change that alters the drawing on purpose (a new part, a moved label, a changed text) updates the baseline in the same pull request:
+
+```bash
+npm run topology:update
+```
+
+To see what moved, write the full descriptions before and after the change and compare them:
+
+```bash
+node scripts/topology-snapshot.mjs --out before.json
+node scripts/topology-snapshot.mjs --diff before.json after.json
+```
+
+If `test/topology-snapshot.js` conflicts after `main` was merged into a branch, do not merge it by hand: take either side and run `npm run topology:update` again.
+
+The flow logic lives in one method, `_flowModel()`: it decides the operating state, the open side of the diverter valve, the series-buffer bypass and which pipe, circuit and loop flows; `_update()` only draws it. A new hydraulic part adds its pipes there instead of new flags in the drawing code.
+
+Known gap (current behaviour, kept unchanged by the test): without a parallel buffer the heating circuits and the heat pump loop are one water loop, but the card animates them independently. A circuit pump that runs while the heat pump idles is drawn flowing while the pipes to the heat pump are not, and a primary pump that circulates while the circuit pumps are off animates the pipes up to the circuits only. The combination test therefore runs the circuits outside heating only behind a parallel buffer or together with the primary pump.
+
 ## Pull requests without merge conflicts
 
 Several pull requests are usually open at once. Files that every change edits make them collide, so a pull request keeps to these rules:
