@@ -796,5 +796,19 @@ setups.push({
     mode_map: { Heating: 'heating', 'Hot water': 'dhw', Defrost: 'defrost', Standby: 'idle' },
   },
 });
+// Parallel buffer with a fresh-water station (dhw_type: fresh_water): no hot-water tank and no diverter valve.
+setups.push({
+  name: 'Fresh-water station', sub: 'no preset: parallel buffer with three sensors, fresh-water station for the tap water, no diverter valve',
+  states: combinedStates,
+  config: {
+    title: 'Heat pump', dhw_type: 'fresh_water', hc_type: 'underfloor',
+    entities: {
+      mode: 'sensor.cs_mode', flow: 'sensor.cs_flow', return: 'sensor.cs_return', power: 'sensor.cs_power', volume: 'sensor.cs_volume',
+      dhw_top: 'sensor.cs_upper', buffer_top: 'sensor.cs_top', buffer_middle: 'sensor.cs_middle', buffer_bottom: 'sensor.cs_bottom',
+      hc_pump: 'binary_sensor.cs_hc_pump', outdoor: 'sensor.cs_outdoor', room: 'sensor.cs_room', room_target: 'sensor.cs_room_target',
+    },
+    mode_map: { Heating: 'heating', 'Hot water': 'dhw', Defrost: 'defrost', Standby: 'idle' },
+  },
+});
 
 const scenarios = [['heat', 'Heating'], ['dhw', 'Hot water'], ['defrost', 'Defrost'], ['idle', 'Standby + error']];
