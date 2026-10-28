@@ -2848,6 +2848,60 @@
     }
   }
 
+  // 18w. #125 value maps in the diagnostic report; #126 valve states in the visual editor and tolerant valve_map values
+  {
+    const st = (valve = '1', extra = {}) => toStates({ 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.c': ['40', 'Hz'], 'sensor.v': valve, 'binary_sensor.bv': 'on', 'sensor.top': ['48', '°C'], ...extra });
+    const ents = { flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c', valve: 'sensor.v', dhw_top: 'sensor.top' };
+    // Report: each map with its source, "none" without maps, a map under entities named as ignored.
+    const report = (cfg) => C._diagnosticReport(cfg, hassOf(st()));
+    const withMap = report({ entities: ents, valve_map: { 0: 'dhw', 1: 'heating' } });
+    check(/\nMaps:\n- valve_map: 0=dhw, 1=heating \(configuration\)\n/.test(withMap), 'report lists the valve_map of the configuration');
+    check(/\nMaps:\n- none\n/.test(report({ entities: ents })), 'report without any map says none');
+    const lambda = report({ preset: 'lambda' });
+    check(/- mode_map: .+ \(preset\)/.test(lambda) && /- dhw_mode_map: .+ \(preset\)/.test(lambda), 'report lists the maps of the preset with their source');
+    const misplaced = report({ entities: { ...ents, valve_map: { 1: 'heating' } } });
+    check(/- valve_map under entities: ignored/.test(misplaced) && !/- valve_map: \[object/.test(misplaced), 'report names a valve_map placed under entities');
+    // Tolerant values: any case and the usual synonyms; the error names the wrong entry.
+    const run = async (valve, cfg) => { const card = mount({ entities: ents, ...cfg }, hassOf(st(valve))); await wait(20); const m = card.shadowRoot.getElementById('chip-mode').className; card.remove(); return m; };
+    check(/mode-heat/.test(await run('1', { valve_map: { 1: 'Heating', 0: 'DHW' } })) && /mode-dhw/.test(await run('0', { valve_map: { 1: 'Heating', 0: 'DHW' } })), 'valve_map values in any case');
+    check(/mode-heat/.test(await run('1', { valve_map: { 1: 'heat', 0: 'hot water' } })) && /mode-dhw/.test(await run('0', { valve_map: { 0: 'hot_water' } })), 'valve_map synonyms heat, hot water, hot_water');
+    let msg = ''; try { document.createElement('heatpump-flow-card').setConfig({ valve_map: { 0: 'dhw', 1: 'cold' } }); } catch (e) { msg = e.message; }
+    check(/"cold"/.test(msg) && /"1"/.test(msg) && /dhw/.test(msg) && /heating/.test(msg), `the valve_map error names the wrong entry (${msg})`);
+    // Editor: fields with a mapped valve, prefilled, round trip, YAML map kept, warning for a numeric sensor without a map.
+    const names = (ed) => ed._form.schema.flatMap(function all(n) { return n.schema ? n.schema.flatMap(all) : [n.name]; });
+    const editor = (cfg, hass) => {
+      const ed = document.createElement('heatpump-flow-card-editor'); const out = {};
+      ed.addEventListener('config-changed', (ev) => { out.config = ev.detail.config; });
+      ed.setConfig(cfg); ed.hass = hass; return [ed, out];
+    };
+    let [ed, out] = editor({ entities: ents }, hassOf(st('1')));
+    check(names(ed).includes('valve_dhw_text') && names(ed).includes('valve_heating_text'), 'editor shows the valve states with a mapped valve');
+    check(/reads 1 as hot water/.test(ed._warn.innerHTML), 'editor warns about a numeric valve sensor without a map');
+    check(/Current state: 1/.test(ed._form.computeHelper({ name: 'valve_heating_text' })), `the helper text shows the current valve state (${ed._form.computeHelper({ name: 'valve_heating_text' })})`);
+    ed._changed({ ...ed._form.data, valve_dhw_text: '0', valve_heating_text: '1' });
+    let bad = ''; try { document.createElement('heatpump-flow-card').setConfig(out.config); } catch (e) { bad = e.message; }
+    check(JSON.stringify(out.config.valve_map) === '{"0":"dhw","1":"heating"}' && !('valve_dhw_text' in out.config) && !bad, `editor writes the valve states as valve_map (${JSON.stringify(out.config.valve_map)} ${bad})`);
+    ed.setConfig(out.config);
+    check(ed._form.data.valve_dhw_text === '0' && ed._form.data.valve_heating_text === '1' && !/reads 1 as hot water/.test(ed._warn.innerHTML), 'the fields show the map again, the warning is gone');
+    ed._changed({ ...ed._form.data, valve_dhw_text: '', valve_heating_text: undefined });
+    check(!('valve_map' in out.config), 'clearing both fields removes the map');
+    [ed, out] = editor({ entities: ents, valve_map: { 1: 'Heat', ON: 'hot water' } }, hassOf(st('1')));
+    ed._changed({ ...ed._form.data, title: 'Renamed' });
+    check(JSON.stringify(out.config.valve_map) === '{"1":"Heat","ON":"hot water"}', `a YAML map stays as written on an unrelated edit (${JSON.stringify(out.config.valve_map)})`);
+    [ed, out] = editor({ entities: { ...ents, valve: 'binary_sensor.bv' } }, hassOf(st('1')));
+    check(!/reads 1 as hot water/.test(ed._warn.innerHTML), 'no warning for a binary valve');
+    [ed, out] = editor({ entities: { flow: 'sensor.f', return: 'sensor.r' } }, hassOf(st('1')));
+    check(!names(ed).includes('valve_dhw_text'), 'no valve fields without a valve entity');
+    // A preset map is shown and only differences are written back.
+    HFC_PRESETS.__valvetest = { name: 'Valve test', detect: () => '', entities: () => ({ valve: 'sensor.v', flow: 'sensor.f' }), valve_map: { 1: 'heating' } };
+    try {
+      [ed, out] = editor({ preset: '__valvetest' }, hassOf(st('1')));
+      check(ed._form.data.valve_heating_text === '1' && ed._form.data.valve_dhw_text === '', 'the preset map is prefilled');
+      ed._changed({ ...ed._form.data, valve_dhw_text: '0' });
+      check(JSON.stringify(out.config.valve_map) === '{"0":"dhw"}', `only the difference from the preset is written (${JSON.stringify(out.config.valve_map)})`);
+    } finally { delete HFC_PRESETS.__valvetest; }
+  }
+
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
   {
     const s = setups[0];
