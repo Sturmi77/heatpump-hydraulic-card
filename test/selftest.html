@@ -2725,6 +2725,50 @@
     lc.remove();
   }
 
+  // 18t. review follow-ups of #130–#132: valve position, editor rules and defaults, editor tile probe, late combined sensors
+  {
+    const st = (extra = {}) => toStates({
+      'sensor.f': ['36', '°C'], 'sensor.r': ['31', '°C'], 'sensor.c': ['0', 'Hz'], 'binary_sensor.valve': 'on', 'binary_sensor.p': 'on',
+      'sensor.t1': ['52', '°C'], 'sensor.t4': ['40', '°C'], 'sensor.t5': ['30', '°C'], ...extra,
+    });
+    const q = (c, id) => c.shadowRoot.getElementById(id);
+    const on = (c, id) => !!q(c, id)?.classList.contains('on');
+    // Direct system after a hot-water charge: compressor off, valve still on hot water, circuit pump on. The valve closes the heating side.
+    let card = mount({ entities: { flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c', valve: 'binary_sensor.valve', hc_pump: 'binary_sensor.p', dhw_top: 'sensor.t1' } }, hassOf(st())); await wait(20);
+    check(!on(card, 'p-vl') && !on(card, 'p-vl-buf') && !on(card, 'p-byp-vl') && !on(card, 'p-hc-vl') && on(card, 'impeller'), 'valve still on hot water: the circuit pump turns, no water moves through the closed heating side');
+    card.hass = hassOf(st({ 'binary_sensor.valve': 'off' })); await wait(5);
+    check(on(card, 'p-vl') && on(card, 'p-hc-vl'), 'valve back on heating: the circuit pump moves the water through the heat pump');
+    card.remove();
+    // A combined-storage sensor that appears after the first drawing gets its gradient stop.
+    const ents = { flow: 'sensor.f', compressor: 'sensor.c', hc_pump: 'binary_sensor.p', dhw_top: 'sensor.t1', buffer_top: 'sensor.t4', buffer_bottom: 'sensor.t5' };
+    const late = st(); delete late['sensor.t5'];
+    card = mount({ entities: ents, storage: 'combined' }, hassOf(late)); await wait(20);
+    const before = card.shadowRoot.querySelectorAll('#g-cs stop').length;
+    card.hass = hassOf(st()); await wait(20);
+    check(before === 2 && !!q(card, 'g-cs-buffer_bottom') && /color-mix/.test(q(card, 'g-cs-buffer_bottom').getAttribute('stop-color')), `a late combined-storage sensor gets its gradient stop (${before} stops before)`);
+    card.remove();
+    // Editor: clears options that do not go with the chosen storage, and keeps the storage defaults out of the configuration.
+    const ed = document.createElement('heatpump-flow-card-editor');
+    let out;
+    ed.addEventListener('config-changed', (ev) => { out = ev.detail.config; });
+    ed.setConfig({ entities: ents, series_buffer: true, series_bypass: false }); ed.hass = hassOf(st());
+    ed._changed({ ...ed._form.data, storage: 'combined' });
+    let bad = ''; try { document.createElement('heatpump-flow-card').setConfig(out); } catch (e) { bad = e.message; }
+    check(out.storage === 'combined' && !('series_buffer' in out) && !('series_bypass' in out) && !bad, `choosing combined storage clears the series buffer (${JSON.stringify(out)} ${bad})`);
+    ed._changed({ ...ed._form.data, dhw_type: 'tank_in_tank' });
+    check(out.dhw_type === 'tank_in_tank', 'tank in tank is kept with a combined storage');
+    ed._changed({ ...ed._form.data, storage: 'separate' });
+    bad = ''; try { document.createElement('heatpump-flow-card').setConfig(out); } catch (e) { bad = e.message; }
+    check(!('storage' in out) && !('dhw_type' in out) && !bad, `back to separate storages: the default and the tank in tank are cleared (${JSON.stringify(out)} ${bad})`);
+    ed._changed({ ...ed._form.data, title: 'Renamed' });
+    check(!('storage' in out) && !('dhw_type' in out), 'an unrelated change writes no storage defaults');
+    // Editor tile probe: decides the standby-loss tile like the card.
+    const tileHas = (config) => C._tileOptions(config, C._resolve(config, hassOf(st())), hassOf(st())).options.some((o) => o.value === 'dhw_loss');
+    check(tileHas({ entities: ents, storage: 'combined' }), 'editor offers the standby-loss tile for a combined storage with a circuit pump');
+    check(!tileHas({ entities: ents, dhw_type: 'fresh_water' }), 'editor does not offer the standby-loss tile for a fresh-water station on the buffer');
+    check(tileHas({ entities: { flow: 'sensor.f', compressor: 'sensor.c', dhw_top: 'sensor.t1' } }), 'editor still offers the standby-loss tile for a plain hot-water tank');
+  }
+
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
   {
     const s = setups[0];

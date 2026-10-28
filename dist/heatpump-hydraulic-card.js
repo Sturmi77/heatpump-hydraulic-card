@@ -2338,8 +2338,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const combined = this._config.storage === 'combined';
     const buffer = combined || this._has('buffer_top') || this._has('buffer_mode');
     const dhwType = this._config.dhw_type || 'coil';
-    // A fresh-water station next to separate storages needs a parallel buffer; without one the tank with its coil is drawn.
-    const station = dhwType === 'fresh_water' && !combined && buffer;
+    const station = this._station();
     const dhw = combined || station || ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_mode'].some((k) => this._has(k));
     const parts = {
       combined,
@@ -2365,6 +2364,8 @@ class HeatpumpFlowCard extends HTMLElement {
       unit: this._unitKey(),
       heaters: ['heater', 'dhw_heater', 'buffer_heater'].map((k) => (this._has(k) ? 1 : 0)).join(''),
       middle: [this._has('dhw_middle') ? 1 : 0, this._has('buffer_middle') ? 1 : 0].join(''),
+      // The gradient of a combined storage has one stop per sensor present: a sensor that appears later rebuilds it.
+      combinedSensors: combined ? this._combinedSensors().map(([k]) => k).join() : '',
       pressure: [this._sourceType === 'brine' && this._has('brine_pressure') ? 1 : 0, this._has('hc_pressure') ? 1 : 0].join(''),
       solar: dhw && !station && (this._has('solar_collector') || this._has('solar_pump')),
       controls: this._controlList().map((c) => c.entity).join(),
@@ -3076,6 +3077,11 @@ class HeatpumpFlowCard extends HTMLElement {
       .filter(([k]) => this._has(k));
   }
 
+  // A fresh-water station next to separate storages needs a parallel buffer; without one the tank with its coil is drawn.
+  _station() {
+    return this._config.dhw_type === 'fresh_water' && this._config.storage !== 'combined' && (this._has('buffer_top') || this._has('buffer_mode'));
+  }
+
   // Fresh-water station (dhw_type: fresh_water): a plate heat exchanger that heats the tap water from the storage; the tap side is not drawn.
   _stationArt(x, y, w, h) {
     const plates = Array.from({ length: Math.floor((w - 12) / 10) + 1 }, (_, n) => `M${x + 6 + n * 10} ${y + 8} V${y + h - 8}`).join(' ');
@@ -3370,8 +3376,9 @@ class HeatpumpFlowCard extends HTMLElement {
     // A fresh-water station on the buffer has no tank of its own. In a combined storage the circuits draw heat from the same
     // tank, so their pumps must be known and every window with a running circuit pump is left out (docs/TOPOLOGY.md, D3).
     const combined = this._config.storage === 'combined';
-    if (this._parts?.station) return null;
-    const pumps = combined ? Array.from({ length: this._hcCount }, (_, n) => this._hk(n + 1, 'pump')).filter((k) => this._has(k)) : [];
+    // Both come from the configuration, so the editor's tile probe, which has no rendered parts, decides like the card.
+    if (this._station()) return null;
+    const pumps = combined ? Array.from({ length: this._hcCount ?? hfcHcCount(this._config) }, (_, n) => this._hk(n + 1, 'pump')).filter((k) => this._has(k)) : [];
     if (combined && !pumps.length) return null;
     return { temps, run, extra: ['dhw_heater', 'solar_pump', ...pumps].filter((k) => this._has(k)).map((k) => this._e[k]) };
   }
@@ -3960,10 +3967,12 @@ class HeatpumpFlowCard extends HTMLElement {
       return { mode, own: this._has(k('pump')) ? this._on(k('pump')) : (this._has(k('mode')) ? ['heating', 'cooling'].includes(mode) : null) };
     }) : [];
     // Without a parallel buffer the circuits and the heat pump are one water loop (#124). A running circuit pump moves the water
-    // through the heat pump as well, unless the diverter valve charges the tank and closes the heating side. When the heat pump
-    // or its primary pump moves the water and no circuit pump runs, it passes the circuits with their pumps standing still.
+    // through the heat pump as well, unless the diverter valve stands on hot water and closes the heating side (also after a
+    // charge, while the compressor is off). When the heat pump or its primary pump moves the water and no circuit pump runs, it
+    // passes the circuits with their pumps standing still.
     const shared = !P.buffer;
-    const pumped = shared && !flowDhw && !bypass && demand.some((c) => c.own === true);
+    const heatClosed = flowDhw || (!!P.dhw && valveDhw);
+    const pumped = shared && !heatClosed && !bypass && demand.some((c) => c.own === true);
     const heatLoop = flowHeat || pumped;
     const passive = shared && !demand.some((c) => c.own !== false);
 
@@ -4714,6 +4723,11 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     if (value.fullscreen !== false) delete config.fullscreen;
     if (value.flow_speed === undefined || value.flow_speed === null || value.flow_speed === '' || +value.flow_speed === 1) delete config.flow_speed;
     if (value.source_spread !== false) delete config.source_spread;
+    // Storage defaults stay out of the configuration. An option that does not go with the chosen storage is cleared, because the
+    // editor hides its field and the card would reject the combination.
+    if (!value.storage || value.storage === 'separate') delete config.storage;
+    if (config.storage === 'combined') { delete config.series_buffer; delete config.series_bypass; }
+    if (!value.dhw_type || value.dhw_type === 'coil' || (value.dhw_type === 'tank_in_tank' && config.storage !== 'combined')) delete config.dhw_type;
     const errorOk = String(value.error_ok_text || '').split(',').map((state) => state.trim()).filter(Boolean);
     if (JSON.stringify(errorOk) !== JSON.stringify(this._presetErrorOk || [])) config.error_ok = errorOk; else delete config.error_ok;
     const errors = Array.isArray(value.errors) ? value.errors.filter(Boolean) : [];
