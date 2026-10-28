@@ -2265,8 +2265,12 @@ class HeatpumpFlowCard extends HTMLElement {
     el._k = measured ? key : '';
   }
 
-  // Status line of heating circuit n under its emitter: the mode (or "running") and, for circuits 2 to 6, the room temperature and
+  // Room keys of circuit n: circuit 1 uses the room and target of the house, circuits 2 to 6 their own.
+  _roomKey(n, key = 'room') { return n === 1 ? key : `hc${n}_${key}`; }
+
+  // Status line of heating circuit n under its emitter: the mode (or "running") and, with several circuits, the room temperature and
   // target of that circuit as a part of its own (tap target and screen reader label), e.g. "Heating · Room 21.4 °C · Target 22.0".
+  // Circuit 1 repeats the room of the house there, so every circuit shows its room in the same place (#135).
   // The two texts are centred together and anchored at the gap between them, so they never overlap. They stay right of the risers
   // of the further circuits (from x 692, or from x 760 with the return label of the circuit) and inside the schematic (up to x 996); where both do not fit, the room target is left out.
   // k2 is the type scale of narrow schematics.
@@ -2276,16 +2280,16 @@ class HeatpumpFlowCard extends HTMLElement {
     const i = this._i;
     let value = ''; let rest = '';
     if (room) {
-      const rt = this._n(`hc${n}_room_target`);
+      const rt = this._n(this._roomKey(n, 'room_target'));
       // Without a room sensor the target stands alone, as in the house.
-      if (this._has(`hc${n}_room`)) { value = this._t(this._n(`hc${n}_room`)); if (Number.isFinite(rt)) rest = ` · ${i.target} ${this._fmt(rt)}`; }
+      if (this._has(this._roomKey(n))) { value = this._t(this._n(this._roomKey(n))); if (Number.isFinite(rt)) rest = ` · ${i.target} ${this._fmt(rt)}`; }
       else if (Number.isFinite(rt)) rest = `${i.room_target} ${this._fmt(rt)} °C`;
     }
     const both = !!status && !!(value || rest);
     this._txt(`t-hc-mode${s}`, both ? `${status} ·` : status);
     if (!mode || !room) return;
     // The return label of the circuit sits under its return pipe up to x ~750 on the same line.
-    const minX = this._config.hc_return_label && this._has(`hc${n}_return`) ? 760 : 692;
+    const minX = this._config.hc_return_label && this._has(this._hk(n, 'return')) ? 760 : 692;
     const key = `${status}|${value}|${rest}|${k2}|${minX}`;
     if (room._k === key) return;
     room.textContent = '';
@@ -3155,14 +3159,17 @@ class HeatpumpFlowCard extends HTMLElement {
     : `<g class="tap" ${de(k('flow'))}><text class="pipe-label" id="t-hc${s}" x="740" y="334" text-anchor="middle"></text></g>`}
       <g class="tap" ${de(k('volume'))}><text class="vol-label" id="t-hc-vol${s}" x="720" y="${e[k('curve_offset')] ? 414 : 394}" text-anchor="middle"></text></g>
       ${this._config.hc_return_label ? `<g class="tap" ${de(k('return'))}><text class="vol-label" id="t-hc-rl${s}" x="690" y="515" text-anchor="start"></text></g>` : ''}
-      ${n === 1 && e.hc_pressure ? `<g class="tap pressure" id="pressure-hc" ${de('hc_pressure')}><text class="pressure-label" id="t-hc-pressure" x="700" y="430" text-anchor="middle"></text></g>` : ''}
+      ${n === 1 && e.hc_pressure
+    // Starts right of the storage column (and right of the risers of further circuits), so a long text such as
+    // "Heizungsdruck 1,8 bar" is not covered by the buffer (#129); low enough to pass between the pipes of the emitter.
+    ? `<g class="tap pressure" id="pressure-hc" ${de('hc_pressure')}><text class="pressure-label" id="t-hc-pressure" x="${this._hcCount > 1 ? 684 : 650}" y="458" text-anchor="start"></text></g>` : ''}
       <g class="tap" ${de(e[k('pump')] ? k('pump') : k('mode'))}>
         ${this._circuitPump(n) ? `<circle class="pump" cx="720" cy="360" r="16"/>
         <g class="impeller" id="impeller${s}"><path d="M720 348 L726 360 L714 360Z M720 372 L714 360 L726 360Z" class="imp"/></g>` : ''}
         ${em.title}
         <text class="small" id="t-hc-mode${s}" x="880" y="524" text-anchor="middle"></text>
       </g>
-      ${n > 1 ? `<g class="tap" ${de(e[k('room')] ? k('room') : k('room_target'))}><text class="small" id="t-hc-room${s}" x="880" y="524" text-anchor="middle"></text></g>` : ''}
+      ${this._hcCount > 1 ? `<g class="tap" ${de(e[this._roomKey(n)] ? this._roomKey(n) : this._roomKey(n, 'room_target'))}><text class="small" id="t-hc-room${s}" x="880" y="524" text-anchor="middle"></text></g>` : ''}
     </g>`;
   }
 
@@ -4399,7 +4406,7 @@ HeatpumpFlowCard.styles = `
   .eline.pv { stroke: ${hfcVar('pv')}; } .eline.bat { stroke: ${hfcVar('battery')}; } .eline.grid { stroke: ${hfcVar('grid')}; }
   .eflow { fill: none; stroke-width: 7; stroke-linecap: round; stroke-dasharray: 0.1 18; opacity: 0; pointer-events: none; }
   .eflow.pv { stroke: ${hfcVar('pv')}; } .eflow.bat { stroke: ${hfcVar('battery')}; } .eflow.grid { stroke: ${hfcVar('grid')}; }
-  .eflow.on { opacity: 1; animation: hfc-dash var(--hfc-electrical, 1.1s) linear infinite; }
+  .eflow.on { opacity: 1; animation: hfc-edash var(--hfc-electrical, 1.1s) linear infinite; }
   .hop { fill: none; stroke: var(--card-background-color, #fff); stroke-width: 15; }
   .src.absent { opacity: .35; }
   .src text { font-size: calc(15px * var(--ks, 1)); paint-order: stroke; stroke: var(--card-background-color, #fff); stroke-width: 5px; stroke-linejoin: round; }
@@ -4424,7 +4431,7 @@ HeatpumpFlowCard.styles = `
   .house-temp { font-size: calc(26px * var(--kt, 1)); font-weight: 700; }
   .house-sub { font-size: calc(14px * var(--k2, 1)); }
   .coil { fill: none; stroke: rgba(255,255,255,.55); stroke-width: 3; stroke-linejoin: round; opacity: .25; }
-  .coil.on { opacity: .6; stroke-width: 2.5; stroke-dasharray: 5 9; animation: hfc-dash var(--hfc-coil, 1.4s) linear infinite; }
+  .coil.on { opacity: .6; stroke-width: 2.5; stroke-dasharray: 5 9; animation: hfc-cdash var(--hfc-coil, 1.4s) linear infinite; }
   .circ { opacity: .35; } .circ.on { opacity: 1; fill: ${hfcVar('cool-strong')}; }
   .pump { fill: var(--card-background-color, #fff); stroke: var(--hfc-muted); stroke-width: 3; }
   .imp { fill: var(--hfc-muted); }
@@ -4580,7 +4587,11 @@ HeatpumpFlowCard.styles = `
   .layout-wall .sv { font-size: 1.4em; } .layout-wall .sl { font-size: .85em; }
   .layout-wall .controls, .layout-wall .drawer-toggle { opacity: 0; pointer-events: none; transition: opacity .5s; }
   .layout-wall.awake .controls, .layout-wall.awake .drawer-toggle { opacity: 1; pointer-events: auto; }
+  /* Each dash animation moves by whole periods of its own dash pattern, so the end of a cycle matches its start (#135):
+     water 3 + 17 = 20, power dots 0.1 + 18 = 18.1, coil 5 + 9 = 14. */
   @keyframes hfc-dash { to { stroke-dashoffset: -40; } }
+  @keyframes hfc-edash { to { stroke-dashoffset: -36.2; } }
+  @keyframes hfc-cdash { to { stroke-dashoffset: -42; } }
   @keyframes hfc-spin { to { transform: rotate(360deg); } }
   @keyframes hfc-pulse { 50% { opacity: .35; } }
   @keyframes hfc-rise { 0% { opacity: 0; transform: translateY(6px); } 40% { opacity: .9; } 100% { opacity: 0; transform: translateY(-10px); } }

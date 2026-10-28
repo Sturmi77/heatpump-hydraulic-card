@@ -1868,7 +1868,9 @@
     check(txt(c, 't-hc-room3') === 'Room target 18.5 °C' && txt(c, 't-hc-mode3') === '' && at(c, 't-hc-room3', 'text-anchor') === 'middle' && at(c, 't-hc-room3', 'x') === '880',
       `a target without a room sensor stands alone, centred under the emitter (${txt(c, 't-hc-room3')})`);
     check(clear(c, 3), 'the target of circuit 3 stays clear of the column radiator');
-    check(!q(c, 't-hc-room') && txt(c, 't-room') === '21.0 °C', 'circuit 1 keeps its room in the house');
+    // Since #135 circuit 1 also shows the room of the house in its status line, so every circuit shows its room in the same place.
+    check(/^Room 21\.0 °C/.test(txt(c, 't-hc-room')) && txt(c, 't-room') === '21.0 °C', `circuit 1 shows its room in its status line and keeps it in the house (${txt(c, 't-hc-room')})`);
+    check(clear(c, ''), 'mode and room of circuit 1 overlap neither each other, the emitter nor the risers of circuit 2');
     const group = q(c, 't-hc-room2')?.parentNode;
     check(group?.dataset.entity === 'sensor.attic' && group !== q(c, 't-hc-mode2').parentNode && q(c, 't-hc-room3')?.parentNode.dataset.entity === 'sensor.c3_target',
       'the room is a tap target of its own: the room sensor, else the target');
@@ -2805,6 +2807,45 @@
     card = mount({ entities: { ...base, dhw_top: 'sensor.t1', buffer_top: 'sensor.t4', solar_collector: 'sensor.sc' }, dhw_type: 'fresh_water' }, hassOf(st())); await wait(20);
     check(q(card, 'fws') && !q(card, 'solar') && !q(card, 'p-sol'), 'fresh-water station on the buffer: no solar thermal');
     card.remove();
+  }
+
+  // 18v. #135 and #129: dash animations loop without a jump, circuit 1 shows its room with several circuits, the pressure label clears the buffer
+  {
+    // Every dash animation moves by whole periods of its own dash pattern.
+    const css = C.styles;
+    const shift = (name) => Math.abs(parseFloat(new RegExp(`@keyframes ${name} \\{ to \\{ stroke-dashoffset: (-?[\\d.]+)`).exec(css)?.[1]));
+    const loop = (sel) => {
+      const rule = new RegExp(`\\${sel} \\{[^}]*stroke-dasharray: ([\\d.]+) ([\\d.]+)`).exec(css);
+      const anim = new RegExp(`\\${sel}\\.on \\{[^}]*animation: (hfc-[a-z]+)`).exec(css);
+      const period = rule ? parseFloat(rule[1]) + parseFloat(rule[2]) : NaN; const s = anim ? shift(anim[1]) : NaN;
+      return { period, s, whole: Math.abs(s / period - Math.round(s / period)) < 1e-6 };
+    };
+    for (const sel of ['.flow', '.eflow']) { const r = loop(sel); check(r.whole, `${sel}: the animation moves by whole dash periods (${r.s} / ${r.period})`); }
+    const coil = /\.coil\.on \{[^}]*stroke-dasharray: ([\d.]+) ([\d.]+); animation: (hfc-[a-z]+)/.exec(css);
+    const cs = shift(coil[3]); const cp = parseFloat(coil[1]) + parseFloat(coil[2]);
+    check(Math.abs(cs / cp - Math.round(cs / cp)) < 1e-6, `.coil: the animation moves by whole dash periods (${cs} / ${cp})`);
+    // Several circuits: circuit 1 shows the room of the house in its status line, like circuits 2 to 6.
+    const st = (extra = {}) => toStates({
+      'sensor.f': ['36', '°C'], 'sensor.r': ['31', '°C'], 'sensor.c': ['40', 'Hz'], 'binary_sensor.p1': 'on', 'binary_sensor.p2': 'on',
+      'sensor.r1': ['21.4', '°C'], 'number.rt1': ['21', '°C'], 'sensor.r2': ['20.1', '°C'], 'sensor.p': ['1.8', 'bar'], 'sensor.bt': ['32', '°C'], ...extra,
+    });
+    const ents = { flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c', hc_pump: 'binary_sensor.p1', hc2_pump: 'binary_sensor.p2', room: 'sensor.r1', room_target: 'number.rt1', hc2_room: 'sensor.r2' };
+    const q = (c, id) => c.shadowRoot.getElementById(id);
+    let card = mount({ entities: ents, hc_count: 2 }, hassOf(st())); await wait(20);
+    check(/21\.4/.test(q(card, 't-hc-room')?.textContent || '') && /21\.0|21/.test(q(card, 't-hc-room').textContent) && /20\.1/.test(q(card, 't-hc-room2')?.textContent || ''),
+      `two circuits: circuit 1 shows its room like circuit 2 (${q(card, 't-hc-room')?.textContent} / ${q(card, 't-hc-room2')?.textContent})`);
+    check(q(card, 't-hc-room').closest('.tap').dataset.entity === 'sensor.r1' && /21\.4/.test(q(card, 't-room').textContent), 'circuit 1 room opens the room sensor; the house keeps it');
+    card.remove();
+    card = mount({ entities: ents }, hassOf(st())); await wait(20);
+    check(!q(card, 't-hc-room') && /21\.4/.test(q(card, 't-room').textContent), 'one circuit: the room stays in the house only');
+    card.remove();
+    // Pressure label (#129): starts right of the buffer, also in German, and right of the risers with several circuits.
+    for (const [hc_count, minX] of [[1, 645], [2, 681]]) {
+      card = mount({ entities: { ...ents, hc_pressure: 'sensor.p', buffer_top: 'sensor.bt' }, hc_count, language: 'de' }, hassOf(st())); await wait(20);
+      const b = q(card, 't-hc-pressure').getBBox();
+      check(/Heizungsdruck 1[.,]8 bar/.test(q(card, 't-hc-pressure').textContent) && b.x >= minX, `${hc_count} circuit(s): the pressure label starts at x ${Math.round(b.x)}, right of the buffer${hc_count > 1 ? ' and the risers' : ''}`);
+      card.remove();
+    }
   }
 
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
