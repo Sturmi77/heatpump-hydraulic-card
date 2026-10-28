@@ -2482,7 +2482,9 @@ class HeatpumpFlowCard extends HTMLElement {
           ${pipePair('rl-buf', 'M520 495 H400 Q380 495 380 475 V380')}
           ${pipePair('rl', 'M380 380 H290')}
           ${P.buffer ? '' : P.series ? this._seriesSvg() : `${pipePair('byp-vl', 'M520 360 H640')}${pipePair('byp-rl', 'M640 495 H520')}`}
-          ${showHc ? Array.from({ length: this._hcCount }, (_, n) => this._circuitSvg(n + 1)).join('') : ''}
+          ${showHc ? Array.from({ length: this._hcCount }, (_, n) => this._circuitSvg(n + 1)
+    // The trunk shared by all circuits lies over circuit 1 and under the risers and crossings of the others.
+    + (n === 0 && this._hcCount > 1 ? `${pipePair('hc-trunk-vl', 'M640 360 H660')}${pipePair('hc-trunk-rl', 'M676 495 H640')}` : '')).join('') : ''}
           ${this._sourceSvg()}
 
           ${this._primaryPump() ? `<g class="tap" ${de(e.volume ? 'volume' : 'mode')}>
@@ -3993,6 +3995,8 @@ class HeatpumpFlowCard extends HTMLElement {
       [`hc-vl${s}`, `hc-body${s}`, `hc-rl${s}`, ...(n > 1 ? [`hc-up${s}`, `hc-down${s}`] : [])].forEach((id) => { pipes[id] = on; });
       return { n, mode, on, pump };
     });
+    // With several circuits the first metres of flow and return feed all of them: they flow when any circuit flows.
+    if (circuits.length > 1) { const trunk = circuits.some((c) => c.on); pipes['hc-trunk-vl'] = trunk; pipes['hc-trunk-rl'] = trunk; }
     // Ground and water sources: the source loop runs with the compressor.
     if (this._sourceType !== 'air') ['src', 'src-in', 'src-out'].forEach((id) => { pipes[id] = running; });
     // Solar thermal: the collector loop runs with the solar pump.
@@ -4079,6 +4083,8 @@ class HeatpumpFlowCard extends HTMLElement {
     if (P.hc || this._hcCount > 1) {
       const pick = (...v) => v.find((x) => Number.isFinite(x)) ?? NaN;
       const k2 = this._hcCount > 1 ? parseFloat(getComputedStyle(this._$('svg')).getPropertyValue('--k2')) || 1 : 1;
+      // The shared trunk carries the water before it splits: the buffer or heat pump temperatures.
+      stroke('hc-trunk-vl', this._vlColor(pick(this._n('buffer_top'), tFlow))); stroke('hc-trunk-rl', this._rlColor(pick(this._n('buffer_bottom'), tRet)));
       for (const { n, mode: cMode, on: hcOn, pump: hcPump } of F.circuits) {
         const k = (key) => this._hk(n, key);
         const s = n === 1 ? '' : String(n);
@@ -4210,7 +4216,15 @@ class HeatpumpFlowCard extends HTMLElement {
     }
 
     // Combined storage: one gradient over every sensor at its height.
-    if (P.combined) this._combinedSensors().forEach(([k]) => this._$(`g-cs-${k}`)?.setAttribute('stop-color', this._tankColor(this._n(k))));
+    // A sensor without a value (unavailable) takes the colour of the nearest sensor with one, so the tank shows no grey band.
+    if (P.combined) {
+      const cs = this._combinedSensors().map(([k, y]) => ({ k, y, t: this._n(k) }));
+      const known = cs.filter((c) => Number.isFinite(c.t));
+      cs.forEach((c) => {
+        const near = Number.isFinite(c.t) ? c : known.reduce((a, b) => (!a || Math.abs(b.y - c.y) < Math.abs(a.y - c.y) ? b : a), null);
+        this._$(`g-cs-${c.k}`)?.setAttribute('stop-color', this._tankColor(near ? near.t : NaN));
+      });
+    }
 
     // house
     if (P.house) {

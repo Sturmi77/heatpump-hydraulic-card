@@ -2769,6 +2769,44 @@
     check(tileHas({ entities: { flow: 'sensor.f', compressor: 'sensor.c', dhw_top: 'sensor.t1' } }), 'editor still offers the standby-loss tile for a plain hot-water tank');
   }
 
+  // 18u. edge cases: shared circuit trunk, sensor without value in a combined storage, cooling, hot water without a tank, station with solar
+  {
+    const st = (extra = {}) => toStates({
+      'sensor.m': 'heating', 'sensor.f': ['36', '°C'], 'sensor.r': ['31', '°C'], 'sensor.c': ['40', 'Hz'], 'binary_sensor.p1': 'off', 'binary_sensor.p2': 'on',
+      'sensor.t1': ['50', '°C'], 'sensor.t3': ['44', '°C'], 'sensor.t4': ['30', '°C'], 'sensor.sc': ['60', '°C'], ...extra,
+    });
+    const q = (c, id) => c.shadowRoot.getElementById(id);
+    const on = (c, id) => !!q(c, id)?.classList.contains('on');
+    const base = { mode: 'sensor.m', flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c' };
+    // Circuit 1 stands, circuit 2 heats: the trunk they share flows, circuit 1 itself does not.
+    let card = mount({ entities: { ...base, hc_pump: 'binary_sensor.p1', hc2_pump: 'binary_sensor.p2' }, hc_count: 2 }, hassOf(st())); await wait(20);
+    check(on(card, 'p-hc-trunk-vl') && on(card, 'p-hc-trunk-rl') && on(card, 'p-hc-up2') && on(card, 'p-hc-down2') && !on(card, 'p-hc-vl') && !on(card, 'p-hc-body'), 'circuit 1 off, circuit 2 on: the shared trunk flows, circuit 1 stands');
+    card.hass = hassOf(st({ 'binary_sensor.p2': 'off', 'sensor.m': 'idle', 'sensor.c': ['0', 'Hz'] })); await wait(5);
+    check(!on(card, 'p-hc-trunk-vl') && !on(card, 'p-hc-trunk-rl'), 'all circuits off: the trunk stands');
+    card.remove();
+    card = mount({ entities: { ...base, hc_pump: 'binary_sensor.p2' } }, hassOf(st())); await wait(20);
+    check(!q(card, 'p-hc-trunk-vl'), 'one circuit: no separate trunk');
+    card.remove();
+    // Combined storage with an unavailable sensor: no grey band, the stop takes the colour of the nearest sensor.
+    card = mount({ entities: { ...base, dhw_top: 'sensor.t1', dhw_bottom: 'sensor.t3', buffer_top: 'sensor.t4' }, storage: 'combined' }, hassOf(st({ 'sensor.t3': 'unavailable' }))); await wait(20);
+    const col = (id) => q(card, id).getAttribute('stop-color');
+    check(!/disabled/.test(col('g-cs-dhw_bottom')) && col('g-cs-dhw_bottom') === col('g-cs-dhw_top'), `an unavailable sensor takes the colour of the nearest one (${col('g-cs-dhw_bottom')})`);
+    card.hass = hassOf(st({ 'sensor.t3': ['44', '°C'] })); await wait(5);
+    check(col('g-cs-dhw_bottom') !== col('g-cs-dhw_top'), 'the sensor gets its own colour back with a value');
+    // Cooling runs through the heating zone, like through a parallel buffer.
+    card.hass = hassOf(st({ 'sensor.m': 'cooling', 'sensor.f': ['18', '°C'] })); await wait(5);
+    check(on(card, 'p-vl-buf') && !on(card, 'p-vl-dhw'), 'combined storage, cooling: through the heating zone');
+    card.remove();
+    // Hot-water mode without any hot-water key: the heat pump runs in hot water, no pipe flows.
+    card = mount({ entities: base }, hassOf(st({ 'sensor.m': 'dhw' }))); await wait(20);
+    check(q(card, 'hp-box').classList.contains('on') && /Hot water/.test(q(card, 'chip-mode').textContent) && !on(card, 'p-vl') && !on(card, 'p-hc-vl'), 'hot-water mode without a tank: running, no pipe flows');
+    card.remove();
+    // A fresh-water station on the buffer leaves solar thermal out, it needs a hot-water tank.
+    card = mount({ entities: { ...base, dhw_top: 'sensor.t1', buffer_top: 'sensor.t4', solar_collector: 'sensor.sc' }, dhw_type: 'fresh_water' }, hassOf(st())); await wait(20);
+    check(q(card, 'fws') && !q(card, 'solar') && !q(card, 'p-sol'), 'fresh-water station on the buffer: no solar thermal');
+    card.remove();
+  }
+
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
   {
     const s = setups[0];

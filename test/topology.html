@@ -151,7 +151,7 @@
   const DHW = ['none', 'tank', 'solar'];
   const SOURCES = ['air', 'brine', 'water'];
   const EMITTERS = ['underfloor', 'radiator', 'column'];
-  const STATES = ['heat', 'dhw', 'defrost', 'idle', 'cool', 'sniff', 'pumps'];
+  const STATES = ['heat', 'dhw', 'defrost', 'idle', 'cool', 'sniff', 'pumps', 'heat1off'];
   const combos = [];
   // A combined storage always holds the hot water.
   for (const storage of STORAGE) for (const dhw of DHW.filter((x) => storage !== 'combined' || x !== 'none')) for (const primary of [false, true]) for (let hcs = 1; hcs <= 6; hcs++) combos.push({ storage, dhw, primary, hcs });
@@ -191,7 +191,7 @@
   };
   const statesOf = (c, st) => {
     const run = !['idle', 'sniff', 'pumps'].includes(st);
-    const mode = { heat: 'heating', dhw: 'dhw', defrost: 'defrost', idle: 'idle', cool: 'cooling', sniff: 'idle', pumps: 'idle' }[st];
+    const mode = { heat: 'heating', dhw: 'dhw', defrost: 'defrost', idle: 'idle', cool: 'cooling', sniff: 'idle', pumps: 'idle', heat1off: 'heating' }[st];
     const out = {
       'sensor.t_mode': mode, 'binary_sensor.t_compressor': run && st !== 'defrost' ? 'on' : 'off',
       'sensor.t_power': [run ? '1400' : '8', 'W'], 'sensor.t_flow': [st === 'cool' ? '18' : st === 'dhw' ? '52' : '36', '°C'],
@@ -208,9 +208,10 @@
       out[`sensor.t_hc${n}_return`] = [String(st === 'cool' ? 22 : 29 - n), '°C'];
       // The last of several circuits stays off while heating, so running and stopped circuits meet in one drawing. The circuit
       // pumps keep running while the tank is charged (blocked by the diverter valve without a parallel buffer), stand still while
-      // the primary pump sniffs, and run alone while the heat pump idles ("pumps").
-      const on = ['heat', 'cool', 'defrost', 'dhw', 'pumps'].includes(st);
-      out[`binary_sensor.t_hc${n}_pump`] = on && !(st === 'heat' && n > 1 && n === c.hcs) ? 'on' : 'off';
+      // the primary pump sniffs, and run alone while the heat pump idles ("pumps"). In "heat1off" the first circuit stands while the
+      // others heat, so the trunk they share with it must flow on its own.
+      const on = ['heat', 'cool', 'defrost', 'dhw', 'pumps', 'heat1off'].includes(st);
+      out[`binary_sensor.t_hc${n}_pump`] = on && !(st === 'heat' && n > 1 && n === c.hcs) && !(st === 'heat1off' && n === 1) ? 'on' : 'off';
     }
     return out;
   };
