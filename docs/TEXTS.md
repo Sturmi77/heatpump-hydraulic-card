@@ -27,6 +27,9 @@ heat_pump
 dhw
 buffer
 series_tank
+combined_tank
+heating_zone
+fresh_water_station
 heating_circuit
 house
 room
