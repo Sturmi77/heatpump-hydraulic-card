@@ -250,8 +250,8 @@ Shipped separately as the tile `dhw_loss` (cool-down in K/h from verified standb
 
 | Step | Content | Release | Depends on |
 | --- | --- | --- | --- |
-| 1 | 0a safety net (snapshot + combination harness) | patch | – |
-| 2 | 0b flow model, no visual change | minor, right after a release, short contributor freeze | step 1 |
+| 1 | 0a safety net (snapshot + combination harness) – **done** ([#111](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/111)) | patch | – |
+| 2 | 0b flow model, no visual change – **done** ([#111](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/111)) | minor, right after a release, short contributor freeze | step 1 |
 | 3 | Phase 1 combined storage and `dhw_type` as fixed slots | next minor | step 2 |
 | 4 | Phase 3a boiler in series as a fixed slot | when data is available | step 2, reviewed diagnostic report |
 | 5 | Decision point: fixed slots or component refactor (0c/0d) for the tail | – | requests after steps 3–4 |
@@ -260,3 +260,31 @@ Shipped separately as the tile `dhw_loss` (cool-down in K/h from verified standb
 Steps 3 and 4 are independent of each other; whichever has its input first goes first.
 
 Each step is one pull request with its changelog fragment. Umbrella issues stay open while only part of the scope is delivered, as described in [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+## Sprint plan
+
+Planned after 0a and 0b were merged (28 October 2026). Each item is one pull request; items that change the flow model or the topology baseline run one after the other, never in parallel, because they touch the same code and the same baseline file.
+
+**Rule for missing input:** where an open question has no answer from users or real installations when its item starts, the item is built with the planned default below. Later input changes the default in a follow-up pull request; it does not hold the item back. Only phase 3a waits, because it needs real integration states (principle "no guessed semantics").
+
+| Sprint | Item | Content | Effort | Coverage | Input needed |
+| --- | --- | --- | --- | --- | --- |
+| 1 | [#124](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/124) one water loop | without a parallel buffer, circuits and heat pump flow together in the flow model; the combination test runs every state for every storage strategy | S–M, 1 d | – (correctness) | none |
+| 1 | Phase 1a combined storage | `storage: combined` with a coil for hot water, demo setup, combination test extended by the fourth storage strategy | S–M, 1–2 d | about 78 % | none, defaults D1 and D4 |
+| 2 | Phase 1b `dhw_type` | `coil`, `fresh_water`, `tank_in_tank` in the combined storage, and `fresh_water` on a parallel buffer | S–M, 1 d | about 85 % | none, default D2 |
+| 2 | `dhw_loss` with combined storage | standby windows with running circuit pumps are left out | S, 0.5 d | – | none, default D3 |
+| 2 | Data for phase 3a | ask for a diagnostic report of a hybrid installation in [#51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51) and the call for testers [#1](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) | – | – | user reports |
+| 3 | Phase 3a boiler in series | fixed slot on the flow pipe, once a reviewed report is there | M, 2 d | about 90 % | **blocked** until a report arrives |
+| – | Decision point | fixed slots or component refactor for the tail, by the criteria above | – | – | requests beyond the catalogue |
+
+Sprints 1 and 2 bring the card from about 73 % to about 85 % of installations in roughly 4–5 working days. Phase 3a follows when its data exists; until then the decision point is not reached.
+
+**Planned defaults** (used when no input arrives; each can be changed later without breaking configurations):
+
+| | Question | Default | Reason |
+| --- | --- | --- | --- |
+| D1 | How is a combined storage configured, with which sensors and charging? | as in [phase 1](#phase-1--combinedlayered-storage-50): `storage: combined`, the six existing keys as heights top to bottom, the diverter valve charges two heights, no stratification valve | no new keys, presets keep working; asked in #50 without an answer |
+| D2 | Does `dhw_type` also apply to separate storages? | yes: `fresh_water` on a parallel buffer draws no hot-water tank, the station hangs on the buffer | about 12 % of installations with a parallel buffer use a fresh-water station |
+| D3 | `dhw_loss` with combined storage: leave out windows with running circuit pumps, or mark the value approximate? | leave them out | the circuits draw heat from the same tank; a marked value would still mislead |
+| D4 | What flows when a circuit pump runs against a diverter valve on hot water (no parallel buffer)? | the pump turns, no water moves, no overflow valve is drawn | no installation has reported an overflow valve yet |
+| D5 | Release of 0a/0b | with the next regular release, as an internal entry | no visible change |
