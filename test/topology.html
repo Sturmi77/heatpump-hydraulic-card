@@ -9,8 +9,8 @@
   1. Snapshot: every demo installation in every layout and scenario, and every generated combination below in every operating state,
      is reduced to two fingerprints – the geometry of the schematic and its state (which pipe flows, classes, colours, texts) – and
      compared with test/topology-snapshot.js. A refactor that must not change what users see keeps both fingerprints.
-  2. Combinations: the storage strategies the card draws today (direct, parallel buffer, series buffer with and without bypass valve)
-     × hot-water tank (none, tank, tank with solar) × primary pump × 1–6 heating circuits; source type, emitters, heaters, power
+  2. Combinations: the storage strategies the card draws (direct, parallel buffer, series buffer with and without bypass valve,
+     combined storage) × hot-water tank (none, tank, tank with solar; a combined storage always holds it) × primary pump × 1–6 heating circuits; source type, emitters, heaters, power
      sources and layout rotate through the cases. Each combination is checked for the same invariants: it renders, every pipe ends
      at another pipe or a component, a flowing pipe never ends at a closed one, components do not overlap, everything stays inside
      the drawing, and the schematic is one tab stop with labelled parts.
@@ -145,13 +145,15 @@
   }
 
   /* ---------- 2. generated combinations ---------- */
-  const STORAGE = ['direct', 'parallel', 'series', 'series-fixed'];
+  // New strategies go at the end, so the existing cases keep their index and with it their source type and layout.
+  const STORAGE = ['direct', 'parallel', 'series', 'series-fixed', 'combined'];
   const DHW = ['none', 'tank', 'solar'];
   const SOURCES = ['air', 'brine', 'water'];
   const EMITTERS = ['underfloor', 'radiator', 'column'];
   const STATES = ['heat', 'dhw', 'defrost', 'idle', 'cool', 'sniff', 'pumps'];
   const combos = [];
-  for (const storage of STORAGE) for (const dhw of DHW) for (const primary of [false, true]) for (let hcs = 1; hcs <= 6; hcs++) combos.push({ storage, dhw, primary, hcs });
+  // A combined storage always holds the hot water.
+  for (const storage of STORAGE) for (const dhw of DHW.filter((x) => storage !== 'combined' || x !== 'none')) for (const primary of [false, true]) for (let hcs = 1; hcs <= 6; hcs++) combos.push({ storage, dhw, primary, hcs });
 
   // A synthetic installation without preset: every entity is mapped by hand, so the case shows exactly the parts it names.
   const installation = (c, idx) => {
@@ -163,13 +165,14 @@
     if (c.dhw !== 'none') Object.assign(ent, { valve: 'binary_sensor.t_valve', dhw_top: 'sensor.t_dhw_top', dhw_bottom: 'sensor.t_dhw_bottom' });
     if (c.dhw !== 'none' && idx % 2) ent.dhw_middle = 'sensor.t_dhw_middle';
     if (c.dhw === 'solar') Object.assign(ent, { solar_collector: 'sensor.t_collector', solar_pump: 'binary_sensor.t_solar_pump' });
-    if (c.storage === 'parallel') Object.assign(ent, { buffer_top: 'sensor.t_buffer_top', buffer_bottom: 'sensor.t_buffer_bottom' });
+    if (['parallel', 'combined'].includes(c.storage)) Object.assign(ent, { buffer_top: 'sensor.t_buffer_top', buffer_bottom: 'sensor.t_buffer_bottom' });
+    if (c.storage === 'combined') config.storage = 'combined';
     if (c.storage.startsWith('series')) config.series_buffer = true;
     if (c.storage === 'series-fixed') config.series_bypass = false;
     if (c.primary) config.primary_pump = true;
     if (idx % 5 === 1) ent.heater = 'sensor.t_heater';
     if (idx % 5 === 2 && c.dhw !== 'none') ent.dhw_heater = 'sensor.t_dhw_heater';
-    if (idx % 5 === 3 && c.storage === 'parallel') ent.buffer_heater = 'sensor.t_buffer_heater';
+    if (idx % 5 === 3 && ['parallel', 'combined'].includes(c.storage)) ent.buffer_heater = 'sensor.t_buffer_heater';
     if (idx % 4 === 1) Object.assign(ent, { pv: 'sensor.t_pv', battery: 'sensor.t_battery', grid: 'sensor.t_grid' });
     if (idx % 4 === 1) config.power_sources = 'manual';
     for (let n = 1; n <= c.hcs; n++) {

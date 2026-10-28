@@ -2613,6 +2613,54 @@
     card.remove();
   }
 
+  // 18r. combined storage (storage: combined, #50): one tank, hot-water zone on top, the six storage keys as heights
+  {
+    const st = (extra = {}) => toStates({
+      'sensor.f': ['36', '°C'], 'sensor.r': ['31', '°C'], 'sensor.c': ['40', 'Hz'], 'binary_sensor.valve': 'off', 'binary_sensor.p': 'on',
+      'sensor.t1': ['52', '°C'], 'sensor.t2': ['47', '°C'], 'sensor.t3': ['42', '°C'], 'sensor.t4': ['35', '°C'], 'sensor.t5': ['30', '°C'], 'binary_sensor.bh': 'on', ...extra,
+    });
+    const ents = { flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c', valve: 'binary_sensor.valve', hc_pump: 'binary_sensor.p',
+      dhw_top: 'sensor.t1', dhw_middle: 'sensor.t2', dhw_bottom: 'sensor.t3', buffer_top: 'sensor.t4', buffer_bottom: 'sensor.t5', buffer_heater: 'binary_sensor.bh' };
+    const q = (c, id) => c.shadowRoot.getElementById(id);
+    const on = (c, id) => !!q(c, id)?.classList.contains('on');
+    let card = mount({ entities: ents, storage: 'combined', hc_count: 2, language: 'de' }, hassOf(st())); await wait(20);
+    const tanks = [...card.shadowRoot.querySelectorAll('rect.tank')];
+    check(tanks.length === 1 && q(card, 'cs-tank')?.getAttribute('height') === '480', `one tall tank instead of two (${tanks.length} tanks)`);
+    const titles = [...card.shadowRoot.querySelectorAll('.tank-title, .zone-title')].map((t) => t.textContent);
+    check(titles.includes('Kombispeicher') && titles.includes('Warmwasser') && titles.includes('Heizung') && !titles.includes('Puffer'), `title and zone titles (${titles.join(', ')})`);
+    const stops = [...card.shadowRoot.querySelectorAll('#g-cs stop')];
+    const offsets = stops.map((s) => parseFloat(s.getAttribute('offset')));
+    check(stops.length === 5 && offsets.every((o, n) => !n || o > offsets[n - 1]) && stops.every((s) => /color-mix/.test(s.getAttribute('stop-color'))), `one gradient over the five sensors, top to bottom (${offsets.join(', ')})`);
+    check(q(card, 't-dhw-top').textContent.startsWith('52') && q(card, 't-buf-top').textContent.startsWith('35') && /30/.test(q(card, 't-buf-bottom').textContent), 'the sensors stand at their heights in the one tank');
+    const bh = q(card, 'heater-buf').getBBox();
+    check(bh.y > 280 && bh.y + bh.height < 520 && q(card, 'heater-buf').classList.contains('on'), 'the buffer heater rod sits in the heating zone');
+    check(on(card, 'p-vl-buf') && !on(card, 'p-vl-dhw') && on(card, 'p-hc-vl') && on(card, 'p-hc-up2'), 'heating: the heat pump charges the heating zone, the circuits draw from it');
+    card.hass = hassOf(st({ 'binary_sensor.valve': 'on' })); await wait(5);
+    check(on(card, 'p-vl-dhw') && on(card, 'p-rl-dhw') && !on(card, 'p-vl-buf') && on(card, 'coil') && on(card, 'p-hc-vl'), 'hot water: the valve charges the top zone, the circuits keep drawing from the heating zone');
+    card.hass = hassOf(st({ 'sensor.c': ['0', 'Hz'] })); await wait(5);
+    check(on(card, 'p-hc-vl') && !on(card, 'p-vl') && !on(card, 'p-vl-buf'), 'standby: the circuits run from the tank, the heat pump side stands still');
+    check(!q(card, 'p-byp-vl') && !q(card, 'sb-tank'), 'no bypass and no series buffer next to the combined storage');
+    card.remove();
+    // Without sensors the tank is still drawn, grey and without values.
+    card = mount({ entities: { flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c' }, storage: 'combined' }, hassOf(st())); await wait(20);
+    check(q(card, 'cs-tank') && q(card, 't-buf-top').textContent === '' && q(card, 't-dhw-top').textContent === '' && card.shadowRoot.querySelectorAll('#g-cs stop').length === 1, 'without sensors the combined storage is drawn without values');
+    card.remove();
+    // Solar thermal enters the hot-water zone.
+    card = mount({ entities: { ...ents, solar_collector: 'sensor.t1' }, storage: 'combined' }, hassOf(st())); await wait(20);
+    check(!!q(card, 'p-sol') && !!q(card, 'solar'), 'solar thermal feeds the hot-water zone of the combined storage');
+    card.remove();
+    // Configuration rules and editor.
+    const err = (config) => { try { document.createElement('heatpump-flow-card').setConfig(config); return ''; } catch (e) { return e.message; } };
+    check(/storage must be one of: separate, combined/.test(err({ storage: 'layered' })), 'storage accepts separate or combined');
+    check(/cannot be used with series_buffer/.test(err({ storage: 'combined', series_buffer: true })), 'combined storage with a series buffer is rejected');
+    check(err({ storage: 'separate' }) === '', 'storage: separate is accepted');
+    const keysOf = (n) => (n.schema ? n.schema.flatMap(keysOf) : [n.name]);
+    const keys = C._formSchema({}).schema.flatMap(keysOf); const keysCs = C._formSchema({ storage: 'combined', series_buffer: true }).schema.flatMap(keysOf);
+    check(keys.includes('storage') && keys.includes('series_buffer') && !keysCs.includes('series_buffer') && !keysCs.includes('series_bypass'), 'editor offers storage and hides the series buffer for a combined storage');
+    const sel = C._formSchema({}).schema.flatMap(function all(n) { return n.schema ? n.schema.flatMap(all) : [n]; }).find((n) => n.name === 'storage');
+    check(sel.selector.select.options.map((o) => o.value).join() === 'separate,combined', 'the storage field offers separate and combined');
+  }
+
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
   {
     const s = setups[0];
