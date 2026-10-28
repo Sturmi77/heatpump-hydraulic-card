@@ -220,7 +220,7 @@ The wood stove appears in 36 of the 88 topologies, which together hold only abou
 
 **Charging variants:** the first version supports the diverter valve into two heights. A stratification valve is a later option `storage_charge: stratified` once an installation reports it.
 
-**Rules:** `storage: combined` with `series_buffer: true` is rejected; cooling bypasses the tank; hot-water mode, valve text and the DHW heater rod keep their meaning; the buffer heater rod is drawn in the lower zone; tile and badge contracts do not change; a preset never sets `storage: combined` (it cannot know whether one or two tanks exist).
+**Rules:** `storage: combined` with `series_buffer: true` is rejected; cooling runs through the heating zone like through a parallel buffer (a bypass around the tank would need geometry of its own; changed from "bypasses the tank" when the edge cases were tested); hot-water mode, valve text and the DHW heater rod keep their meaning; the buffer heater rod is drawn in the lower zone; tile and badge contracts do not change; a preset never sets `storage: combined` (it cannot know whether one or two tanks exist).
 
 **Open questions** (asked in #50, no answer yet; the defaults above are used until then): storage type, how the heat pump charges it, whether a DHW target entity exists, number and height of the sensors.
 
