@@ -1120,6 +1120,7 @@ const HFC_LANGUAGES = { en: 'English', de: 'Deutsch' };
 const HFC_I18N = {
   en: {
     not_found: 'No entities of this preset found. Check the integration and the prefix, or open the card editor.',
+    start: 'No supported heat pump integration found. Open the card editor to pick a preset or to map your entities.', start_link: 'Supported integrations',
     title: 'Heat pump', heat_pump: 'Heat pump', dhw: 'Hot water', buffer: 'Buffer', series_tank: 'Series buffer', combined_tank: 'Combined storage', heating_zone: 'Heating', fresh_water_station: 'Fresh-water station', heating_circuit: 'Heating circuit',
     house: 'Rooms', room: 'Room', room_target: 'Room target', running: 'running', compressor_off: 'Compressor off', source_in: 'Air inlet', outdoor: 'Outdoor',
     energy_missing: 'Energy dashboard: no power sensor for {sources}; energy counters alone cannot show live flow.',
@@ -1160,6 +1161,7 @@ const HFC_I18N = {
   },
   de: {
     not_found: 'Keine Entitäten dieser Voreinstellung gefunden. Integration und Präfix prüfen oder den Karteneditor öffnen.',
+    start: 'Keine unterstützte Wärmepumpen-Integration gefunden. Im Karteneditor eine Voreinstellung wählen oder die Entitäten selbst zuordnen.', start_link: 'Unterstützte Integrationen',
     title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', dhw: 'Warmwasser', buffer: 'Puffer', series_tank: 'Reihenpuffer', combined_tank: 'Kombispeicher', heating_zone: 'Heizung', fresh_water_station: 'Frischwasserstation', heating_circuit: 'Heizkreis',
     house: 'Wohnräume', room: 'Raum', room_target: 'Raum-Soll', running: 'läuft', compressor_off: 'Verdichter aus', source_in: 'Luft-Eintritt', outdoor: 'Außen',
     energy_missing: 'Energie-Dashboard: kein Leistungssensor für {sources}; Energiezähler allein zeigen keinen aktuellen Fluss.',
@@ -1576,7 +1578,16 @@ class HeatpumpFlowCard extends HTMLElement {
         return stub;
       }
     }
-    return { preset: 'lambda' };
+    // No supported integration: no preset. The card shows its start state instead of a preset that finds nothing (#142).
+    return {};
+  }
+
+  // Start state: no preset and nothing of its own (entities, error entities, badges, quick controls), so there is nothing to
+  // show yet: a new card without a detected integration.
+  _startState() {
+    const c = this._config || {};
+    return !this._preset && !Object.values(c.entities || {}).some((v) => v && v !== 'none')
+      && !['errors', 'badges', 'controls'].some((k) => Array.isArray(c[k]) && c[k].length);
   }
 
   static getConfigElement() { return document.createElement('heatpump-flow-card-editor'); }
@@ -2494,6 +2505,12 @@ class HeatpumpFlowCard extends HTMLElement {
     const e = this._e;
     const i = this._i;
     const T = this._esc(this._config.title ?? i.title);
+    if (this._startState()) {
+      this.shadowRoot.innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card class="start"><div class="head">${T ? `<div class="title">${T}</div>` : '<div></div>'}</div>
+        <div class="hint" id="start-hint">${this._esc(i.start)} <a href="https://github.com/Sturmi77/heatpump-hydraulic-card#quick-start" target="_blank" rel="noopener noreferrer">${this._esc(i.start_link)}</a></div></ha-card>`;
+      this._rendered = true;
+      return;
+    }
     const fullLabel = this._fullscreenOpen ? i.fullscreen_close : i.fullscreen_open;
     const diagnosticIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v18H7zM10 7h4M10 11h4M10 15h4"/></svg>';
     const fullscreenIcon = this._fullscreenOpen
@@ -4163,7 +4180,7 @@ class HeatpumpFlowCard extends HTMLElement {
 
   /* ---------- update ---------- */
   _update() {
-    if (!this._rendered || !this._hass) return;
+    if (!this._rendered || !this._hass || this._startState()) return;
     const i = this._i;
     const P = this._parts;
     const F = this._flowModel();
@@ -4602,6 +4619,7 @@ HeatpumpFlowCard.styles = `
   .waves.on .wave { animation: hfc-rise var(--hfc-wave, 2.4s) ease-in-out infinite; }
   .waves.on .wave:nth-child(2) { animation-delay: var(--hfc-wave-delay, .8s); } .waves.on .wave:nth-child(3) { animation-delay: var(--hfc-wave-delay2, 1.6s); }
   .hint { margin: 4px 4px 8px; padding: 8px 12px; border-radius: 8px; background: ${hfcTint('heat', 14)}; color: var(--primary-text-color); font-size: .9em; }
+  .hint a { color: var(--primary-color, #03a9f4); }
   .controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 4px 0; }
   .ctl { font: inherit; font-size: .88em; color: var(--primary-text-color); background: var(--secondary-background-color, rgba(127,127,127,.12));
     border: 1px solid var(--divider-color, rgba(127,127,127,.3)); border-radius: 999px; padding: 5px 12px; display: inline-flex; align-items: center; gap: 6px; }
