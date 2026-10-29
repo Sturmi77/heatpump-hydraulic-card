@@ -1465,7 +1465,7 @@
     const draw = async (setup, scen, cfg = {}) => {
       const c = mount({ ...setup.config, ...cfg }, hassOf(toStates(setup.states(scen)), setup.registry || {}, setup.energy, setup)); await wait(20);
       const q = (sel) => c.shadowRoot.querySelectorAll(sel).length;
-      const out = { lam: q('.lam-body'), vai: q('.vai-body'), pana: q('.pana-body'), vies: q('.vies-body'), bosch: q('.bosch-body'), sd: q('.sd-body'), samsung: q('.sam-body'), wolf: q('.wolf-body'), kro: q('.kro-body'), ring: q('.fan-ring'), fans: q('.fan'), snows: q('.snow'), fan2on: c.shadowRoot.getElementById('fan2')?.classList.contains('on'), snow2on: c.shadowRoot.getElementById('snow2')?.classList.contains('on'),
+      const out = { lam: q('.lam-body'), vai: q('.vai-body'), pana: q('.pana-body'), vies: q('.vies-body'), bosch: q('.bosch-body'), sd: q('.sd-body'), samsung: q('.sam-body'), wolf: q('.wolf-body'), kro: q('.kro-body'), ait: q('.ait-body'), ring: q('.fan-ring'), fans: q('.fan'), snows: q('.snow'), fan2on: c.shadowRoot.getElementById('fan2')?.classList.contains('on'), snow2on: c.shadowRoot.getElementById('snow2')?.classList.contains('on'),
         origin: c.shadowRoot.getElementById('fan')?.style.transformOrigin, ok: ok(c) };
       c.remove(); return out;
     };
@@ -1485,6 +1485,13 @@
     check(o.kro === 1 && o.snows === 1, 'ADAPT unit gets one snowflake while defrosting');
     o = await draw(byPreset('kronoterm'), 'heat', { source_type: 'brine' });
     check(o.kro === 0 && o.ok, 'a Kronoterm brine unit keeps the loop symbol');
+    // the Luxtronik demo is a water source: it keeps the loop, an air unit gets the Alpha Innotec drawing
+    o = await draw(byPreset('luxtronik'), 'heat');
+    check(o.ait === 0 && o.ok, 'the Luxtronik water source keeps the loop symbol');
+    o = await draw(byPreset('luxtronik'), 'heat', { source_type: 'air' });
+    check(o.ait === 1 && o.ring === 0 && o.fans === 1 && o.ok, `Luxtronik air unit draws the Alpha Innotec Hybrox (${JSON.stringify(o)})`);
+    o = await draw(byPreset('luxtronik'), 'defrost', { source_type: 'air' });
+    check(o.ait === 1 && o.snows === 1, 'Hybrox gets one snowflake while defrosting');
     o = await draw(byPreset('wolf'), 'heat');
     check(o.wolf === 1 && o.ring === 0 && o.fans === 1 && o.ok, `Wolf preset draws the CHA unit (${JSON.stringify(o)})`);
     o = await draw(byPreset('wolf'), 'defrost');
@@ -1515,7 +1522,7 @@
     check(o.samsung === 1 && o.ring === 0 && o.fans === 1 && o.ok, `Samsung preset draws the EHS Mono unit (${JSON.stringify(o)})`);
     // Automatic drawing per preset, as listed in the README table "Outdoor-unit style coverage" (#151). A new preset needs an entry here.
     const unitOf = { lambda: 'lambda', vicare: 'viessmann', open3e: 'viessmann', vaillant: 'vaillant', ebusd: 'vaillant', emsesp: 'bosch', bosch_buderus_heating: 'bosch',
-      heishamon: 'panasonic', samsung: 'samsung', wolf: 'wolf', kronoterm: 'kronoterm', luxtronik: 'generic', stiebel_isg: 'generic' };
+      heishamon: 'panasonic', samsung: 'samsung', wolf: 'wolf', kronoterm: 'kronoterm', luxtronik: 'alpha_innotec', stiebel_isg: 'generic' };
     const unitWrong = Object.keys(HFC_PRESETS).filter((p) => (HFC_PRESETS[p].unit_style || 'generic') !== unitOf[p]);
     check(!unitWrong.length, `every preset selects the outdoor-unit drawing the README lists (${unitWrong.join(', ') || 'all match'})`);
     check(Object.values(unitOf).every((s) => HFC_UNIT_STYLES.includes(s)), 'the expected drawings are valid unit_style values');
