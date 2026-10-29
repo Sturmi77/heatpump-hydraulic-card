@@ -850,14 +850,15 @@ const HFC_PRESETS = {
   },
 
   // Stiebel Eltron heat pumps with an ISG (WPM 3, WPM 3i, WPMsystem, LWZ; Tecalor) through the "Stiebel Eltron ISG" integration
-  // (pail23, HACS, domain stiebel_eltron_isg, Modbus TCP). Built from the integration source (2026.9), not tested on an installation:
-  // every entity carries its key as translation key, so entity ids and the HA language do not matter (a French Home Assistant calls the
+  // (pail23, HACS, domain stiebel_eltron_isg, Modbus TCP). Built from the integration source (2026.9) and confirmed on a WPMsystem
+  // (#69, card 0.13.1, French Home Assistant); WPM 3, WPM 3i and the LWZ family follow the source only. Every entity carries its key as translation key, so entity ids and the HA language do not matter (a French Home Assistant calls the
   // heat pump flow sensor_..._temperature_de_depart_pac1). The integration creates the sensors of the whole controller family, also those of
   // hardware that is not installed; they read unavailable. Optional parts (buffer, solar, heat source, refrigerant circuit, circuits 2 and 3)
   // are therefore mapped only where they report a number. There is no operating mode entity (the select is the program), so the card
   // derives the mode from the compressor, the defrost flag and the hot water flag; cooling is not shown.
   stiebel_isg: {
     name: 'Stiebel Eltron ISG (WPM, LWZ) / Tecalor',
+    tested: true,
     // Optional parts are mapped by their readings: the card looks again every minute for parts that report late.
     dynamic: true,
     auto_circuits: false,

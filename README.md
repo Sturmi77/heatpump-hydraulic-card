@@ -31,7 +31,7 @@ It shows electricity flowing from **PV, battery and grid** into the heat pump, t
 | `ebusd` | **Vaillant** aroTHERM / aroTHERM plus (HMU) with a VWZ hydraulic station and sensoCOMFORT / multiMATIC controller | [ebusd](https://github.com/john30/ebusd) with Home Assistant MQTT discovery | Vaillant aroTHERM plus | mapped from and checked live on one real installation (aroTHERM plus cascade, two circuits) |
 | `wolf` | **Wolf** air/water heat pumps (CHA monoblock) with a WOLF Link gateway | [Wolf SmartSet Service](https://www.home-assistant.io/integrations/wolflink/) (core, `wolflink`) or [Wolf SmartSet (read/write)](https://github.com/tibuntu/homeassistant-wolf-smartset) (HACS, `wolf_smartset`) | Wolf CHA | `wolf_smartset` confirmed on a real installation (CHA); `wolflink` from the entity states of the same installation |
 | `luxtronik` | **Alpha Innotec**, **Novelan**, **Roth**, **Siemens**, **Elco**, **Buderus**, **Nibe**, **Wolf** heat pumps with a Luxtronik controller | [Luxtronik](https://github.com/BenPru/luxtronik) (HACS, `luxtronik2`) | generic fan, loop symbol with `source_type` | untested |
-| `stiebel_isg` | **Stiebel Eltron** (WPM 3, WPM 3i, WPMsystem, LWZ) and **Tecalor** heat pumps with an ISG | [Stiebel Eltron ISG](https://github.com/pail23/stiebel_eltron_isg_component) (HACS, `stiebel_eltron_isg`) | generic fan, loop symbol with `source_type` | untested |
+| `stiebel_isg` | **Stiebel Eltron** (WPM 3, WPM 3i, WPMsystem, LWZ) and **Tecalor** heat pumps with an ISG | [Stiebel Eltron ISG](https://github.com/pail23/stiebel_eltron_isg_component) (HACS, `stiebel_eltron_isg`) | generic fan, loop symbol with `source_type` | confirmed on a WPMsystem; WPM 3, WPM 3i and LWZ from the integration source |
 | `samsung` | **Samsung** EHS (Mono, Split, TDM) on the NASA bus | [esphome-samsung-nasa](https://github.com/Beormund/esphome-samsung-nasa) (ESPHome) | Samsung EHS Mono HT Quiet | tested on a real installation |
 
 Additional real-installation reports with manual entity mappings are tracked separately from preset validation:
@@ -51,7 +51,7 @@ Additional real-installation reports with manual entity mappings are tracked sep
 
 ## Current status
 
-The current release is **[0.14.0](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.14.0)**. Its HACS, quality, Chromium and Firefox checks pass, including 1,375 browser self-tests and a topology test of 1,984 drawing cases. The shipped presets and features are covered with simulated data; Lambda, HeishaMon, Samsung, Kronoterm (Cloud API), ebusd (one installation) and Wolf (`wolf_smartset`) have also been confirmed on real installations.
+The current release is **[0.14.0](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.14.0)**. Its HACS, quality, Chromium and Firefox checks pass, including 1,375 browser self-tests and a topology test of 1,984 drawing cases. The shipped presets and features are covered with simulated data; Lambda, HeishaMon, Samsung, Kronoterm (Cloud API), ebusd (one installation), Wolf (`wolf_smartset`) and Stiebel Eltron ISG (WPMsystem) have also been confirmed on real installations.
 
 Release 0.14.0 adds a **combined (layered) storage** (`storage: combined`: one tank with the hot-water zone on top and the heating zone below, the six storage sensors as heights) and the **hot-water preparation** (`dhw_type`: coil, fresh-water station, tank in tank; a fresh-water station can also stand on a parallel buffer instead of a hot-water tank), both in the visual editor. Without a parallel buffer, the heating circuits and the heat pump are now drawn as one water loop, and several circuits share a common trunk. A new topology test checks every storage combination in every operating state ([docs/TOPOLOGY.md](docs/TOPOLOGY.md)). The visual editor sets `valve_map` with two fields for the valve states, and the diagnostic report lists the value maps and the hydraulic options. The Wolf preset is confirmed with `wolf_smartset`. Fixes: smooth power and coil animations, the room of circuit 1 in its status line with several circuits, and the heating pressure label clear of the buffer. Owners of a combined storage or a fresh-water station are especially welcome to test, and hybrid installations with a gas or oil boiler can help with data in [#51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51).
 
@@ -492,7 +492,7 @@ What you get:
 
 Not mapped: the last error (it stays after a reset), the circulation pump (the integration names it ambiguously), the buffer and multifunction storage (not exposed). Add them with `entities` if you want them.
 
-### Stiebel Eltron ISG (WPM, LWZ) and Tecalor – untested, feedback welcome
+### Stiebel Eltron ISG (WPM, LWZ) and Tecalor – confirmed on a WPMsystem, other controllers feedback welcome
 ```yaml
 type: custom:heatpump-flow-card
 preset: stiebel_isg
