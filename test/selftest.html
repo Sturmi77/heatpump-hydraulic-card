@@ -118,6 +118,26 @@
       `ViCare and Open3E with one core entity each: the order of the presets decides (${tieMatches.map((m) => `${m.name} ${m.score}`).join(', ')})`);
     const unavailable = hassOf(toStates({ ...vaillant.states('heat'), ...Object.fromEntries(Object.keys(ebusd.states('heat')).map((id) => [id, 'unavailable'])) }), { ...(vaillant.registry || {}), ...(ebusd.registry || {}) });
     check(C.getStubConfig(unavailable).preset === 'vaillant', 'an integration whose entities are all unavailable does not win');
+
+    // #145: the editor marks detected presets and lists them first; zero, one and two matches
+    const options = (opts) => C._formSchema({}, undefined, opts).schema.find((f) => f.name === 'preset').selector.select.options.slice(1);
+    const plainOrder = Object.keys(HFC_PRESETS).join();
+    let opt = options({});
+    check(opt.map((o) => o.value).join() === plainOrder && !opt.some((o) => /Detected|Erkannt/.test(o.label)), 'no match: the preset list keeps its order and marks nothing');
+    const ebusdOnly = hassOf(toStates(ebusd.states('heat')), ebusd.registry || {});
+    opt = options({ matches: C._presetMatches(ebusdOnly) });
+    check(opt[0].value === 'ebusd' && /(Detected|Erkannt) \(\d+ /.test(opt[0].label) && opt.filter((o) => /Detected|Erkannt/.test(o.label)).length === 1
+      && opt.slice(1).map((o) => o.value).join() === Object.keys(HFC_PRESETS).filter((k) => k !== 'ebusd').join(), `one match: ebusd first and marked, the others in their order (${opt[0].label})`);
+    opt = options({ matches });
+    check(opt.slice(0, 2).map((o) => o.value).join() === 'ebusd,vaillant' && opt.slice(0, 2).every((o) => /Detected|Erkannt/.test(o.label)), 'two matches: both first, best first, both marked');
+    const real = C._presetMatches; let runs = 0; C._presetMatches = (h) => { runs++; return real.call(C, h); };
+    const ed = document.createElement('heatpump-flow-card-editor'); ed.setConfig({ preset: 'vaillant' }); ed.hass = both;
+    ed.setConfig({ preset: 'vaillant', title: 'a' }); ed.setConfig({ preset: 'vaillant', title: 'ab' });
+    const helper = ed._form?.computeHelper?.({ name: 'preset' }) || '';
+    C._presetMatches = real;
+    check(runs === 1, `the editor detects the presets once per registry, not on every change (${runs} runs)`);
+    check(/also detected here:|ebenfalls erkannt:/i.test(helper) && helper.includes(HFC_PRESETS.ebusd.name) && !helper.includes(`${HFC_PRESETS.vaillant.name}.`), `the helper names the other detected preset (${helper.slice(-80)})`);
+    ed.remove();
   }
 
   // 5-0. No supported integration (#142): the stub has no preset and the card shows its start state, not an error
