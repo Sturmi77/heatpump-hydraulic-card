@@ -114,7 +114,7 @@ The completed release history and the prioritized post-0.14.0 backlog are mainta
 | `vaillant` | Vaillant aroTHERM plus | Vaillant; default fallback for the shared myPyllant brands | `preset: vaillant` |
 | `saunier` | Saunier Duval GeniaAir Mono | Saunier Duval | Manual override because myPyllant does not identify the brand reliably |
 | `bosch` | Bosch Compress 5800i/6800i AW | Bosch, Buderus, Junkers, Nefit, Worcester, Sieger, elm.leblanc and iVT through EMS-ESP; Bosch and Buderus through Home Comfort | `preset: emsesp`, `preset: bosch_buderus_heating` |
-| `panasonic` | Panasonic Aquarea | Panasonic Aquarea | `preset: heishamon` |
+| `panasonic` | Panasonic Aquarea | Panasonic Aquarea; with `unit_size: large` the tall unit with two fans (T-CAP, 12 and 16 kW, H generation from 9 kW) | `preset: heishamon`, size from the model HeishaMon reports |
 | `samsung` | Samsung EHS Mono HT Quiet | Samsung EHS Mono / Mono HT Quiet | `preset: samsung` |
 | `wolf` | Wolf CHA monoblock | Wolf CHA-07/10 and CHA-16/20 (same proportions) | `preset: wolf` |
 | `kronoterm` | Kronoterm ADAPT | Kronoterm ADAPT and ADAPT 2 air/water units (louvred front); brine and water units keep the loop symbol | `preset: kronoterm` |
@@ -590,7 +590,7 @@ Everything can be set in the **UI editor**. With a preset, the editor shows whet
 | `brine_pressure_min`, `brine_pressure_crit`, `brine_pressure_max` | Optional brine-pressure thresholds in bar. Below `crit` is critical; below `min` or above `max` is a warning. |
 | `hc_pressure_min`, `hc_pressure_crit`, `hc_pressure_max` | Optional heating-pressure thresholds in bar, with the same warning/critical logic. |
 | `unit_style` | Drawing of the outdoor unit: `auto` (default, uses the preset style), `generic`, `lambda`, `viessmann`, `vaillant`, `saunier`, `bosch`, `panasonic`, `samsung`, `wolf`, `kronoterm`, `alpha_innotec` or `stiebel`. Ground and groundwater sources keep their loop symbol. See [Outdoor-unit style coverage](#outdoor-unit-style-coverage). |
-| `unit_size` | Vaillant aroTHERM plus class: `small` (3.5 and 5.5 kW, one fan, low), `medium` (7.5 kW, one fan, default) or `large` (10.5 and 12.5 kW, two fans). |
+| `unit_size` | Vaillant aroTHERM plus class: `small` (3.5 and 5.5 kW, one fan, low), `medium` (7.5 kW, one fan, default) or `large` (10.5 and 12.5 kW, two fans). Panasonic: `medium` (one fan) or `large` (two fans: T-CAP, 12 and 16 kW, H generation from 9 kW); left out, the HeishaMon preset takes it from the model the heat pump reports (`…_main_heat_pump_model`). |
 | `timeline` | `true` shows a strip with the operating mode of the last hours under the schematic (needs the `mode` entity, or the `compressor` and optionally the `valve`, and the Home Assistant history). |
 | `timeline_hours` | Length of the timeline in hours, 3 to 72 (default 24). |
 | `timeline_marks` | `true` adds a lane under the timeline for every badge, showing when it was on (for example Boost). A list of entities or `{ entity, label }` entries does the same for other switches, inputs and sensors with an on/off state. Needs the Home Assistant history. |

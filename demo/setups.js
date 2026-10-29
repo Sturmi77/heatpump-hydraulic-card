@@ -151,6 +151,7 @@ const historySim = (setup, msg) => {
 };
 // HeishaMon (Panasonic Aquarea): no operating-mode entity, valve as Room/Tank, flow in L/min, power in W.
 const hmStates = (s) => ({
+  'sensor.panasonic_heat_pump_main_heat_pump_model': 'WH-MDC05J3E5 5 1ph HP',
   'sensor.panasonic_heat_pump_main_main_outlet_temp': [{ heat: '36.0', dhw: '50.5', defrost: '23', idle: '30' }[s], '°C'],
   'sensor.panasonic_heat_pump_main_main_inlet_temp': [{ heat: '31.0', dhw: '45.0', defrost: '26', idle: '29.5' }[s], '°C'],
   'sensor.panasonic_heat_pump_main_pump_flow': [s === 'idle' ? '0' : '18.5', 'L/min'],

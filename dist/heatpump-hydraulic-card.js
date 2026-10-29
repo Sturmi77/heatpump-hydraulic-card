@@ -547,6 +547,16 @@ const HFC_PRESETS = {
     name: 'Panasonic Aquarea (HeishaMon)',
     tested: true,
     unit_style: 'panasonic',
+    // Size of the drawing from the model HeishaMon reports ("WH-MXC09H3E5 9 1ph T-CAP"): T-CAP units, 12 and 16 kW and the 9 kW
+    // units of the H generation have the tall casing with two fans; the J generation monobloc up to 9 kW has one (#176).
+    unit_size: (e, hass) => {
+      const text = String(hass?.states?.[e.model]?.state || '');
+      // All-in-one models carry two capacities in the code (WH-ADC0916H9E8 12 3ph T-CAP); the number after the code counts.
+      const m = /WH-[A-Z]{3}(\d{2,4})([A-Z])\w*\s+(\d+)/.exec(text);
+      if (!m) return undefined;
+      const kw = +m[3]; const generation = m[2];
+      return /T-CAP/i.test(text) || kw >= 12 || (kw >= 9 && generation === 'H') ? 'large' : 'medium';
+    },
     // The primary pump sits in the heat pump (outdoor unit of the monobloc, hydro module of the split) and also runs for hot water.
     primary_pump: true,
     auto_circuits: false,
@@ -565,6 +575,8 @@ const HFC_PRESETS = {
       const zoneFlow = parseFloat(ctx.state(`sensor.${m}${z}_water_temp`));
       const curve = ctx.state(`sensor.${m}heating_mode`) === 'compensation curve';
       return {
+        // The model text ("Aquarea Heatpump model") only picks the size of the drawing (unit_size above).
+        model: `sensor.${m}heat_pump_model`,
         compressor: `sensor.${m}compressor_freq`,
         // The fan runs on for about a minute after the compressor stops.
         fan_speed: `sensor.${m}fan1_motor_speed`,
@@ -1307,7 +1319,7 @@ const HFC_EDITOR = {
     source_type: 'Heat source', src_air: 'Air', src_brine: 'Ground (brine)', src_water: 'Groundwater',
     hc_count: 'Heating circuits', hc2_type: 'Circuit 2 emitter', hc3_type: 'Circuit 3 emitter', hc4_type: 'Circuit 4 emitter', hc5_type: 'Circuit 5 emitter', hc6_type: 'Circuit 6 emitter',
     unit_style: 'Unit drawing', unit_auto: 'Automatic (from the preset)', unit_generic: 'Generic (fan)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
-    unit_size: 'Vaillant size', size_small: '3.5 / 5.5 kW (1 fan, low)', size_medium: '7.5 kW (1 fan)', size_large: '10.5 / 12.5 kW (2 fans)',
+    unit_size: 'Size of the unit drawing', size_pana_medium: '1 fan (3 to 9 kW)', size_pana_large: '2 fans (T-CAP, 12 and 16 kW)', size_small: '3.5 / 5.5 kW (1 fan, low)', size_medium: '7.5 kW (1 fan)', size_large: '10.5 / 12.5 kW (2 fans)',
     timeline: 'Timeline of the operating mode', timeline_hours: 'Timeline length (hours)', timeline_marks: 'Show the badges (e.g. Boost) as extra lanes',
     layout: 'Layout', layout_default: 'Default', layout_compact: 'Compact (narrow columns)', layout_wide: 'Wide (tiles beside the schematic)', layout_wall: 'Wall display (large, controls fade out)',
     animations: 'Animations', animations_auto: 'Automatic (respect reduced motion)', animations_always: 'Always', animations_off: 'Off',
@@ -1376,7 +1388,7 @@ const HFC_EDITOR = {
     source_type: 'Wärmequelle', src_air: 'Luft', src_brine: 'Erdreich (Sole)', src_water: 'Grundwasser',
     hc_count: 'Heizkreise', hc2_type: 'Wärmeabgabe Heizkreis 2', hc3_type: 'Wärmeabgabe Heizkreis 3', hc4_type: 'Wärmeabgabe Heizkreis 4', hc5_type: 'Wärmeabgabe Heizkreis 5', hc6_type: 'Wärmeabgabe Heizkreis 6',
     unit_style: 'Geräte-Zeichnung', unit_auto: 'Automatisch (aus der Voreinstellung)', unit_generic: 'Allgemein (Lüfter)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
-    unit_size: 'Vaillant-Größe', size_small: '3,5 / 5,5 kW (1 Lüfter, niedrig)', size_medium: '7,5 kW (1 Lüfter)', size_large: '10,5 / 12,5 kW (2 Lüfter)',
+    unit_size: 'Größe der Geräte-Zeichnung', size_pana_medium: '1 Lüfter (3 bis 9 kW)', size_pana_large: '2 Lüfter (T-CAP, 12 und 16 kW)', size_small: '3,5 / 5,5 kW (1 Lüfter, niedrig)', size_medium: '7,5 kW (1 Lüfter)', size_large: '10,5 / 12,5 kW (2 Lüfter)',
     timeline: 'Zeitleiste der Betriebsart', timeline_hours: 'Länge der Zeitleiste (Stunden)', timeline_marks: 'Badges (z. B. Boost) als zusätzliche Spuren zeigen',
     layout: 'Layout', layout_default: 'Standard', layout_compact: 'Kompakt (schmale Spalten)', layout_wide: 'Breit (Kacheln neben dem Schema)', layout_wall: 'Wanddisplay (groß, Bedienelemente blenden aus)',
     animations: 'Animationen', animations_auto: 'Automatisch (reduzierte Bewegung beachten)', animations_always: 'Immer', animations_off: 'Aus',
@@ -1953,6 +1965,9 @@ class HeatpumpFlowCard extends HTMLElement {
               { name: 'unit_style', selector: { select: { mode: 'dropdown', options: HFC_UNIT_STYLES.map((v) => ({ value: v, label: L[`unit_${v}`] })) } } },
               ...(config && (config.unit_style === 'vaillant' || ((!config.unit_style || config.unit_style === 'auto') && config.preset === 'vaillant'))
                 ? [{ name: 'unit_size', selector: { select: { mode: 'dropdown', options: HFC_UNIT_SIZES.map((v) => ({ value: v, label: L[`size_${v}`] })) } } }] : []),
+              // Panasonic: one or two fans; left empty, the HeishaMon preset takes the size from the model (#176).
+              ...(config && (config.unit_style === 'panasonic' || ((!config.unit_style || config.unit_style === 'auto') && config.preset === 'heishamon'))
+                ? [{ name: 'unit_size', selector: { select: { mode: 'dropdown', options: ['medium', 'large'].map((v) => ({ value: v, label: L[`size_pana_${v}`] })) } } }] : []),
               { name: 'primary_pump', selector: { boolean: {} } },
               { name: 'timeline', selector: { boolean: {} } },
               ...(config && config.timeline ? [{ name: 'timeline_hours', selector: { number: { min: 3, max: 72, step: 1, mode: 'box', unit_of_measurement: 'h' } } }, { name: 'timeline_marks', selector: { boolean: {} } }] : []),
@@ -3550,7 +3565,13 @@ class HeatpumpFlowCard extends HTMLElement {
   _unitKey() {
     if (this._sourceType !== 'air') return 'generic';
     const style = this._config.unit_style && this._config.unit_style !== 'auto' ? this._config.unit_style : (this._preset?.unit_style || 'generic');
-    return style === 'vaillant' ? `vaillant-${this._config.unit_size || 'medium'}` : style;
+    if (style === 'vaillant') return `vaillant-${this._config.unit_size || 'medium'}`;
+    // Panasonic: one fan, or two for the large units; without unit_size the preset may tell the size from the model (#176).
+    if (style === 'panasonic') {
+      const size = this._config.unit_size || this._preset?.unit_size?.(this._e || {}, this._hass);
+      return size === 'large' ? 'panasonic-large' : 'panasonic';
+    }
+    return style;
   }
 
   // One blade, scaled to a fan of radius r at (cx, cy); the group spins around its own centre.
@@ -3596,12 +3617,25 @@ class HeatpumpFlowCard extends HTMLElement {
         snows: grilles.map(([cx, cy, r]) => [...abs(cx, cy), +Math.min(19, r * 0.58).toFixed(1)]),
       };
     }
-    if (key === 'panasonic') {
+    if (key.startsWith('panasonic')) {
+      const ring = (cx, cy, r) => `<circle class="pana-gr" cx="${cx}" cy="${cy}" r="${r}"/><circle class="pana-gr thin" cx="${cx}" cy="${cy}" r="${(r * 0.78).toFixed(1)}"/><circle class="pana-gr thin" cx="${cx}" cy="${cy}" r="${(r * 0.54).toFixed(1)}"/>${Array.from({ length: 16 }, (_, m) => { const a = (m * Math.PI) / 8; return `<line class="pana-gr thin" x1="${(cx + Math.cos(a) * 7).toFixed(1)}" y1="${(cy + Math.sin(a) * 7).toFixed(1)}" x2="${(cx + Math.cos(a) * r).toFixed(1)}" y2="${(cy + Math.sin(a) * r).toFixed(1)}"/>`; }).join('')}`;
+      if (key === 'panasonic-large') {
+        // T-CAP and the larger units (bi-bloc 1340 x 900 mm, monobloc 1410 mm high): a tall pale casing with two fans one above
+        // the other on the left and the service panel on the right (#176).
+        const x = 66; const y = 32; const w = 112; const h = 118;
+        const grilles = [[107, y + 32, 25], [107, y + 86, 25]];
+        return {
+          below: T(`<rect class="pana-foot" x="${x + 10}" y="${y + h}" width="15" height="6" rx="1.5"/><rect class="pana-foot" x="${x + w - 25}" y="${y + h}" width="15" height="6" rx="1.5"/><rect class="pana-body" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/><path class="pana-top" d="M${x + 3} ${y + 5} H${x + w - 3}"/>${grilles.map(([cx, cy, r]) => ring(cx, cy, r)).join('')}`),
+          fans: grilles.map(([cx, cy, r]) => [...abs(cx, cy), +(r * 0.82).toFixed(1), 'pana-fan']),
+          above: T(`<path class="pana-seam" d="M146 ${y + 8} V${y + h - 7}"/><path class="pana-vents" d="M152 ${y + 44}h18M152 ${y + 50}h18M152 ${y + 56}h18M152 ${y + 62}h18M152 ${y + 68}h18M152 ${y + 74}h18"/><rect class="pana-panel" x="154" y="${y + h - 22}" width="15" height="12" rx="1.5"/>`),
+          snows: grilles.map(([cx, cy]) => [...abs(cx, cy), 15]),
+        };
+      }
       // Aquarea H/J/K outdoor units: a pale rectangular casing, large left-hand grille and a narrow service panel.
       // This is an original simplified drawing without branding; proportions follow the common single-fan 824/875 mm units.
       const x = 58; const y = 48; const w = 124; const h = 96;
       const cx = 102; const cy = 95; const r = 37;
-      const grille = `<circle class="pana-gr" cx="${cx}" cy="${cy}" r="${r}"/><circle class="pana-gr thin" cx="${cx}" cy="${cy}" r="${(r * 0.78).toFixed(1)}"/><circle class="pana-gr thin" cx="${cx}" cy="${cy}" r="${(r * 0.54).toFixed(1)}"/>${Array.from({ length: 16 }, (_, m) => { const a = (m * Math.PI) / 8; return `<line class="pana-gr thin" x1="${(cx + Math.cos(a) * 7).toFixed(1)}" y1="${(cy + Math.sin(a) * 7).toFixed(1)}" x2="${(cx + Math.cos(a) * r).toFixed(1)}" y2="${(cy + Math.sin(a) * r).toFixed(1)}"/>`; }).join('')}`;
+      const grille = ring(cx, cy, r);
       return {
         below: T(`<rect class="pana-foot" x="${x + 10}" y="${y + h}" width="15" height="6" rx="1.5"/><rect class="pana-foot" x="${x + w - 25}" y="${y + h}" width="15" height="6" rx="1.5"/><rect class="pana-body" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/><path class="pana-top" d="M${x + 3} ${y + 7} H${x + w - 3}"/>${grille}`),
         fans: [[...abs(cx, cy), +(r * 0.82).toFixed(1), 'pana-fan']],
