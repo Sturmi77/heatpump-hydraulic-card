@@ -1103,7 +1103,7 @@ const HFC_I18N = {
       suction_temp: 'Suction gas', hot_gas: 'Hot gas', liquid_temp: 'Liquid line', low_pressure: 'Low pressure', high_pressure: 'High pressure',
       eev: 'Expansion valve', superheat: 'Superheat', subcooling: 'Subcooling',
     },
-    source_flow: 'Source', target: 'Target', curve_offset: 'curve', curve_shift: 'shift', return_short: 'RL', middle: 'middle', bottom: 'bottom', error: 'Error', circulation: 'Circ.', valve_dhw: 'DHW', solar: 'Solar',
+    source_flow: 'Source', target: 'Target', curve_offset: 'curve', curve_shift: 'shift', return_short: 'RL', error: 'Error', circulation: 'Circ.', valve_dhw: 'DHW', solar: 'Solar',
     brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', pressure_normal: 'normal', pressure_warning: 'warning', pressure_critical: 'critical',
     timeline_title: 'Last {h} hours', timeline_gap: 'No data', timeline_aria: 'Operating mode of the last {h} hours. Arrow keys select a period.',
     programs: { eco: 'Eco', night: 'Night', party: 'Party', holiday: 'Holiday' },
@@ -1143,7 +1143,7 @@ const HFC_I18N = {
       suction_temp: 'Sauggas', hot_gas: 'Heißgas', liquid_temp: 'Flüssigkeitsleitung', low_pressure: 'Niederdruck', high_pressure: 'Hochdruck',
       eev: 'Expansionsventil', superheat: 'Überhitzung', subcooling: 'Unterkühlung',
     },
-    source_flow: 'Quelle', target: 'Soll', curve_offset: 'Kurve', curve_shift: 'Verschiebung', return_short: 'RL', middle: 'Mitte', bottom: 'unten', error: 'Fehler', circulation: 'Zirk.', valve_dhw: 'WW', solar: 'Solar',
+    source_flow: 'Quelle', target: 'Soll', curve_offset: 'Kurve', curve_shift: 'Verschiebung', return_short: 'RL', error: 'Fehler', circulation: 'Zirk.', valve_dhw: 'WW', solar: 'Solar',
     brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', pressure_normal: 'normal', pressure_warning: 'Warnung', pressure_critical: 'kritisch',
     timeline_title: 'Letzte {h} Stunden', timeline_gap: 'Keine Daten', timeline_aria: 'Betriebsart der letzten {h} Stunden. Mit den Pfeiltasten einen Zeitraum wählen.',
     programs: { eco: 'Eco', night: 'Nacht', party: 'Party', holiday: 'Urlaub' },
@@ -2575,8 +2575,8 @@ class HeatpumpFlowCard extends HTMLElement {
               <text class="tank-temp" id="t-dhw-top" x="580" y="112" text-anchor="middle"></text>
               <text class="small${P.combined ? ' on-tank' : ''}" id="t-dhw-mode" x="580" y="262" text-anchor="middle"></text>
             </g>
-            ${this._has('dhw_middle') ? `<g class="tap" ${de('dhw_middle')}><text class="tank-sub" id="t-dhw-middle" x="${this._has('dhw_heater_middle') && !P.solar ? 572 : 580}" y="166" text-anchor="middle"></text></g>` : ''}
-            <g class="tap" ${de('dhw_bottom')}><text class="tank-sub" id="t-dhw-bottom" x="${this._has('dhw_heater_bottom') && P.dhwType !== 'fresh_water' ? 572 : 580}" y="222" text-anchor="middle"></text></g>
+            ${this._has('dhw_middle') ? `<g class="tap" ${de('dhw_middle')}><text class="tank-sub" id="t-dhw-middle" x="580" y="166" text-anchor="middle"></text></g>` : ''}
+            <g class="tap" ${de('dhw_bottom')}><text class="tank-sub" id="t-dhw-bottom" x="580" y="222" text-anchor="middle"></text></g>
             ${this._tankHeaters('dhw', P).map((h) => this._heaterSvg(...h)).join('')}
             ${P.circ ? `<g class="tap" ${de('circulation')}><text class="small circ" id="t-circ" x="650" y="60">↻ ${this._esc(i.circulation)}</text></g>` : ''}` : ''}
 
@@ -2588,7 +2588,7 @@ class HeatpumpFlowCard extends HTMLElement {
               <text class="tank-temp" id="t-buf-top" x="580" y="392" text-anchor="middle"></text>
               <text class="small" id="t-buf-mode" x="580" y="542" text-anchor="middle"></text>
             </g>
-            ${this._has('buffer_middle') ? `<g class="tap" ${de('buffer_middle')}><text class="tank-sub" id="t-buf-middle" x="${this._has('buffer_heater_middle') ? 572 : 580}" y="446" text-anchor="middle"></text></g>` : ''}
+            ${this._has('buffer_middle') ? `<g class="tap" ${de('buffer_middle')}><text class="tank-sub" id="t-buf-middle" x="580" y="446" text-anchor="middle"></text></g>` : ''}
             <g class="tap" ${de('buffer_bottom')}><text class="tank-sub" id="t-buf-bottom" x="580" y="502" text-anchor="middle"></text></g>
             ${this._tankHeaters('buffer', P).map((h) => this._heaterSvg(...h)).join('')}` : ''}
 
@@ -3748,7 +3748,7 @@ class HeatpumpFlowCard extends HTMLElement {
   _tankHeaters(tank, P = {}) {
     const dhw = tank === 'dhw';
     const y = dhw ? { '': 186, top: 74, middle: P.solar ? 184 : 162, bottom: P.dhwType === 'fresh_water' ? 244 : 218 } : { '': 455, top: 340, middle: 442, bottom: 476 };
-    return Object.entries(y).map(([pos, h]) => [`${tank}_heater${pos ? `_${pos}` : ''}`, `${dhw ? 'dhw' : 'buf'}${pos ? `-${pos}` : ''}`, h, pos ? 628 : dhw ? 604 : 578]);
+    return Object.entries(y).map(([pos, h]) => [`${tank}_heater${pos ? `_${pos}` : ''}`, `${dhw ? 'dhw' : 'buf'}${pos ? `-${pos}` : ''}`, h, pos ? 612 : dhw ? 604 : 578]);
   }
 
   // Heater rod entering a tank from the right wall at height y, reaching left to x; backup / inline heater as a box inside the heat pump.
@@ -4253,10 +4253,9 @@ class HeatpumpFlowCard extends HTMLElement {
       if (this._has('dhw_middle')) this._$('g-dhw-middle')?.setAttribute('stop-color', this._tankColor(this._n('dhw_middle')));
       this._$('g-dhw-bottom').setAttribute('stop-color', this._tankColor(bot));
       this._txt('t-dhw-top', hasTop ? this._t(top) : '');
-      this._txt('t-dhw-middle', this._has('dhw_middle') ? `${i.middle} ${this._t(this._n('dhw_middle'))}` : '');
-      // The position label only tells sensors apart; a single bottom sensor shows the bare value at the bottom.
-      const onlyBottom = !hasTop && !this._has('dhw_middle');
-      this._txt('t-dhw-bottom', this._has('dhw_bottom') ? `${onlyBottom ? '' : `${i.bottom} `}${this._t(this._n('dhw_bottom'))}` : '');
+      this._txt('t-dhw-middle', this._has('dhw_middle') ? this._t(this._n('dhw_middle')) : '');
+      // Each value stands at the height of its sensor, so it needs no position word.
+      this._txt('t-dhw-bottom', this._has('dhw_bottom') ? this._t(this._n('dhw_bottom')) : '');
       const tgt = this._n('dhw_target');
       const parts = [];
       if (this._has('dhw_mode')) parts.push(this._modeLabel(dhwMode, this._s('dhw_mode')));
@@ -4271,8 +4270,8 @@ class HeatpumpFlowCard extends HTMLElement {
       this._$('g-buf-bottom').setAttribute('stop-color', this._tankColor(bot));
       // A combined storage may have no sensor in its heating zone: the zone then stays without a value.
       this._txt('t-buf-top', P.combined && !this._has('buffer_top') ? '' : this._t(top));
-      this._txt('t-buf-middle', this._has('buffer_middle') ? `${i.middle} ${this._t(this._n('buffer_middle'))}` : '');
-      this._txt('t-buf-bottom', this._has('buffer_bottom') ? `${i.bottom} ${this._t(this._n('buffer_bottom'))}` : '');
+      this._txt('t-buf-middle', this._has('buffer_middle') ? this._t(this._n('buffer_middle')) : '');
+      this._txt('t-buf-bottom', this._has('buffer_bottom') ? this._t(this._n('buffer_bottom')) : '');
       this._txt('t-buf-mode', this._has('buffer_mode') ? this._modeLabel(bufMode, this._s('buffer_mode')) : '');
     }
 

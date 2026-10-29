@@ -2991,6 +2991,7 @@
     let card = mount({ entities: ents }, hassOf(st())); await wait(20);
     const rods = ['dhw-top', 'dhw-middle', 'dhw-bottom', 'buf-top', 'buf-middle', 'buf-bottom'];
     check(rods.every((id) => q(card, `heater-${id}`)) && !q(card, 'heater-dhw') && !q(card, 'heater-buf'), 'one rod per configured height, no rod for the plain keys');
+    check(['t-dhw-middle', 't-dhw-bottom', 't-buf-middle', 't-buf-bottom'].every((id) => /^\d+(\.\d)? °C$/.test(q(card, id).textContent)), 'the lower values carry no position word, their height tells them apart');
     for (const [rod, label] of [['dhw-middle', 't-dhw-middle'], ['dhw-bottom', 't-dhw-bottom'], ['buf-middle', 't-buf-middle']]) {
       const r = box(card, `heater-${rod}`), l = box(card, label);
       check(mid(r) > l.y && mid(r) < l.y + l.height && l.x + l.width < r.x && l.x > 515, `the ${rod} rod stands at the height of its label, right of it (rod ${mid(r).toFixed(0)} from x ${r.x.toFixed(0)}, label ${l.y.toFixed(0)}–${(l.y + l.height).toFixed(0)}, x ${l.x.toFixed(0)}–${(l.x + l.width).toFixed(0)})`);
@@ -3002,15 +3003,14 @@
     check(lit.join() === 'dhw-bottom,buf-middle', `each rod follows its own entity, a power above 0 W is on (${lit.join()})`);
     check(card._lossIds().extra.join() === 'sensor.rod1,sensor.rod2,sensor.rod3', `every rod in the hot-water tank excludes its run time from the standby loss (${card._lossIds().extra.join()})`);
     card.remove();
-    // Without a rod at its height the label stays centred; the plain key keeps its old place between the middle and the bottom sensor.
+    // The plain key keeps its old place between the middle and the bottom sensor.
     card = mount({ entities: { ...ents, dhw_heater_middle: undefined, dhw_heater_bottom: undefined, dhw_heater: 'sensor.rod3' } }, hassOf(st())); await wait(20);
-    check(q(card, 't-dhw-middle').getAttribute('x') === '580' && q(card, 't-dhw-bottom').getAttribute('x') === '580', 'labels without a rod at their height stay centred');
     const plain = box(card, 'heater-dhw');
     check(mid(plain) > box(card, 't-dhw-middle').y + box(card, 't-dhw-middle').height && mid(plain) < box(card, 't-dhw-bottom').y, 'the plain dhw_heater keeps its place between the middle and the bottom label');
     card.remove();
     // A solar loop enters the right wall at the middle sensor: the middle rod moves below it.
     card = mount({ entities: { ...ents, solar_collector: 'sensor.t1' } }, hassOf(st())); await wait(20);
-    check(box(card, 'heater-dhw-middle').y > 168 && q(card, 't-dhw-middle').getAttribute('x') === '580', `with solar thermal the middle rod moves below the solar loop (${box(card, 'heater-dhw-middle').y.toFixed(0)})`);
+    check(box(card, 'heater-dhw-middle').y > 168, `with solar thermal the middle rod moves below the solar loop (${box(card, 'heater-dhw-middle').y.toFixed(0)})`);
     card.remove();
     // A combined storage with a fresh-water station: the bottom rod moves below the station pipes; the rods of the heating zone count for the loss.
     card = mount({ entities: { ...ents, hc_pump: 'binary_sensor.valve' }, storage: 'combined', dhw_type: 'fresh_water' }, hassOf(st())); await wait(20);
@@ -3115,7 +3115,7 @@
     check(card.shadowRoot.querySelectorAll('#stats .stat').length === 2 && /0\.8 bar/.test(card.shadowRoot.getElementById('stats').textContent), 'pressure values are available as live tiles');
     check([...card.shadowRoot.querySelectorAll('#drawer-body .dsec-title')].some((x) => /Hydraulic/.test(x.textContent)) && /0\.6 bar/.test(card.shadowRoot.getElementById('drawer-body').textContent), 'pressure values are available in details');
     check(!!card.shadowRoot.getElementById('g-dhw-middle') && !!card.shadowRoot.getElementById('g-buf-middle')
-      && /middle 44/.test(card.shadowRoot.getElementById('t-dhw-middle').textContent) && /middle 30/.test(card.shadowRoot.getElementById('t-buf-middle').textContent), 'middle sensors create labelled three-point tank gradients');
+      && /^44/.test(card.shadowRoot.getElementById('t-dhw-middle').textContent) && /^30/.test(card.shadowRoot.getElementById('t-buf-middle').textContent), 'middle sensors create three-point tank gradients and show the bare value at their height');
     card.remove();
 
     const old = setups[1];
