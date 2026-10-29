@@ -1016,6 +1016,8 @@ const HFC_PRESETS = {
   samsung: {
     name: 'Samsung EHS (esphome-samsung-nasa)',
     tested: true,
+    // The EHS Mono drawing also stands for Split installations, whose outdoor unit the integration does not identify (#151).
+    unit_style: 'samsung',
     // The primary water pump (0x4089) belongs to the heat pump (outdoor unit of the Mono, hydro unit of the Split) and runs for hot water, too.
     primary_pump: true,
     auto_circuits: false,

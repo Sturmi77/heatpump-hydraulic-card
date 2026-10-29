@@ -1502,6 +1502,14 @@
     check(o.sd === 1 && o.fans === 1, 'Saunier Duval style draws the GeniaAir unit');
     o = await draw(setups[8], 'heat', { unit_style: 'samsung' });
     check(o.samsung === 1 && o.fans === 1, 'Samsung style draws the EHS Mono unit without requiring a preset');
+    o = await draw(setups.find((s) => s.config.preset === 'samsung'), 'heat');
+    check(o.samsung === 1 && o.ring === 0 && o.fans === 1 && o.ok, `Samsung preset draws the EHS Mono unit (${JSON.stringify(o)})`);
+    // Automatic drawing per preset, as listed in the README table "Outdoor-unit style coverage" (#151). A new preset needs an entry here.
+    const unitOf = { lambda: 'lambda', vicare: 'viessmann', open3e: 'viessmann', vaillant: 'vaillant', ebusd: 'vaillant', emsesp: 'bosch', bosch_buderus_heating: 'bosch',
+      heishamon: 'panasonic', samsung: 'samsung', wolf: 'generic', kronoterm: 'generic', luxtronik: 'generic', stiebel_isg: 'generic' };
+    const unitWrong = Object.keys(HFC_PRESETS).filter((p) => (HFC_PRESETS[p].unit_style || 'generic') !== unitOf[p]);
+    check(!unitWrong.length, `every preset selects the outdoor-unit drawing the README lists (${unitWrong.join(', ') || 'all match'})`);
+    check(Object.values(unitOf).every((s) => HFC_UNIT_STYLES.includes(s)), 'the expected drawings are valid unit_style values');
     o = await draw(setups[1], 'defrost');
     check(o.snows === 1, 'one snowflake on the Lambda unit');
     o = await draw(setups[3], 'heat', { unit_style: 'lambda' });
