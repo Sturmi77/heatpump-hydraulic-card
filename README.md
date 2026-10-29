@@ -22,15 +22,15 @@ It shows electricity flowing from **PV, battery and grid** into the heat pump, t
 |---|---|---|---|---|
 | `lambda` | **Lambda** (EU-L series) | [lambda_heat_pumps](https://github.com/GuidoJeuken-6512/lambda_heat_pumps) (HACS) | Lambda EU-L | tested on a real installation |
 | `heishamon` | **Panasonic** Aquarea (H, J, K, L generation; monoblock, split, all-in-one) | [HeishaMon](https://github.com/heishamon/HeishaMon) + [heishamon-homeassistant](https://github.com/kamaradclimber/heishamon-homeassistant) (HACS) | Panasonic Aquarea | confirmed on a real installation |
-| `kronoterm` | **Kronoterm** (ADAPT, ETERA, VERSI, WPLV …) | [Kronoterm](https://github.com/Favio25/Kronoterm-homeassistant) (HACS), Cloud API or Modbus | generic (no Kronoterm drawing yet) | Cloud API confirmed on a real installation; Modbus from the integration source |
+| `kronoterm` | **Kronoterm** (ADAPT, ETERA, VERSI, WPLV …) | [Kronoterm](https://github.com/Favio25/Kronoterm-homeassistant) (HACS), Cloud API or Modbus | Kronoterm ADAPT (air units) | Cloud API confirmed on a real installation; Modbus from the integration source |
 | `vicare` | **Viessmann** (Vitocal) | [ViCare](https://www.home-assistant.io/integrations/vicare/) (core) | Viessmann Vitocal 250-A | untested |
 | `open3e` | **Viessmann** (Vitocal) | [Open3E](https://github.com/MojoOli/open3e-ha) (HACS, MQTT) | Viessmann Vitocal 250-A | untested |
 | `vaillant` | **Vaillant** (aroTHERM, aroTHERM plus), **Saunier Duval**, **Bulex**, **Glow-worm**, **DemirDöküm** | [myPyllant](https://github.com/signalkraft/mypyllant-component) (HACS) | Vaillant aroTHERM plus by default; Saunier Duval GeniaAir Mono by manual override | untested |
 | `emsesp` | **Bosch**, **Buderus**, **Junkers**, **Nefit**, **Worcester**, **Sieger**, **elm.leblanc**, **iVT** – EMS/EMS+ heat pumps such as Buderus Logatherm WLW, Bosch Compress, Nefit EnviLine | [EMS-ESP](https://github.com/emsesp/EMS-ESP32) gateway (MQTT discovery) | Bosch Compress 5800i/6800i AW | untested |
 | `bosch_buderus_heating` | **Bosch**, **Buderus** heat pumps in the Home Comfort app (PointT cloud, for example with an MX400 gateway) | [Bosch/Buderus Home Comfort](https://github.com/SoftwareSchmied/ha-bosch-buderus-heating) (HACS, `bosch_buderus_heating`) | Bosch Compress 5800i/6800i AW | untested (mapping checked against a manual configuration on one installation) |
 | `ebusd` | **Vaillant** aroTHERM / aroTHERM plus (HMU) with a VWZ hydraulic station and sensoCOMFORT / multiMATIC controller | [ebusd](https://github.com/john30/ebusd) with Home Assistant MQTT discovery | Vaillant aroTHERM plus | mapped from and checked live on one real installation (aroTHERM plus cascade, two circuits) |
-| `wolf` | **Wolf** air/water heat pumps (CHA monoblock) with a WOLF Link gateway | [Wolf SmartSet Service](https://www.home-assistant.io/integrations/wolflink/) (core, `wolflink`) or [Wolf SmartSet (read/write)](https://github.com/tibuntu/homeassistant-wolf-smartset) (HACS, `wolf_smartset`) | generic fan | `wolf_smartset` confirmed on a real installation (CHA); `wolflink` from the entity states of the same installation |
-| `luxtronik` | **Alpha Innotec**, **Novelan**, **Roth**, **Siemens**, **Elco**, **Buderus**, **Nibe**, **Wolf** heat pumps with a Luxtronik controller | [Luxtronik](https://github.com/BenPru/luxtronik) (HACS, `luxtronik2`) | generic fan, loop symbol with `source_type` | untested |
+| `wolf` | **Wolf** air/water heat pumps (CHA monoblock) with a WOLF Link gateway | [Wolf SmartSet Service](https://www.home-assistant.io/integrations/wolflink/) (core, `wolflink`) or [Wolf SmartSet (read/write)](https://github.com/tibuntu/homeassistant-wolf-smartset) (HACS, `wolf_smartset`) | Wolf CHA | `wolf_smartset` confirmed on a real installation (CHA); `wolflink` from the entity states of the same installation |
+| `luxtronik` | **Alpha Innotec**, **Novelan**, **Roth**, **Siemens**, **Elco**, **Buderus**, **Nibe**, **Wolf** heat pumps with a Luxtronik controller | [Luxtronik](https://github.com/BenPru/luxtronik) (HACS, `luxtronik2`) | Alpha Innotec Hybrox (air), loop symbol with `source_type` | untested |
 | `stiebel_isg` | **Stiebel Eltron** (WPM 3, WPM 3i, WPMsystem, LWZ) and **Tecalor** heat pumps with an ISG | [Stiebel Eltron ISG](https://github.com/pail23/stiebel_eltron_isg_component) (HACS, `stiebel_eltron_isg`) | generic fan, loop symbol with `source_type` | untested |
 | `samsung` | **Samsung** EHS (Mono, Split, TDM) on the NASA bus | [esphome-samsung-nasa](https://github.com/Beormund/esphome-samsung-nasa) (ESPHome) | Samsung EHS Mono HT Quiet | tested on a real installation |
 
@@ -65,7 +65,7 @@ The completed release history and the prioritized post-0.14.0 backlog are mainta
 
 - **Power sources:** PV / battery / grid → heat pump, animated whenever more than 10 W flow. Taken automatically from your **Energy dashboard** (its power sensors), or from your own sensors.
 - **Heat pump:** the fan spins while the compressor runs, faster at higher compressor modulation (or higher power, when the integration has no modulation value); the circuit pumps and the flow lines follow the modulation as well. Shows mode and sub-state, electrical power → heat output, and live COP. Defrost is shown with a snowflake, restrained vapour and an icy flow line. The frame of the block is orange while heating, red for hot water and blue while defrosting or cooling, grey in standby. A long status line wraps into mode and status. A backup / inline heater (`heater`) glows inside the unit while it runs. With a fan speed entity (`fan_speed`) the fan follows its own speed and runs on after the compressor stops. The heat pump's own **primary pump** (`primary_pump`) is drawn on the flow pipe next to the block, turning with the flow rate; the flow dashes of the pipes move in proportion to the flow rate.
-- **Unit drawing:** the heat pump block can show simplified, logo-free outdoor units for Lambda, Viessmann, Vaillant, Bosch/Buderus, Panasonic, Saunier Duval and Samsung. Presets select a style where the integration identifies the product family; every style is also available manually. The fan spins, the blades turn blue while running, and each fan gets its own snowflake while defrosting.
+- **Unit drawing:** the heat pump block can show simplified, logo-free outdoor units for Lambda, Viessmann, Vaillant, Bosch/Buderus, Panasonic, Saunier Duval, Samsung, Wolf, Kronoterm and Alpha Innotec. Presets select a style where the integration identifies the product family; every style is also available manually. The fan spins, the blades turn blue while running, and each fan gets its own snowflake while defrosting.
 - **Heat source:** air (the outdoor temperature is shown under the unit; default), **ground** with a brine loop or **groundwater** with two wells (`source_type`), with source inlet and outlet temperatures and the source flow rate. Optional brine and heating-circuit pressures are normalized to bar and can show warning/critical thresholds with text symbols as well as colour.
 - **Diverter valve:** shows DHW or heating; the active circuit is animated.
 - **Tanks:** DHW tank and buffer with a top/bottom temperature gradient, optionally refined by a middle sensor (`dhw_middle`, `buffer_middle`; blue = cold, then cyan and orange, red = hot), target, mode, a heat-exchanger coil while charging, and the circulation pump. **Heater rods** (`dhw_heater`, `buffer_heater`) glow orange while on, red at stage 2 or higher. A **series buffer** (`series_buffer: true`) sits in the return of the heating circuits with a 3-way bypass valve (`bypass_valve`, or the defrost signal) so that the heat pump defrosts from the buffer water; without a bypass valve set `series_bypass: false`. A **combined storage** (`storage: combined`) is drawn as one tall tank with the hot-water zone on top and the heating zone below; the six storage sensors are heights in it. `dhw_type` draws a **fresh-water station** (beside the combined storage, or on a parallel buffer instead of a hot-water tank) or a **tank in tank**.
@@ -108,7 +108,7 @@ The completed release history and the prioritized post-0.14.0 backlog are mainta
 
 | `unit_style` | Schematic based on | Brands / families covered | Automatic selection |
 |---|---|---|---|
-| `generic` | Neutral fan symbol | Any air-source heat pump | Fallback without a known style, also `preset: wolf`, `preset: luxtronik`, `preset: stiebel_isg` and `preset: kronoterm`; ground and groundwater sources show their loop symbol instead |
+| `generic` | Neutral fan symbol | Any air-source heat pump | Fallback without a known style, also `preset: stiebel_isg`; ground and groundwater sources show their loop symbol instead |
 | `lambda` | Lambda EU-L | Lambda | `preset: lambda` |
 | `viessmann` | Viessmann Vitocal 250-A | Viessmann Vitocal | `preset: vicare`, `preset: open3e` |
 | `vaillant` | Vaillant aroTHERM plus | Vaillant; default fallback for the shared myPyllant brands | `preset: vaillant` |
@@ -116,6 +116,9 @@ The completed release history and the prioritized post-0.14.0 backlog are mainta
 | `bosch` | Bosch Compress 5800i/6800i AW | Bosch, Buderus, Junkers, Nefit, Worcester, Sieger, elm.leblanc and iVT through EMS-ESP; Bosch and Buderus through Home Comfort | `preset: emsesp`, `preset: bosch_buderus_heating` |
 | `panasonic` | Panasonic Aquarea | Panasonic Aquarea | `preset: heishamon` |
 | `samsung` | Samsung EHS Mono HT Quiet | Samsung EHS Mono / Mono HT Quiet | `preset: samsung` |
+| `wolf` | Wolf CHA monoblock | Wolf CHA-07/10 and CHA-16/20 (same proportions) | `preset: wolf` |
+| `kronoterm` | Kronoterm ADAPT | Kronoterm ADAPT and ADAPT 2 air/water units (louvred front); brine and water units keep the loop symbol | `preset: kronoterm` |
+| `alpha_innotec` | Alpha Innotec Hybrox | Alpha Innotec air units with a Luxtronik controller; Novelan, Roth, Siemens, Elco and the other Luxtronik brands share the controller, not the casing | `preset: luxtronik` (air units) |
 
 These are deliberately simplified original drawings without manufacturer logos. Related brands can share an integration even when their enclosures differ; set `unit_style` explicitly whenever the automatic family drawing does not match the installed unit.
 
@@ -141,7 +144,7 @@ If the standard HACS entry is not available in your installation, open HACS → 
 
 The repository was called `heatpump-flow-card` until version 0.9.3. If you installed the card under that name, HACS keeps its old folder `/config/www/community/heatpump-flow-card/` and does **not** change the dashboard resource by itself. The new files then land next to the old ones, while the resource still loads the old file. You keep running an old version, and the card editor and new options are missing. Do the following once:
 
-1. Open **HACS**, find **Heat Pump Hydraulic Card** (it is listed under the new name, with an old version number) and choose ⋮ → **Remove**. HACS deletes the old folder.
+1. Open **HACS**, find **Heat Pump Hydraulic Card** (it is listed under the new name, with an old version number) and choose ⋮ → **Remove**. Remove does **not** reliably delete the old folder: check whether `/config/www/community/heatpump-flow-card/` still exists (File editor, Studio Code Server, Samba or SSH) and delete it if it does.
 2. Open *Settings → Dashboards → ⋮ → Resources*. Delete every entry whose address contains `heatpump-flow-card`. If you manage resources in YAML, remove the line there.
 3. In HACS, search for **Heat Pump Hydraulic Card** again, select **Download** and keep the newest version selected.
 4. Check *Settings → Dashboards → ⋮ → Resources*: there must be exactly one entry for the card, `/hacsfiles/heatpump-hydraulic-card/heatpump-hydraulic-card.js`, type **JavaScript module**. If HACS did not add it, add it yourself.
@@ -472,7 +475,7 @@ For heat pumps with a Luxtronik controller and the [Luxtronik](https://github.co
 - Nibe
 - Wolf Heiztechnik
 
-The controller sits in air, brine and water heat pumps alike, so the card draws the generic fan for air units and the ground or water loop for `source_type: brine` or `water`; there is no manufacturer-specific outdoor-unit drawing yet.
+The controller sits in air, brine and water heat pumps alike. For air units the card draws the Alpha Innotec Hybrox; the other brands share the controller but not the casing, so set `unit_style: generic` (or another style) if the drawing does not match your unit. Brine and water units get the ground or water loop with `source_type: brine` or `water`.
  Entities are found through the entity registry (platform + translation key), so entity ids and the HA language don't matter. The controller does not tell the heat source, so set `source_type` for brine and water heat pumps. Details and the full mapping: [docs/presets/luxtronik.md](docs/presets/luxtronik.md).
 
 What you get:
@@ -574,7 +577,7 @@ Everything can be set in the **UI editor**. With a preset, the editor shows whet
 | `source_spread` | Show `source_in − source_out` on a running ground/groundwater loop (default `true`). |
 | `brine_pressure_min`, `brine_pressure_crit`, `brine_pressure_max` | Optional brine-pressure thresholds in bar. Below `crit` is critical; below `min` or above `max` is a warning. |
 | `hc_pressure_min`, `hc_pressure_crit`, `hc_pressure_max` | Optional heating-pressure thresholds in bar, with the same warning/critical logic. |
-| `unit_style` | Drawing of the outdoor unit: `auto` (default, uses the preset style), `generic`, `lambda`, `viessmann`, `vaillant`, `saunier`, `bosch`, `panasonic` or `samsung`. Ground and groundwater sources keep their loop symbol. See [Outdoor-unit style coverage](#outdoor-unit-style-coverage). |
+| `unit_style` | Drawing of the outdoor unit: `auto` (default, uses the preset style), `generic`, `lambda`, `viessmann`, `vaillant`, `saunier`, `bosch`, `panasonic`, `samsung`, `wolf`, `kronoterm` or `alpha_innotec`. Ground and groundwater sources keep their loop symbol. See [Outdoor-unit style coverage](#outdoor-unit-style-coverage). |
 | `unit_size` | Vaillant aroTHERM plus class: `small` (3.5 and 5.5 kW, one fan, low), `medium` (7.5 kW, one fan, default) or `large` (10.5 and 12.5 kW, two fans). |
 | `timeline` | `true` shows a strip with the operating mode of the last hours under the schematic (needs the `mode` entity, or the `compressor` and optionally the `valve`, and the Home Assistant history). |
 | `timeline_hours` | Length of the timeline in hours, 3 to 72 (default 24). |

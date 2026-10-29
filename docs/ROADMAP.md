@@ -22,7 +22,7 @@ The immediate work is evidence gathering rather than another broad feature relea
 
 ## Next low-risk work
 
-1. Treat the remaining brand drawings in [#5](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/5) as one brand per change, each with its own visual and browser checks and original references. Open candidates: the Luxtronik brands (Alpha Innotec, Novelan, Roth, Siemens, Elco, Nibe), Kronoterm and Wolf; air units only, brine and water units keep the loop symbol.
+1. Treat the remaining brand drawings in [#5](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/5) as one brand per change, each with its own visual and browser checks and original references. Open candidates: Stiebel Eltron, and the other Luxtronik brands (Novelan, Roth, Siemens, Elco, Nibe) if their units differ enough (Wolf CHA done in #156, Kronoterm ADAPT in #157, Alpha Innotec Hybrox in #158); air units only, brine and water units keep the loop symbol.
 2. Map the cut-out counters of [#35](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/35) in presets only from verified integration or installation data.
 
 Multiple entities per key [#23](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/23) remains a separate later sprint because it changes entity resolution, calculations and the editor contract. Recorder- and time-window-based features stay outside this small-work track unless a real data set backs them; 0.13.0 added two (the PV surplus share and the DHW standby loss), each with conservative exclusion rules and documented limits.
