@@ -1,6 +1,6 @@
 # Stiebel Eltron ISG preset (WPM 3, WPM 3i, WPMsystem, LWZ; Tecalor)
 
-Source: the [Stiebel Eltron ISG integration](https://github.com/pail23/stiebel_eltron_isg_component) (HACS, domain `stiebel_eltron_isg`, MIT), release 2026.9, which talks Modbus TCP to the Internet Service Gateway. The preset is **not tested on an installation**: it is derived from the integration source (`const.py`, `sensor.py`, `binary_sensor.py`, `select.py`, `number.py`, `strings.json`) and from the entity list in [#69](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/69). The core Home Assistant integration `stiebel_eltron` (a climate entity only) is not covered.
+Source: the [Stiebel Eltron ISG integration](https://github.com/pail23/stiebel_eltron_isg_component) (HACS, domain `stiebel_eltron_isg`, MIT), release 2026.9, which talks Modbus TCP to the Internet Service Gateway. The preset is derived from the integration source (`const.py`, `sensor.py`, `binary_sensor.py`, `select.py`, `number.py`, `strings.json`) and from the entity list in [#69](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/69). It is **confirmed on a WPMsystem** (diagnostic report and screenshot with card 0.13.1 in #69, see Evidence); WPM 3, WPM 3i and the LWZ family follow the source only. The core Home Assistant integration `stiebel_eltron` (a climate entity only) is not covered.
 
 The integration sets the translation key of every entity to its key (`flow_temperature_wp1`, `compressor_on` …), so the preset finds entities through the entity registry (platform `stiebel_eltron_isg`). Entity ids and the Home Assistant language do not matter: a French Home Assistant calls the heat pump flow `sensor.stiebel_eltron_wpmsystem_temperature_de_depart_pac1`, and the preset finds it all the same.
 
@@ -39,15 +39,21 @@ The integration creates the sensors of the whole controller family, also for har
 - Circuits 4 and 5 (the integration disables them by default) and the second and further heat pumps of a cascade.
 - `hc_curve_offset`: the heating curve numbers of the integration are the curve rise (slope), not a shift.
 
-## Open questions for a real installation
+## Answered on the WPMsystem in #69
 
-- Is the hot water flag (`is_heating_water`) on exactly while the diverter valve points to the tank? A WPM run for the buffer after a hot water run would show hot water for too long if it stays on.
-- Which flow temperature belongs to the heat pump on a WPMsystem with one heat pump: `flow_temperature_wp1` or the system flow `flow_temperature`? The preset takes the first one that reports.
-- Do the optional sensors really read `unavailable` where the hardware is missing, or a fixed value? The integration marks entities unavailable for the controller's "no value" marker; a buffer or solar collector that reads a number without a sensor would be drawn.
+- The heat pump flow is `flow_temperature_wp1` (31.6 °C, return `return_temperature_wp1` 27.9 °C, buffer 26.6 °C, circuit 1 26.2 °C): the preset's first choice is the right one.
+- The optional sensors of missing hardware read `unavailable`: solar collector, heat source, circuits 2 and 3 stayed unmapped, the installed buffer was drawn.
+- During a heating run (compressor on) the hot water flag was off, so the valve showed heating.
+- Without a heat output sensor the card estimated about 2.5 kW from 576 l/h and a 3.7 K spread; with the inverter power of 0.5 kW the live COP read about 5.
+
+## Open questions
+
+- Does the hot water flag (`is_heating_water`) switch off as soon as the diverter valve returns to heating? A report taken during and right after a hot water run would answer it.
 - Is `source_temperature` the heat source inlet on brine heat pumps? The card shows it as the source inlet.
-- LWZ: do `pump_on_hk1` and the room values of the circuit match the circuit drawing?
+- LWZ, WPM 3 and WPM 3i: no report yet. For the LWZ: do `pump_on_hk1` and the room values of the circuit match the circuit drawing?
 
 ## Evidence
 
 - Report in [#69](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/69): a WPMsystem (entity prefix `stiebel_eltron_wpmsystem`) in a French Home Assistant, card 0.11.0, preset not detected. The entity ids in it are the French names of the integration (its `translations/fr.json`): "Température de départ PAC1" is `flow_temperature_wp1`, "Température de retour PAC1" `return_temperature_wp1`, "Débit volumique PAC1" `volume_stream_wp1`, "Compresseur" `compressor_on`, "Dégivrage évaporateur" `evaporator_defrost`, "Pompe circuit chauffage 1" `heating_circuit_1_pump`, "Température actuelle tampon" `actual_temperature_buffer`, "Température cible CC 1" `target_temperature_hk1`, "Chaleur produite chauffage" `produced_heating` and so on. The reporter mapped heat pump 1 flow, return and flow rate by hand; the preset takes the same sensors. The reporter's mapping also used the heat quantity counter as `heat`, which the preset does not, because a counter is not a power.
+- Second report in #69 (29.10.2026): the same WPMsystem with card 0.13.1 and `preset: stiebel_isg`, detected without a prefix, layout compact. Mapped from the preset alone: compressor, defrost, inverter power, heat pump 1 flow, return and flow rate, outdoor, hot water flag as valve, NHZ stages, hot water actual and target, circulation pump, buffer, circuit 1 flow, target and pump, heating pressure, room actual and target, the program select, hot gas, high and low pressure, the fault flag and both quick controls. Unmapped as designed: `mode`, `status`, `heat` (no such entities), heat source, solar, circuits 2 and 3 (not installed), `hours` (two separate runtimes), `starts_total` (LWZ only). The screenshot shows the drawing with buffer, hot water tank and one underfloor circuit as expected.
 - Integration source: the files listed above, release 2026.9; the comments there document the register scaling (inverter power 0.1 kW verified against the ISG display on a WPMsystem) and the day-and-total behaviour of the energy registers.
