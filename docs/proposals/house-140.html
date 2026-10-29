@@ -1,0 +1,73 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  body { margin: 0; background: #f3f4f6; font-family: system-ui, sans-serif; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 14px; width: 1260px; }
+  .panel { background: #fff; border-radius: 14px; padding: 10px 12px 6px; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  h2 { font-size: 17px; margin: 2px 4px 2px; } p { font-size: 12.5px; margin: 0 4px 6px; color: #475569; }
+  svg { width: 100%; height: auto; display: block; }
+  text { font-family: system-ui, sans-serif; fill: #1f2937; }
+</style></head>
+<body><div class="grid" id="g"></div>
+<script>
+const flow = '#f97316', ret = '#3b82f6', muted = '#94a3b8';
+const pipe = (d, c, w = 9) => `<path d="${d}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" opacity=".85"/>`;
+const t = (x, y, s, size = 15, w = 400, anchor = 'middle', fill = '#1f2937') => `<text x="${x}" y="${y}" font-size="${size}" font-weight="${w}" text-anchor="${anchor}" fill="${fill}">${s}</text>`;
+const floorHeat = (y) => pipe(`M800 ${y} H935 Q955 ${y} 955 ${y + 20} Q955 ${y + 40} 935 ${y + 40} H825 Q805 ${y + 40} 805 ${y + 60} Q805 ${y + 80} 825 ${y + 80} H935 Q955 ${y + 80} 955 ${y + 100} Q955 ${y + 120} 935 ${y + 120} H800`, '#e879f9', 8);
+const pump = (x, y) => `<circle cx="${x}" cy="${y}" r="15" fill="#fff" stroke="${muted}" stroke-width="3"/><path d="M${x} ${y - 9} l5 9 h-10z" fill="${flow}"/>`;
+// The part of the card that stays the same in every variant: heat pump, valve, tanks, two circuits.
+const base = ({ status1, status2, pvOnLeft = true } = {}) => `
+  ${pvOnLeft ? `<circle cx="70" cy="45" r="28" fill="#fff7d6" stroke="#eab308" stroke-width="3"/>${t(70, 51, 'PV', 15, 700)}
+  <circle cx="270" cy="45" r="28" fill="#eef2ff" stroke="${muted}" stroke-width="3"/>${t(270, 51, 'Grid', 13, 700)}
+  ${pipe('M70 73 V118 Q70 140 92 140 H148 Q170 140 170 162 V190', '#eab308', 5)}${pipe('M270 73 V118 Q270 140 248 140 H192 Q170 140 170 162 V190', muted, 5)}` : ''}
+  <rect x="50" y="190" width="240" height="235" rx="20" fill="#f1f5f9" stroke="${flow}" stroke-width="3"/>
+  ${t(170, 220, 'Heat pump', 17, 700)}<circle cx="170" cy="288" r="45" fill="#fff" stroke="#cbd5e1" stroke-width="3"/>${t(170, 372, 'Heating', 15, 700)}
+  ${pipe('M290 250 H402', flow)}${pipe('M420 268 V338 Q420 360 442 360 H520', flow)}${pipe('M420 232 V102 Q420 80 442 80 H520', '#fed7aa')}
+  ${pipe('M520 215 H400 Q380 215 380 235 V380', '#bfdbfe')}${pipe('M520 495 H400 Q380 495 380 475 V380 H290', ret)}
+  <circle cx="420" cy="250" r="18" fill="#fff" stroke="${muted}" stroke-width="3"/>
+  <rect x="520" y="40" width="120" height="200" rx="26" fill="url(#gd)"/>${t(580, 30, 'Hot water', 16, 700)}${t(580, 118, '49 °C', 26, 800, 'middle', '#fff')}
+  <rect x="520" y="320" width="120" height="200" rx="26" fill="url(#gb)"/>${t(580, 310, 'Buffer', 16, 700)}${t(580, 398, '34 °C', 26, 800, 'middle', '#fff')}
+  ${pipe('M640 360 H800', flow)}${pipe('M800 480 Q785 480 785 490 Q785 495 775 495 H640', ret)}${floorHeat(360)}${pump(720, 360)}
+  ${pipe('M660 360 V610 H800', flow)}${pipe('M800 730 Q785 730 785 740 Q785 745 775 745 H676 V495', ret)}${floorHeat(610)}${pump(720, 610)}
+  ${status1 ?? t(880, 524, 'running · Room 21.2 °C', 14, 400, 'middle', '#64748b')}
+  ${status2 ?? t(880, 774, 'running · Room 20.6 °C', 14, 400, 'middle', '#64748b')}`;
+const defs = `<defs><linearGradient id="gd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ef4444"/><stop offset="1" stop-color="#f97316"/></linearGradient>
+  <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f97316"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs>`;
+const svg = (body, h = 810) => `<svg viewBox="0 0 1000 ${h}">${defs}${body}</svg>`;
+const dot = (x, y, c) => `<circle cx="${x}" cy="${y}" r="7" fill="${c}"/>`;
+const collector = (x, y, a) => `<g transform="translate(${x} ${y}) rotate(${a})"><rect x="0" y="-22" width="84" height="22" rx="3" fill="#fde68a" stroke="#b45309" stroke-width="2"/><path d="M21 -22 V0 M42 -22 V0 M63 -22 V0" stroke="#b45309" stroke-width="1.5"/></g>`;
+const pvPanel = (x, y, a) => `<g transform="translate(${x} ${y}) rotate(${a})"><rect x="0" y="-22" width="84" height="22" rx="3" fill="#1e3a8a" stroke="#93c5fd" stroke-width="2"/><path d="M21 -22 V0 M42 -22 V0 M63 -22 V0 M0 -11 H84" stroke="#93c5fd" stroke-width="1.2"/></g>`;
+
+const variants = [
+  ['Today (0.14.0)', 'House top right with the room of circuit 1 only; circuit rooms repeat in the status lines; PV and grid top left.',
+    svg(`${base({ status1: t(880, 280, '', 1) })}
+      <path d="M720 130 L830 50 L940 130 V240 H720 Z" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      ${t(830, 118, 'Rooms', 17, 700)}${t(830, 172, '21.2 °C', 26, 800)}${t(830, 202, 'Target 21.0 °C', 14)}
+      ${t(880, 524, 'running · Room 21.2 °C', 14, 400, 'middle', '#64748b')}`)],
+  ['A · Room overview in the house (same place)', 'One row per circuit with room, target and a comfort dot (below, on, above target); outdoor beside the house. Status lines keep only the mode.',
+    svg(`${base({ status1: t(880, 524, 'running', 14, 400, 'middle', '#64748b'), status2: t(880, 774, 'running', 14, 400, 'middle', '#64748b') })}
+      <path d="M705 110 L835 30 L965 110 V262 H705 Z" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      ${t(835, 96, 'Rooms', 17, 700)}
+      <line x1="720" y1="178" x2="950" y2="178" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="5 4"/>
+      ${dot(728, 144, '#22c55e')}${t(742, 140, 'Ground floor', 13, 600, 'start')}${t(950, 150, '21.2 °C', 22, 800, 'end')}${t(742, 160, 'target 21.0', 12, 400, 'start', '#64748b')}
+      ${dot(728, 214, '#3b82f6')}${t(742, 210, 'Upstairs', 13, 600, 'start')}${t(950, 220, '20.6 °C', 22, 800, 'end')}${t(742, 230, 'target 21.5', 12, 400, 'start', '#64748b')}
+      ${t(985, 285, 'Outdoor 3.0 °C', 13, 400, 'end', '#64748b')}`)],
+  ['B · House around the circuits', 'Each circuit is a floor of the house with its room temperature; the roof carries solar thermal (and optionally PV panels). The top right is free.',
+    svg(`${base({ status1: t(880, 524, 'running', 14, 400, 'middle', '#64748b'), status2: t(880, 774, 'running', 14, 400, 'middle', '#64748b') })}
+      <path d="M690 300 L845 175 L1000 300" fill="none" stroke="#94a3b8" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M700 300 V800 H990 V300" fill="none" stroke="#94a3b8" stroke-width="4"/>
+      <line x1="700" y1="555" x2="990" y2="555" stroke="#94a3b8" stroke-width="3"/>
+      ${collector(735, 286, -39)}${pvPanel(858, 214, 39)}
+      ${t(845, 278, '', 1)}
+      ${t(985, 330, 'Ground floor', 15, 700, 'end')}${t(985, 352, '21.2 °C · target 21.0', 13, 400, 'end', '#475569')}
+      ${t(985, 582, 'Upstairs', 15, 700, 'end')}${t(985, 604, '20.6 °C · target 21.5', 13, 400, 'end', '#475569')}
+      ${t(985, 160, 'Outdoor 3.0 °C', 13, 400, 'end', '#64748b')}`)],
+  ['C · No house: room strip', 'Rooms and outdoor as a compact strip at the top right; the circuits keep their room in the status line. Least drawing, most space.',
+    svg(`${base({})}
+      <rect x="690" y="40" width="300" height="44" rx="22" fill="#f1f5f9" stroke="#cbd5e1"/>${dot(712, 62, '#22c55e')}${t(726, 68, 'Ground floor 21.2 °C', 15, 600, 'start')}
+      <rect x="690" y="94" width="300" height="44" rx="22" fill="#f1f5f9" stroke="#cbd5e1"/>${dot(712, 116, '#3b82f6')}${t(726, 122, 'Upstairs 20.6 °C', 15, 600, 'start')}
+      <rect x="690" y="148" width="300" height="44" rx="22" fill="#fff" stroke="#e2e8f0"/>${t(712, 176, 'Outdoor 3.0 °C', 15, 400, 'start', '#475569')}`)],
+];
+document.getElementById('g').innerHTML = variants.map(([h, p, s]) => `<div class="panel"><h2>${h}</h2><p>${p}</p>${s}</div>`).join('');
+document.title = 'READY';
+</script></body></html>
