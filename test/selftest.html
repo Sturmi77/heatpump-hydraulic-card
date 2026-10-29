@@ -359,8 +359,11 @@
     for (let n = 0; n < 5; n++) a.hass = { ...hass };
     await wait(5);
     check(requests === 1, 'PointT ordinary polling does not reload the registry');
+    const builtCard = a.shadowRoot.querySelector('ha-card');
     a.hass = { ...hass, entities: { ...compact } }; await wait(20);
     check(requests === 2, 'PointT a compact registry change refreshes stable identities');
+    check(a.shadowRoot.querySelector('ha-card') === builtCard && !!a._e.flow,
+      'PointT a reloaded registry with the same entries keeps the card as it is (#164)');
     const separate = mount(cfg, { ...hass, connection: {} }); await wait(20);
     check(requests === 3, 'PointT registry cache is isolated between connections');
     a.remove(); b.remove(); editor.remove(); separate.remove();
@@ -407,6 +410,14 @@
       'PointT value updates with thousands of unrelated states do not enumerate states or rescan the registry');
     check(card.shadowRoot.getElementById('ctl-0') === originalControl && card._hass.states[flowId].state === '38',
       'PointT value updates preserve existing controls while displaying the latest state');
+
+    // HA sends a new registry object after a change to any entity; with the same PointT entities nothing is rebuilt, so styles
+    // that card-mod put into the shadow root (here a marker) survive (#164)
+    const marker = document.createElement('style'); marker.id = 'card-mod-marker'; card.shadowRoot.appendChild(marker);
+    const sameRegistry = { ...hass, states: { ...baseStates }, entities: { ...fixture.registry, 'sensor.other_integration': { platform: 'other' } } };
+    card.hass = sameRegistry; editor.hass = sameRegistry; await wait(20);
+    check(card.shadowRoot.getElementById('ctl-0') === originalControl && card.shadowRoot.getElementById('card-mod-marker'),
+      'a new registry object with the same PointT entities does not rebuild the card (card-mod styles survive)');
 
     const renamedId = 'sensor.renamed_pointt_flow';
     const renamedRegistry = { ...fixture.registry, [renamedId]: fixture.registry[flowId] }; delete renamedRegistry[flowId];
