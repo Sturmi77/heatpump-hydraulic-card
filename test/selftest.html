@@ -1632,7 +1632,27 @@
     check(o.lam === 0 && o.ok, 'ground sources keep their loop symbol');
     const keysOf = (n) => (n.schema ? n.schema.flatMap(keysOf) : [n.name]);
     const names = (cfg) => C._formSchema(cfg).schema.flatMap(keysOf);
-    check(names({}).includes('unit_style') && !names({ preset: 'lambda' }).includes('unit_size') && names({ preset: 'vaillant' }).includes('unit_size') && names({ unit_style: 'vaillant' }).includes('unit_size') && !names({ preset: 'vaillant', unit_style: 'panasonic' }).includes('unit_size'), 'editor offers unit_style, and unit_size only for Vaillant');
+    check(names({}).includes('unit_style') && !names({ preset: 'lambda' }).includes('unit_size') && names({ preset: 'vaillant' }).includes('unit_size') && names({ unit_style: 'vaillant' }).includes('unit_size') && !names({ preset: 'vaillant', unit_style: 'bosch' }).includes('unit_size'), 'editor offers unit_style, and unit_size for Vaillant');
+
+    // Panasonic with two fans for the large units (#176): from the HeishaMon model, from unit_size, and in the editor
+    const pana = setups.find((s) => s.config.preset === 'heishamon');
+    const withModel = (model) => ({ ...pana, states: (scen) => ({ ...pana.states(scen), 'sensor.panasonic_heat_pump_main_heat_pump_model': model }) });
+    o = await draw(withModel('WH-MXC09J3E8 9 3ph T-CAP'), 'heat');
+    check(o.pana === 1 && o.fans === 2 && o.fan2on === true && o.ok, `a T-CAP model draws the tall unit with two fans that both spin (${JSON.stringify(o)})`);
+    o = await draw(withModel('WH-MXC09J3E8 9 3ph T-CAP'), 'defrost');
+    check(o.snows === 2, 'two snowflakes on the two-fan Panasonic unit');
+    o = await draw(withModel('WH-MDC05J3E5 5 1ph HP'), 'heat');
+    check(o.pana === 1 && o.fans === 1, 'a 5 kW J-generation monobloc keeps one fan');
+    o = await draw(withModel('WH-MXC09J3E8 9 3ph T-CAP'), 'heat', { unit_size: 'medium' });
+    check(o.fans === 1, 'unit_size medium wins over the model');
+    o = await draw(setups[7], 'heat', { unit_style: 'panasonic', unit_size: 'large' });
+    check(o.pana === 1 && o.fans === 2, 'unit_style panasonic with unit_size large draws two fans without a preset');
+    const size = (model) => HFC_PRESETS.heishamon.unit_size({ model: 'sensor.m' }, { states: { 'sensor.m': { state: model } } });
+    check(size('WH-SDC09H3E8 9 3ph HP') === 'large' && size('WH-ADC0916H9E8 12 3ph T-CAP - All-In-One') === 'large' && size('WH-MDC09J3E5 9 1ph HP') === 'medium'
+      && size('Unknown model for HeishaMon') === undefined, 'the model text gives the size: H generation from 9 kW, T-CAP and from 12 kW two fans; unknown leaves it to the default');
+    const sizeOptions = (cfg) => C._formSchema(cfg).schema.flatMap((n) => (n.schema ? n.schema.flatMap((x) => (x.schema ? x.schema : [x])) : [n])).find((f) => f.name === 'unit_size')?.selector.select.options.map((x) => x.value).join();
+    check(sizeOptions({ preset: 'heishamon' }) === 'medium,large' && sizeOptions({ unit_style: 'panasonic' }) === 'medium,large' && sizeOptions({ preset: 'vaillant' }) === 'small,medium,large',
+      'the editor offers one or two fans for Panasonic and the three classes for Vaillant');
   }
 
   // Editor labels say what a field expects (#180): the three flow rates name their unit and their circuit, temperatures °C
