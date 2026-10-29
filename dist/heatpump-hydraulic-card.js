@@ -2105,6 +2105,8 @@ class HeatpumpFlowCard extends HTMLElement {
       '',
       `Card version: ${HFC_VERSION}`,
       `Loaded from: ${clean(HFC_SCRIPT_URL.replace(/[?#].*$/, '')) || 'unknown'}`,
+      // Two scripts of this card mean an old resource next to the new one: the first loaded wins the element names (#171).
+      ...(hfcCardScripts().length > 1 ? [`Card scripts on this page: ${hfcCardScripts().map(clean).join(', ')} (only one should be loaded)`] : []),
       `Home Assistant: ${clean(hass.config?.version) || 'unknown'}`,
       `Browser language: ${clean(navigator.language) || 'unknown'}`,
       `Card language: ${HeatpumpFlowCard._language(config, hass)}`,
@@ -5144,16 +5146,63 @@ class HeatpumpFlowCardEditor extends HTMLElement {
 // first definition, so this card is always available under names of its own as well: custom:heatpump-hydraulic-card.
 HeatpumpFlowCard.hfcOwner = 'sturmi77';
 HeatpumpFlowCardEditor.hfcOwner = 'sturmi77';
+// The version marker tells this script whether another copy of the card took the element names first (#171).
+HeatpumpFlowCard.hfcVersion = HFC_VERSION;
+HeatpumpFlowCardEditor.hfcVersion = HFC_VERSION;
 class HeatpumpHydraulicCard extends HeatpumpFlowCard {
   static getConfigElement() { return document.createElement('heatpump-hydraulic-card-editor'); }
 }
 class HeatpumpHydraulicCardEditor extends HeatpumpFlowCardEditor {}
 const hfcDefine = (name, cls) => { if (!customElements.get(name)) customElements.define(name, cls); };
-const hfcMine = (name) => { const c = customElements.get(name); return !c || c.hfcOwner === 'sturmi77'; };
+// A class of this card from another copy of the script: marked since 0.9.3, recognised by its name before.
+const hfcOwnCopy = (cls) => !!cls && (cls.hfcOwner === 'sturmi77' || ['HeatpumpFlowCard', 'HeatpumpHydraulicCard'].includes(cls.name));
+const hfcMine = (name) => { const c = customElements.get(name); return !c || hfcOwnCopy(c); };
+const hfcNewer = (a, b) => {
+  const p = (v) => String(v).split('.').map((n) => parseInt(n, 10) || 0);
+  const x = p(a); const y = p(b);
+  for (let n = 0; n < 3; n++) if ((x[n] || 0) !== (y[n] || 0)) return (x[n] || 0) > (y[n] || 0);
+  return false;
+};
+// An older copy of this card that owns an element name: releases before 0.15 carry no version marker. A newer copy, the same
+// version loaded twice and a foreign card with the same name are no conflict here.
+const hfcOlderCopy = (cls, own = HFC_VERSION) => (hfcOwnCopy(cls) && (!cls.hfcVersion || hfcNewer(own, cls.hfcVersion))
+  ? { version: cls.hfcVersion || 'older than 0.15' } : null);
+// Every script of this card the page loaded, without query strings; the first one wins the element names.
+const hfcCardScripts = () => {
+  const re = /heatpump-(flow|hydraulic)-card[^/?#]*\.js/;
+  let urls = [...document.querySelectorAll('script[src]')].map((s) => s.src);
+  try { urls = urls.concat(performance.getEntriesByType('resource').map((r) => r.name)); } catch (e) { /* no timing API */ }
+  return [...new Set(urls.filter((u) => re.test(u)).map((u) => u.replace(/[?#].*$/, '')))];
+};
+// The warning for an older copy: in the console, and once per browser session as a Home Assistant notification, because the
+// dashboard keeps running the old code and nothing else would show it (#166).
+const hfcOldCopyText = (conflict, scripts = hfcCardScripts()) => {
+  const others = scripts.filter((u) => u !== HFC_SCRIPT_URL.replace(/[?#].*$/, ''));
+  return `An older copy of the Heat Pump Hydraulic Card (${conflict.version}) was loaded before version ${HFC_VERSION}, so dashboards still run the old one.`
+    + `${others.length ? ` Card scripts on this page: ${others.join(', ')}.` : ''}`
+    + ' In Settings → Dashboards → ⋮ → Resources, delete the resource of the old copy (on installations from before the rename: every entry with'
+    + ' "heatpump-flow-card"), delete the folder /config/www/community/heatpump-flow-card/ if it exists, and reload the browser.'
+    + ' Details: https://github.com/Sturmi77/heatpump-hydraulic-card#upgrading-an-installation-from-before-the-rename';
+};
+const hfcNotifyOldCopy = (text, getHass = () => document.querySelector('home-assistant')?.hass, tries = 20) => {
+  try { if (sessionStorage.getItem('hfc-old-copy')) return; } catch (e) { /* storage blocked: notify anyway */ }
+  const hass = getHass();
+  if (typeof hass?.callService !== 'function') { if (tries > 0) setTimeout(() => hfcNotifyOldCopy(text, getHass, tries - 1), 3000); return; }
+  try { sessionStorage.setItem('hfc-old-copy', '1'); } catch (e) { /* storage blocked */ }
+  Promise.resolve(hass.callService('persistent_notification', 'create', {
+    notification_id: 'heatpump_hydraulic_card_old_copy', title: 'Heat Pump Hydraulic Card: an older copy is loaded', message: text,
+  })).catch(() => {});
+};
+const hfcConflict = hfcOlderCopy(customElements.get('heatpump-flow-card')) || hfcOlderCopy(customElements.get('heatpump-hydraulic-card'));
 hfcDefine('heatpump-hydraulic-card-editor', HeatpumpHydraulicCardEditor);
 hfcDefine('heatpump-hydraulic-card', HeatpumpHydraulicCard);
 hfcDefine('heatpump-flow-card-editor', HeatpumpFlowCardEditor);
 hfcDefine('heatpump-flow-card', HeatpumpFlowCard);
+if (hfcConflict) {
+  const text = hfcOldCopyText(hfcConflict);
+  console.warn(`heatpump-flow-card: ${text}`);
+  hfcNotifyOldCopy(text);
+}
 // The card picker lists the card once: under the generic name when this card owns it, otherwise under the unique name.
 const hfcGeneric = hfcMine('heatpump-flow-card') && hfcMine('heatpump-flow-card-editor');
 if (!hfcGeneric) {
