@@ -1423,6 +1423,8 @@ const HFC_EDITOR = {
 
 // Heating circuits the card can draw; circuit 1 uses the plain hc_ keys, circuits 2 to 6 hc2_ to hc6_.
 const HFC_MAX_HC = 6;
+// Entities that make a preset match useful; the best match is the preset that finds most of them live (#143).
+const HFC_CORE_KEYS = ['mode', 'compressor', 'power', 'flow', 'return', 'dhw_top'];
 const hfcHcCount = (config) => Math.min(Math.max(Math.round(+config?.hc_count) || 1, 1), HFC_MAX_HC);
 
 const HFC_ENTITY_GROUPS = {
@@ -1628,22 +1630,32 @@ class HeatpumpFlowCard extends HTMLElement {
   }
 
   static getStubConfig(hass) {
-    for (const [name, preset] of Object.entries(HFC_PRESETS)) {
-      const ctx = HeatpumpFlowCard._ctx(hass, undefined, { hp: 1, dhw: 1, buffer: 1, hc: 1, ...(preset.index || {}) });
-      if (hass && preset.detect(ctx) !== undefined) {
-        const stub = { preset: name };
-        // Further circuits count when the preset finds a different, reporting flow or mode entity for them.
-        const base = HeatpumpFlowCard._resolve({ preset: name, hc_count: HFC_MAX_HC }, hass).fromPreset;
-        const live = (id) => id && hass.states[id] && !['unknown', 'unavailable'].includes(hass.states[id].state);
-        let n = 1;
-        while (n < HFC_MAX_HC && preset.auto_circuits !== false && ['flow', 'mode', 'pump'].some((k) => live(base[`hc${n + 1}_${k}`]) && base[`hc${n + 1}_${k}`] !== base[`hc_${k}`])) n++;
-        if (n > 1) stub.hc_count = n;
-        if (preset.source_type) { const st = preset.source_type(base, hass); if (st && st !== 'air') stub.source_type = st; }
-        return stub;
-      }
-    }
+    // The preset that finds the most live core entities; on a tie the order of HFC_PRESETS (#143).
     // No supported integration: no preset. The card shows its start state instead of a preset that finds nothing (#142).
-    return {};
+    return HeatpumpFlowCard._presetMatches(hass)[0]?.stub || {};
+  }
+
+  // Every preset whose detection matches, best first: { name, score, stub }. The score counts the live core entities
+  // (mode, compressor, power, flow, return, hot water) the preset maps, so with two integrations for one heat pump
+  // (myPyllant and ebusd, ViCare and Open3E) the richer one wins, not the order of HFC_PRESETS (#143).
+  static _presetMatches(hass) {
+    if (!hass) return [];
+    const live = (id) => id && hass.states[id] && !['unknown', 'unavailable'].includes(hass.states[id].state);
+    const matches = [];
+    Object.entries(HFC_PRESETS).forEach(([name, preset], order) => {
+      const ctx = HeatpumpFlowCard._ctx(hass, undefined, { hp: 1, dhw: 1, buffer: 1, hc: 1, ...(preset.index || {}) });
+      if (preset.detect(ctx) === undefined) return;
+      const stub = { preset: name };
+      // Further circuits count when the preset finds a different, reporting flow or mode entity for them.
+      const base = HeatpumpFlowCard._resolve({ preset: name, hc_count: HFC_MAX_HC }, hass).fromPreset;
+      let n = 1;
+      while (n < HFC_MAX_HC && preset.auto_circuits !== false && ['flow', 'mode', 'pump'].some((k) => live(base[`hc${n + 1}_${k}`]) && base[`hc${n + 1}_${k}`] !== base[`hc_${k}`])) n++;
+      if (n > 1) stub.hc_count = n;
+      if (preset.source_type) { const st = preset.source_type(base, hass); if (st && st !== 'air') stub.source_type = st; }
+      const score = HFC_CORE_KEYS.filter((k) => [].concat(base[k] || []).some(live)).length;
+      matches.push({ name, score, stub, order });
+    });
+    return matches.sort((a, b) => b.score - a.score || a.order - b.order);
   }
 
   // Start state: no preset and nothing of its own (entities, error entities, badges, quick controls), so there is nothing to
