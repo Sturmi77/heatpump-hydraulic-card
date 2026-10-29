@@ -144,7 +144,7 @@ If the standard HACS entry is not available in your installation, open HACS → 
 
 The repository was called `heatpump-flow-card` until version 0.9.3. If you installed the card under that name, HACS keeps its old folder `/config/www/community/heatpump-flow-card/` and does **not** change the dashboard resource by itself. The new files then land next to the old ones, while the resource still loads the old file. You keep running an old version, and the card editor and new options are missing. Do the following once:
 
-1. Open **HACS**, find **Heat Pump Hydraulic Card** (it is listed under the new name, with an old version number) and choose ⋮ → **Remove**. HACS deletes the old folder.
+1. Open **HACS**, find **Heat Pump Hydraulic Card** (it is listed under the new name, with an old version number) and choose ⋮ → **Remove**. Remove does **not** reliably delete the old folder: check whether `/config/www/community/heatpump-flow-card/` still exists (File editor, Studio Code Server, Samba or SSH) and delete it if it does.
 2. Open *Settings → Dashboards → ⋮ → Resources*. Delete every entry whose address contains `heatpump-flow-card`. If you manage resources in YAML, remove the line there.
 3. In HACS, search for **Heat Pump Hydraulic Card** again, select **Download** and keep the newest version selected.
 4. Check *Settings → Dashboards → ⋮ → Resources*: there must be exactly one entry for the card, `/hacsfiles/heatpump-hydraulic-card/heatpump-hydraulic-card.js`, type **JavaScript module**. If HACS did not add it, add it yourself.
