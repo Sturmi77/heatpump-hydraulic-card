@@ -1465,7 +1465,7 @@
     const draw = async (setup, scen, cfg = {}) => {
       const c = mount({ ...setup.config, ...cfg }, hassOf(toStates(setup.states(scen)), setup.registry || {}, setup.energy, setup)); await wait(20);
       const q = (sel) => c.shadowRoot.querySelectorAll(sel).length;
-      const out = { lam: q('.lam-body'), vai: q('.vai-body'), pana: q('.pana-body'), vies: q('.vies-body'), bosch: q('.bosch-body'), sd: q('.sd-body'), samsung: q('.sam-body'), ring: q('.fan-ring'), fans: q('.fan'), snows: q('.snow'), fan2on: c.shadowRoot.getElementById('fan2')?.classList.contains('on'), snow2on: c.shadowRoot.getElementById('snow2')?.classList.contains('on'),
+      const out = { lam: q('.lam-body'), vai: q('.vai-body'), pana: q('.pana-body'), vies: q('.vies-body'), bosch: q('.bosch-body'), sd: q('.sd-body'), samsung: q('.sam-body'), wolf: q('.wolf-body'), ring: q('.fan-ring'), fans: q('.fan'), snows: q('.snow'), fan2on: c.shadowRoot.getElementById('fan2')?.classList.contains('on'), snow2on: c.shadowRoot.getElementById('snow2')?.classList.contains('on'),
         origin: c.shadowRoot.getElementById('fan')?.style.transformOrigin, ok: ok(c) };
       c.remove(); return out;
     };
@@ -1476,10 +1476,15 @@
     check(o.lam === 0 && o.ring === 1 && o.fans === 1, 'unit_style generic keeps the fan ring');
     o = await draw(setups[1], 'heat', { unit_style: 'auto' });
     check(o.lam === 1, 'unit_style auto follows the preset');
-    o = await draw(setups[8], 'heat');
+    const byPreset = (p) => setups.find((s) => s.config.preset === p);
+    o = await draw(setups.find((s) => !s.config.preset && !s.config.unit_style), 'heat');
     check(o.lam === 0 && o.vai === 0 && o.ring === 1, 'manual setups without a style keep the generic drawing');
-    o = await draw(setups[7], 'heat');
+    o = await draw(byPreset('kronoterm'), 'heat');
     check(o.lam === 0 && o.vai === 0 && o.ring === 1 && o.ok, 'the Kronoterm preset keeps the generic drawing');
+    o = await draw(byPreset('wolf'), 'heat');
+    check(o.wolf === 1 && o.ring === 0 && o.fans === 1 && o.ok, `Wolf preset draws the CHA unit (${JSON.stringify(o)})`);
+    o = await draw(byPreset('wolf'), 'defrost');
+    check(o.wolf === 1 && o.snows === 1, 'CHA unit gets one snowflake while defrosting');
     o = await draw(setups[2], 'heat');
     check(o.vies === 1 && o.ring === 0 && o.fans === 1, `ViCare preset draws the Viessmann Vitocal unit (${JSON.stringify(o)})`);
     o = await draw(setups[4], 'heat');
@@ -1506,7 +1511,7 @@
     check(o.samsung === 1 && o.ring === 0 && o.fans === 1 && o.ok, `Samsung preset draws the EHS Mono unit (${JSON.stringify(o)})`);
     // Automatic drawing per preset, as listed in the README table "Outdoor-unit style coverage" (#151). A new preset needs an entry here.
     const unitOf = { lambda: 'lambda', vicare: 'viessmann', open3e: 'viessmann', vaillant: 'vaillant', ebusd: 'vaillant', emsesp: 'bosch', bosch_buderus_heating: 'bosch',
-      heishamon: 'panasonic', samsung: 'samsung', wolf: 'generic', kronoterm: 'generic', luxtronik: 'generic', stiebel_isg: 'generic' };
+      heishamon: 'panasonic', samsung: 'samsung', wolf: 'wolf', kronoterm: 'generic', luxtronik: 'generic', stiebel_isg: 'generic' };
     const unitWrong = Object.keys(HFC_PRESETS).filter((p) => (HFC_PRESETS[p].unit_style || 'generic') !== unitOf[p]);
     check(!unitWrong.length, `every preset selects the outdoor-unit drawing the README lists (${unitWrong.join(', ') || 'all match'})`);
     check(Object.values(unitOf).every((s) => HFC_UNIT_STYLES.includes(s)), 'the expected drawings are valid unit_style values');
@@ -3073,7 +3078,7 @@
     check(!twoPoint.shadowRoot.getElementById('g-dhw-middle') && !twoPoint.shadowRoot.getElementById('g-buf-middle'), 'existing two-sensor tanks keep two-point gradients');
     twoPoint.remove();
 
-    for (const unit_style of ['generic', 'lambda', 'vaillant', 'panasonic', 'viessmann', 'bosch', 'saunier', 'samsung']) {
+    for (const unit_style of HFC_UNIT_STYLES.filter((s) => s !== 'auto')) {
       const s = setups[0]; const vapour = mount({ ...s.config, unit_style }, hassOf(toStates(s.states('defrost')), s.registry || {}, s.energy, s)); await wait(20);
       check(vapour.shadowRoot.getElementById('vapour')?.classList.contains('on'), `defrost vapour works with ${unit_style} unit`);
       vapour.remove();
