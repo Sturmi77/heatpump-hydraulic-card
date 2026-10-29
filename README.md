@@ -236,7 +236,12 @@ What you get:
 - COP heating and DHW, energy today, compressor starts
 - details: compressor hours and starts, heater rod hours, compressor modulation, inlet/outlet temperatures and pressures, liquid line, subcooling and superheat
 
-ViCare has no live electrical power, so add `power` from a meter if you have one; the heat output is estimated from flow rate × spread. For a Vitocal with a ground source, set `source_type: brine`: the primary circuit supply and return become brine in and out. Circuits 2 and 3 share the same translation keys in ViCare, so map their entities manually (`hc2_flow`, …).
+ViCare has no live electrical power, so add `power` from a meter if you have one; the heat output is estimated from flow rate × spread. For a Vitocal with a ground source, set `source_type: brine`: the primary circuit supply and return become brine in and out. Multiple ViCare circuits are detected and mapped independently. Set `hc_count` if the detected count needs adjusting, and choose each emitter separately:
+```yaml
+hc_count: 2
+hc_type: radiator
+hc2_type: underfloor
+```
 
 ### Viessmann Vitocal (Open3E) – untested, feedback welcome
 ```yaml
@@ -246,7 +251,14 @@ hc_type: radiator
 ```
 For the [Open3E Home Assistant integration](https://github.com/MojoOli/open3e-ha), which connects to the Open3E server over MQTT. The server communicates with the Vitocal over CAN. The preset uses the integration's entity-registry translation keys, so entity IDs and the Home Assistant language do not matter. If you have multiple Open3E devices, set `device:` to the Vitocal device ID.
 
-It maps the refrigeration-circuit mode, compressor and diverter valve; system electrical and thermal power; flow and return temperatures; DHW and buffer temperatures; and the first heating circuit, room temperature, and target. Daily COP and energy sensors, compressor and additional-heater counters, and available refrigerant sensors are mapped as well. Open3E's `hot_water` valve state is recognized as DHW operation. Add a power meter if your installation does not expose `power_consumption_system`.
+It maps the refrigeration-circuit mode, compressor and diverter valve; system electrical and thermal power; flow and return temperatures; DHW and buffer temperatures; and each reported heating circuit's flow, target, pump, mode, and room temperature. Daily COP and energy sensors, compressor and additional-heater counters, and available refrigerant sensors are mapped as well. Open3E's `hot_water` valve state is recognized as DHW operation. Add a power meter if your installation does not expose `power_consumption_system`.
+
+Open3E detects and maps multiple heating circuits independently. Configure the count and emitter type per circuit, for example:
+```yaml
+hc_count: 2
+hc_type: radiator
+hc2_type: underfloor
+```
 
 ### Vaillant, Saunier Duval, Bulex, Glow-worm, DemirDöküm (myPyllant) – untested, feedback welcome
 ```yaml

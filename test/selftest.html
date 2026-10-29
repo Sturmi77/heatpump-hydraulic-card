@@ -146,24 +146,76 @@
       circuitFlow: add('sensor', 'flow_circuit1_temperature', '38'),
       circuitTarget: add('sensor', 'flow_circuit_1_supply_temp_setpoint', '40'),
       circuitPump: add('binary_sensor', 'circuit_1_pump', 'on'),
+      circuitFlow2: add('sensor', 'flow_circuit2_temperature', '32'),
+      circuitTarget2: add('sensor', 'flow_circuit_2_supply_temp_setpoint', '35'),
+      circuitPump2: add('binary_sensor', 'circuit_2_pump', 'on'),
       cop: add('sensor', 'cop_heating_today', '4.2'),
       dhwStatus: add('sensor', 'domestic_hot_water_status', 'active'),
     };
     const hass = hassOf(toStates(states), registry);
     const stubConfig = C.getStubConfig(hass);
-    const resolved = C._resolve({ preset: 'open3e' }, hass);
+    const resolved = C._resolve({ preset: 'open3e', hc_count: 2 }, hass);
     check(stubConfig.preset === 'open3e', `Open3E Vitocal preset detected (${stubConfig.preset})`);
     check(resolved.ready && resolved.entities.mode === ids.mode && resolved.entities.compressor === ids.compressor
       && resolved.entities.valve === ids.valve, 'Open3E preset maps mode, compressor and diverter valve');
     check(resolved.entities.dhw_top === ids.dhwTop && resolved.entities.dhw_middle === ids.dhwMiddle
       && resolved.entities.dhw_bottom === ids.dhwBottom, 'Open3E preset maps DHW tank temperature levels');
     check(resolved.entities.hc_flow === ids.circuitFlow && resolved.entities.hc_setpoint === ids.circuitTarget
-      && resolved.entities.hc_pump === ids.circuitPump && resolved.tiles.cop_heating.today === ids.cop,
-    'Open3E preset maps circuit and daily COP entities');
+      && resolved.entities.hc_pump === ids.circuitPump && resolved.entities.hc2_flow === ids.circuitFlow2
+      && resolved.entities.hc2_setpoint === ids.circuitTarget2 && resolved.entities.hc2_pump === ids.circuitPump2
+      && resolved.tiles.cop_heating.today === ids.cop, 'Open3E preset maps both circuits and daily COP entities');
+    check(stubConfig.hc_count === 2, `Open3E detects two circuits (got ${stubConfig.hc_count})`);
     const card = mount({ preset: 'open3e' }, hass);
     check(/Hot water/.test(card.shadowRoot.getElementById('chip-mode')?.textContent || ''), 'Open3E hot_water valve state selects DHW mode');
     check(/Hot water/.test(card.shadowRoot.getElementById('t-dhw-mode')?.textContent || ''), 'Open3E domestic_hot_water_status "active" shows hot water charging');
     check(card._unitKey() === 'viessmann', `Open3E selects the Viessmann unit drawing (${card._unitKey()})`);
+    card.remove();
+  }
+  {
+    const states = {
+      'sensor.vitocal_compressor_phase': 'heating',
+      'sensor.vitocal_secondary_supply': '40',
+      'sensor.vitocal_supply_temperature': '38',
+      'sensor.vitocal_supply_temperature_2': '38',
+      'sensor.vitocal_supply_temperature_3': '32',
+      'binary_sensor.vitocal_compressor': 'on',
+      'binary_sensor.vitocal_circulation_pump': 'on',
+      'binary_sensor.vitocal_circulation_pump_2': 'on',
+      'climate.vitocal_heating': { state: 'heat', attributes: { current_temperature: 21, temperature: 22 } },
+      'climate.vitocal_heating_2': { state: 'heat', attributes: { current_temperature: 19, temperature: 20 } },
+    };
+    const registry = {};
+    const keys = {
+      'sensor.vitocal_compressor_phase': 'compressor_phase',
+      'sensor.vitocal_secondary_supply': 'secondary_circuit_supply_temperature',
+      'sensor.vitocal_supply_temperature': 'supply_temperature',
+      'sensor.vitocal_supply_temperature_2': 'supply_temperature',
+      'sensor.vitocal_supply_temperature_3': 'supply_temperature',
+      'binary_sensor.vitocal_compressor': 'compressor',
+      'binary_sensor.vitocal_circulation_pump': 'circulation_pump',
+      'binary_sensor.vitocal_circulation_pump_2': 'circulation_pump',
+      'climate.vitocal_heating': 'heating',
+      'climate.vitocal_heating_2': 'heating',
+    };
+    Object.entries(keys).forEach(([id, translation_key]) => {
+      const component = id.includes('supply_temperature_2') ? '-circuit-1'
+        : id.includes('supply_temperature_3') ? '-circuit-2'
+          : /circulation_pump_2|heating_2/.test(id) ? '-circuit-2'
+            : /circulation_pump|heating/.test(id) ? '-circuit-1' : '';
+      registry[id] = { platform: 'vicare', translation_key, unique_id: `vicare-${translation_key}${component}` };
+    });
+    const hass = hassOf(toStates(states), registry);
+    const resolved = C._resolve({ preset: 'vicare', hc_count: 2 }, hass);
+    const stub = C.getStubConfig(hass);
+    check(resolved.entities.hc_flow === 'sensor.vitocal_supply_temperature_2'
+      && resolved.entities.hc2_flow === 'sensor.vitocal_supply_temperature_3'
+      && resolved.entities.hc_pump === 'binary_sensor.vitocal_circulation_pump'
+      && resolved.entities.hc2_pump === 'binary_sensor.vitocal_circulation_pump_2'
+      && resolved.entities.hc_mode === 'climate.vitocal_heating'
+      && resolved.entities.hc2_mode === 'climate.vitocal_heating_2', 'ViCare maps both circuit flows, pumps and thermostats');
+    check(stub.preset === 'vicare' && stub.hc_count === 2, `ViCare detects two circuits (got ${stub.hc_count})`);
+    const card = mount({ preset: 'vicare', hc_count: 2, hc_type: 'radiator', hc2_type: 'underfloor' }, hass);
+    check(card._hcCount === 2 && card._config.hc_type === 'radiator' && card._config.hc2_type === 'underfloor', 'ViCare circuits keep independent emitter types');
     card.remove();
   }
 
