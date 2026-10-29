@@ -2932,6 +2932,39 @@
     check(both && both.extra.includes('binary_sensor.p1') && both.extra.includes('binary_sensor.p2'), 'two circuits, both pumps known: both are part of the standby check');
   }
 
+  // 18y. code audit before 0.14.0: no series_bypass default on save, hydraulic options in the report, a map under entities in the editor
+  {
+    const hass = hassOf(toStates({ 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.c': ['40', 'Hz'] }));
+    const ents = { flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c' };
+    const editor = (cfg) => {
+      const ed = document.createElement('heatpump-flow-card-editor'); const out = {};
+      ed.addEventListener('config-changed', (ev) => { out.config = ev.detail.config; });
+      ed.setConfig(cfg); ed.hass = hass; return [ed, out];
+    };
+    // An unrelated edit writes no series_bypass; false next to a series buffer stays.
+    let [ed, out] = editor({ entities: ents });
+    ed._changed({ ...ed._form.data, title: 'Renamed' });
+    check(!('series_bypass' in out.config), `an unrelated edit writes no series_bypass (${JSON.stringify(out.config)})`);
+    [ed, out] = editor({ entities: ents, series_buffer: true, series_bypass: false });
+    ed._changed({ ...ed._form.data, title: 'Renamed' });
+    check(out.config.series_buffer === true && out.config.series_bypass === false, 'series_bypass: false next to a series buffer is kept');
+    ed._changed({ ...ed._form.data, series_bypass: true });
+    check(out.config.series_buffer === true && !('series_bypass' in out.config), 'switching the bypass valve back on removes the option (default)');
+    // Report: storage, hot-water preparation, series buffer and primary pump in one line.
+    const line = (cfg) => (/\nStorage: [^\n]+/.exec(C._diagnosticReport(cfg, hass)) || [''])[0].trim();
+    check(line({ entities: ents }) === 'Storage: separate · hot water: coil · series buffer: no · primary pump: no', `report names the default hydraulics (${line({ entities: ents })})`);
+    check(line({ entities: ents, storage: 'combined', dhw_type: 'fresh_water', primary_pump: true }) === 'Storage: combined · hot water: fresh_water · series buffer: no · primary pump: yes', 'report names a combined storage with a fresh-water station');
+    check(line({ entities: ents, series_buffer: true, series_bypass: false }) === 'Storage: separate · hot water: coil · series buffer: yes, no bypass valve · primary pump: no', 'report names a series buffer without bypass valve');
+    check(/primary pump: yes$/.test(line({ preset: 'heishamon' })), 'report takes the primary pump from the preset');
+    // Editor: a value map under entities is named as ignored, and saving keeps it where it is.
+    [ed, out] = editor({ entities: { ...ents, valve_map: { 1: 'heating' } } });
+    check(/valve_map is under entities/.test(ed._warn.innerHTML), 'editor warns about a valve_map under entities');
+    ed._changed({ ...ed._form.data, title: 'Renamed' });
+    check(JSON.stringify(out.config.entities.valve_map) === '{"1":"heating"}', 'saving in the editor does not drop the misplaced map');
+    [ed, out] = editor({ entities: ents, valve_map: { 1: 'heating' } });
+    check(!/is under entities/.test(ed._warn.innerHTML), 'no such warning for a valve_map at the top level');
+  }
+
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
   {
     const s = setups[0];
