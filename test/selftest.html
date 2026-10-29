@@ -2986,6 +2986,8 @@
       buffer_heater_top: 'switch.b1', buffer_heater_middle: 'switch.b2', buffer_heater_bottom: 'switch.b3' };
     const q = (c, id) => c.shadowRoot.getElementById(id);
     const box = (c, id) => q(c, id).getBBox();
+    // A rod is where its flange is; the heat waves above it are not part of its height.
+    const rodBox = (c, id) => q(c, id).querySelector('.heater-flange').getBBox();
     const mid = (b) => b.y + b.height / 2;
     const apart = (a, b) => a.y + a.height <= b.y || b.y + b.height <= a.y;
     let card = mount({ entities: ents }, hassOf(st())); await wait(20);
@@ -2993,28 +2995,32 @@
     check(rods.every((id) => q(card, `heater-${id}`)) && !q(card, 'heater-dhw') && !q(card, 'heater-buf'), 'one rod per configured height, no rod for the plain keys');
     check(['t-dhw-middle', 't-dhw-bottom', 't-buf-middle', 't-buf-bottom'].every((id) => /^\d+(\.\d)? °C$/.test(q(card, id).textContent)), 'the lower values carry no position word, their height tells them apart');
     for (const [rod, label] of [['dhw-middle', 't-dhw-middle'], ['dhw-bottom', 't-dhw-bottom'], ['buf-middle', 't-buf-middle']]) {
-      const r = box(card, `heater-${rod}`), l = box(card, label);
+      const r = rodBox(card, `heater-${rod}`), l = box(card, label);
       check(mid(r) > l.y && mid(r) < l.y + l.height && l.x + l.width < r.x && l.x > 515, `the ${rod} rod stands at the height of its label, right of it (rod ${mid(r).toFixed(0)} from x ${r.x.toFixed(0)}, label ${l.y.toFixed(0)}–${(l.y + l.height).toFixed(0)}, x ${l.x.toFixed(0)}–${(l.x + l.width).toFixed(0)})`);
     }
-    check(apart(box(card, 'heater-dhw-top'), box(card, 't-dhw-top')) && apart(box(card, 'heater-buf-top'), box(card, 't-buf-top')), 'the top rods keep clear of the large top value');
-    check(box(card, 'heater-dhw-top').y < box(card, 't-dhw-top').y && box(card, 'heater-buf-top').y < box(card, 't-buf-top').y, 'the top rods sit above the top value');
-    check(rods.slice(0, 3).every((id, n, a) => !n || apart(box(card, `heater-${a[n - 1]}`), box(card, `heater-${id}`))) && rods.slice(3).every((id, n, a) => !n || apart(box(card, `heater-${a[n - 1]}`), box(card, `heater-${id}`))), 'the rods of one tank do not overlap');
+    check(apart(rodBox(card, 'heater-dhw-top'), box(card, 't-dhw-top')) && apart(rodBox(card, 'heater-buf-top'), box(card, 't-buf-top')), 'the top rods keep clear of the large top value');
+    check(rodBox(card, 'heater-dhw-top').y < box(card, 't-dhw-top').y && rodBox(card, 'heater-buf-top').y < box(card, 't-buf-top').y, 'the top rods sit above the top value');
+    check(rods.slice(0, 3).every((id, n, a) => !n || apart(rodBox(card, `heater-${a[n - 1]}`), rodBox(card, `heater-${id}`))) && rods.slice(3).every((id, n, a) => !n || apart(rodBox(card, `heater-${a[n - 1]}`), rodBox(card, `heater-${id}`))), 'the rods of one tank do not overlap');
     const lit = rods.filter((id) => q(card, `heater-${id}`).classList.contains('on'));
     check(lit.join() === 'dhw-bottom,buf-middle', `each rod follows its own entity, a power above 0 W is on (${lit.join()})`);
+    const waving = rods.filter((id) => q(card, `heater-${id}`).querySelector('.waves').classList.contains('on'));
+    check(waving.join() === lit.join(), `a running rod shows heat waves, a rod that is off shows none (${waving.join()})`);
+    const red = getComputedStyle(q(card, 'heater-dhw-bottom').querySelector('.heater-el')).stroke;
+    check(red === 'rgb(220, 38, 38)' && red === getComputedStyle(q(card, 'heater-dhw-bottom').querySelector('.wave')).stroke && !getComputedStyle(q(card, 'heater-dhw-top').querySelector('.heater-el')).stroke.includes(red), `a running rod and its waves share the hot-water red, a rod that is off does not (${red})`);
     check(card._lossIds().extra.join() === 'sensor.rod1,sensor.rod2,sensor.rod3', `every rod in the hot-water tank excludes its run time from the standby loss (${card._lossIds().extra.join()})`);
     card.remove();
     // The plain key keeps its old place between the middle and the bottom sensor.
     card = mount({ entities: { ...ents, dhw_heater_middle: undefined, dhw_heater_bottom: undefined, dhw_heater: 'sensor.rod3' } }, hassOf(st())); await wait(20);
-    const plain = box(card, 'heater-dhw');
+    const plain = rodBox(card, 'heater-dhw');
     check(mid(plain) > box(card, 't-dhw-middle').y + box(card, 't-dhw-middle').height && mid(plain) < box(card, 't-dhw-bottom').y, 'the plain dhw_heater keeps its place between the middle and the bottom label');
     card.remove();
     // A solar loop enters the right wall at the middle sensor: the middle rod moves below it.
     card = mount({ entities: { ...ents, solar_collector: 'sensor.t1' } }, hassOf(st())); await wait(20);
-    check(box(card, 'heater-dhw-middle').y > 168, `with solar thermal the middle rod moves below the solar loop (${box(card, 'heater-dhw-middle').y.toFixed(0)})`);
+    check(rodBox(card, 'heater-dhw-middle').y > 168, `with solar thermal the middle rod moves below the solar loop (${rodBox(card, 'heater-dhw-middle').y.toFixed(0)})`);
     card.remove();
     // A combined storage with a fresh-water station: the bottom rod moves below the station pipes; the rods of the heating zone count for the loss.
     card = mount({ entities: { ...ents, hc_pump: 'binary_sensor.valve' }, storage: 'combined', dhw_type: 'fresh_water' }, hassOf(st())); await wait(20);
-    check(box(card, 'heater-dhw-bottom').y > 230, `next to a fresh-water station the bottom rod moves below its pipes (${box(card, 'heater-dhw-bottom').y.toFixed(0)})`);
+    check(rodBox(card, 'heater-dhw-bottom').y > 230, `next to a fresh-water station the bottom rod moves below its pipes (${rodBox(card, 'heater-dhw-bottom').y.toFixed(0)})`);
     card.remove();
     card = mount({ entities: { ...ents, hc_pump: 'binary_sensor.valve' }, storage: 'combined' }, hassOf(st())); await wait(20);
     check(card._lossIds()?.extra.filter((e) => /rod|switch\.b/.test(e)).length === 6, `in a combined storage every rod excludes its run time from the standby loss (${card._lossIds()?.extra.join()})`);

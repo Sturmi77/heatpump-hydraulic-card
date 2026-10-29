@@ -3759,8 +3759,12 @@ class HeatpumpFlowCard extends HTMLElement {
       return `<g class="tap heater" id="heater-${id}" ${de}><rect class="heater-box" x="230" y="266" width="46" height="30" rx="6"/>
         <path class="heater-el" d="M236 281 l4 -8 l6 16 l6 -16 l6 16 l6 -16 l6 16 l4 -8"/></g>`;
     }
-    return `<g class="tap heater" id="heater-${id}" ${de}><rect class="heater-flange" x="638" y="${y - 9}" width="9" height="18" rx="2"/>
-      <path class="heater-el" d="M640 ${y - 4} H${left + 6} Q${left} ${y - 4} ${left} ${y} Q${left} ${y + 4} ${left + 6} ${y + 4} H640"/></g>`;
+    // A running rod is red like the hot-water phase of the timeline, with rising heat waves like the emitters; a dark casing keeps
+    // it visible in a tank of a similar colour.
+    const d = `M640 ${y - 4} H${left + 6} Q${left} ${y - 4} ${left} ${y} Q${left} ${y + 4} ${left + 6} ${y + 4} H640`;
+    const waves = [0, 1, 2].map((n) => `<path class="wave" d="M${left + 6 + n * (634 - left - 6) / 2} ${y - 7} q4 -4 0 -8 q-4 -4 0 -8"/>`).join('');
+    return `<g class="tap heater rod" id="heater-${id}" ${de}><rect class="heater-flange" x="638" y="${y - 9}" width="9" height="18" rx="2"/>
+      <path class="heater-case" d="${d}"/><path class="heater-el" d="${d}"/><g class="waves rod-waves">${waves}</g></g>`;
   }
 
   // Solar thermal collector on the roof edge of the house, with a loop into the right side of the DHW tank.
@@ -4199,6 +4203,7 @@ class HeatpumpFlowCard extends HTMLElement {
       const el = this._$(`heater-${id}`); if (!el) return;
       const lv = this._level(key);
       el.classList.toggle('on', lv > 0); el.classList.toggle('stage2', lv > 1);
+      el.querySelector('.waves')?.classList.toggle('on', lv > 0);
     });
 
     this._txtPre('t-vl', 'VL', this._has('flow') ? this._t(tFlow) : '');
@@ -4495,10 +4500,12 @@ HeatpumpFlowCard.styles = `
   .collector { fill: var(--secondary-background-color, rgba(127,127,127,.15)); stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 2; transition: fill .4s, stroke .4s; }
   .collector-cells { fill: none; stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 1.5; }
   .solar.on .collector { fill: ${hfcTint('pv', 28)}; stroke: ${hfcVar('pv')}; }
+  .heater-case { fill: none; stroke: rgba(0,0,0,.45); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
   .heater-el { fill: none; stroke: var(--disabled-text-color, #9e9e9e); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
   .heater-flange, .heater-box { fill: var(--secondary-background-color, rgba(127,127,127,.15)); stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 1.5; }
   .heater.on .heater-el { stroke: ${hfcVar('heat')}; filter: url(#glow); }
   .heater.on.stage2 .heater-el { stroke: ${hfcVar('hot')}; }
+  .heater.rod.on .heater-el, .rod-waves .wave { stroke: ${hfcVar('hot')}; } .rod-waves .wave { stroke-width: 2; }
   .ground { fill: none; stroke: ${hfcVar('ground')}; stroke-width: 3; stroke-dasharray: 10 5; opacity: .7; }
   .well { fill: none; stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 2; }
   .water { fill: none; stroke: ${hfcVar('cool')}; stroke-width: 2; }
