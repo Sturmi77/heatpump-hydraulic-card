@@ -411,7 +411,19 @@ const HFC_PRESETS = {
         || ctx.match(/^sensor\.(.+)_system_flow_temperature(?:_\d+)?$/, 'mypyllant');
       return id === undefined ? undefined : id.replace(/^sensor\./, '').replace(/_(energy_manager_state|system_flow_temperature)(?:_\d+)?$/, '');
     },
+    // Device counters "<home> Device <n> <product> Operation Time" and "… On/Off Cycles" (#120). The heat pump is the device
+    // that reports its power, else the first device that is not the hydraulic station. The station's counters count its
+    // backup heater: 1.5 h against 4165 h of the compressor on the installation in #120.
+    counters: (p, ctx) => {
+      const m = (re) => ctx.match(re, 'mypyllant');
+      const power = m(new RegExp(`^sensor\\.${p}_device_\\d+_(?!hydraulic_station)[^.]*_current_power(?:_\\d+)?$`));
+      const hp = power ? power.match(/_device_(\d+)_/)[1] : '\\d+';
+      const device = (name) => m(new RegExp(`^sensor\\.${p}_device_${hp}_(?!hydraulic_station)[^.]*_${name}(?:_\\d+)?$`));
+      const station = (name) => m(new RegExp(`^sensor\\.${p}_device_\\d+_hydraulic_station_${name}(?:_\\d+)?$`));
+      return { hours: device('operation_time'), starts: device('on_off_cycles'), aux_hours: station('operation_time'), aux_starts: station('on_off_cycles') };
+    },
     entities: (p, i, ctx) => {
+      const counters = HFC_PRESETS.vaillant.counters(p, ctx);
       const m = (re) => ctx.match(re, 'mypyllant');
       // The exact id first; if it does not exist, the entity of that name that carries a number (_2).
       const e = (name) => {
@@ -437,14 +449,21 @@ const HFC_PRESETS = {
         room_target: [m(new RegExp(`^sensor\\.${p}_zone_.+_desired_temperature(?:_\\d+)?$`)), m(new RegExp(`^climate\\.${p}_zone_[^.]+$`))],
         program: m(new RegExp(`^sensor\\.${p}_zone_.+_current_special_function(?:_\\d+)?$`)),
         cop_heating_today: m(new RegExp(`^sensor\\.${p}.*_heating_energy_efficiency(?:_\\d+)?$`)),
+        hc_pressure: e('system_water_pressure'),
+        hours: counters.hours,
+        starts_total: counters.starts,
+        aux_hours: counters.aux_hours,
       };
     },
     // Daily energy per device and mode ("Consumed Electrical Energy Heating", "Heat Generated Domestic Hot Water" …).
     tiles: (p, i, ctx) => {
       const d = (suffix) => ctx.match(new RegExp(`^sensor\\.${p}_device_\\d+.*_${suffix}(?:_\\d+)?$`), 'mypyllant');
+      const counters = HFC_PRESETS.vaillant.counters(p, ctx);
       return {
         energy_heating: { today: d('consumed_electrical_energy_heating') }, energy_dhw: { today: d('consumed_electrical_energy_domestic_hot_water') },
         heat_heating: { today: d('heat_generated_heating') }, heat_dhw: { today: d('heat_generated_domestic_hot_water') },
+        hours: { total: counters.hours }, starts: { total: counters.starts },
+        aux_hours: { total: counters.aux_hours }, aux_starts: { total: counters.aux_starts },
       };
     },
     errors: (p, i, ctx) => [ctx.match(new RegExp(`^binary_sensor\\.${p}.*_trouble_codes(?:_\\d+)?$`), 'mypyllant')].filter(Boolean),

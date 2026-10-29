@@ -102,6 +102,9 @@ const vaillantStates = (s) => ({
   'sensor.zuhause_domestic_hot_water_0_setpoint': ['50', '°C'], 'sensor.zuhause_circuit_0_current_flow_temperature': ['32.8', '°C'],
   'sensor.zuhause_circuit_0_flow_temperature_setpoint': ['33.5', '°C'], 'sensor.zuhause_circuit_0_state': s === 'idle' ? 'STANDBY' : 'HEATING',
   'sensor.zuhause_device_1_arotherm_plus_current_power': [s === 'idle' ? '0.01' : '1.35', 'kW'],
+  'sensor.zuhause_device_1_arotherm_plus_operation_time': ['4165.5', 'h'], 'sensor.zuhause_device_1_arotherm_plus_on_off_cycles': '2329',
+  'sensor.zuhause_device_2_hydraulic_station_operation_time': ['1.5', 'h'], 'sensor.zuhause_device_2_hydraulic_station_on_off_cycles': '12',
+  'sensor.zuhause_system_water_pressure': ['1.7', 'bar'],
   'sensor.zuhause_zone_wohnen_current_temperature': ['21.6', '°C'], 'sensor.zuhause_zone_wohnen_desired_temperature': ['21.5', '°C'],
   'binary_sensor.zuhause_trouble_codes': s === 'idle' ? 'on' : 'off',
 });

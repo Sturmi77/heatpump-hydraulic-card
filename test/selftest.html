@@ -1458,6 +1458,23 @@
     check(r.ready && r.prefix === 'home_2' && r.entities.mode === 'sensor.home_2_energy_manager_state', `a home that is named home_2 keeps its name as the prefix (${r.prefix})`);
     r = resolve(base, { preset: 'vaillant', prefix: 'home' });
     check(r.ready && r.entities.mode === 'sensor.home_energy_manager_state_2', 'with the prefix set by hand the numbered entity is found, too');
+
+    // Device counters and water pressure (#120): the heat pump is the device with a power sensor, the hydraulic station's
+    // counters are its backup heater; the ids of the installation in #120 (station listed first).
+    const counters = {
+      ...base, 'sensor.home_system_water_pressure': ['1.7', 'bar'],
+      'sensor.home_device_1_hydraulic_station_operation_time': ['1.5', 'h'], 'sensor.home_device_1_hydraulic_station_on_off_cycles': '12',
+      'sensor.home_device_0_arotherm_plus_operation_time': ['4165.5', 'h'], 'sensor.home_device_0_arotherm_plus_on_off_cycles': '2329',
+    };
+    r = resolve(counters); e = r.entities;
+    check(e.hours === 'sensor.home_device_0_arotherm_plus_operation_time' && e.starts_total === 'sensor.home_device_0_arotherm_plus_on_off_cycles',
+      `without a power sensor the first device that is not the hydraulic station gives hours and starts (${e.hours}, ${e.starts_total})`);
+    check(e.aux_hours === 'sensor.home_device_1_hydraulic_station_operation_time' && r.tiles.aux_starts.total === 'sensor.home_device_1_hydraulic_station_on_off_cycles',
+      'the hydraulic station counts as the backup heater (hours and starts)');
+    check(e.hc_pressure === 'sensor.home_system_water_pressure' && r.tiles.hours.total === e.hours && r.tiles.starts.total === e.starts_total,
+      'system water pressure as heating pressure; hours and starts tiles from the heat pump');
+    r = resolve({ ...counters, 'sensor.home_device_2_flexotherm_operation_time': ['10', 'h'], 'sensor.home_device_2_flexotherm_current_power': ['1.2', 'kW'] });
+    check(r.entities.hours === 'sensor.home_device_2_flexotherm_operation_time', `the device with a power sensor wins (${r.entities.hours})`);
   }
 
   // 14. outdoor unit drawings: style per preset, manufacturer variants, fans and snowflakes, loop symbol for ground sources

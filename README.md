@@ -266,6 +266,9 @@ What you get:
 - circuit 0 flow, setpoint and state
 - zone room temperature and target; without zone sensors the zone thermostat (`climate.<home>_zone_…`) serves as room temperature and target
 - device power and heating efficiency
+- system water pressure as heating pressure
+- operating hours and on/off cycles of the heat pump (`<home> Device <n> <product> Operation Time`, `… On/Off Cycles`; the device that reports its power, else the first device that is not the hydraulic station) for the details and the hours and starts tiles
+- the hydraulic station's operating hours and on/off cycles as the backup heater (aux hours and starts); on the installation that reported them they matched the heater (1.5 h against 4,165 h of the compressor)
 - trouble codes
 
 The Vaillant cloud API has no return temperature and no compressor state, and values update every few minutes. Use `index: {hc: 1, dhw: 1}` for a second circuit or DHW system.
