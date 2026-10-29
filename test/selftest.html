@@ -1615,6 +1615,16 @@
     check(names({}).includes('unit_style') && !names({ preset: 'lambda' }).includes('unit_size') && names({ preset: 'vaillant' }).includes('unit_size') && names({ unit_style: 'vaillant' }).includes('unit_size') && !names({ preset: 'vaillant', unit_style: 'panasonic' }).includes('unit_size'), 'editor offers unit_style, and unit_size only for Vaillant');
   }
 
+  // Editor labels say what a field expects (#180): the three flow rates name their unit and their circuit, temperatures °C
+  for (const lang of ['en', 'de']) {
+    const L = HFC_EDITOR[lang];
+    const flows = ['volume', 'source_volume', 'hc_volume'].map((k) => L[k]);
+    check(flows.every((t) => /l\/h/.test(t)) && new Set(flows).size === 3 && /prim/i.test(L.volume) && /(brine|sole)/i.test(L.source_volume),
+      `${lang}: the flow rate fields name l/h and their circuit (${flows.join(' | ')})`);
+    const temps = ['flow', 'return', 'source_in', 'outdoor', 'dhw_top', 'buffer_top', 'hc_flow', 'hc_setpoint', 'room', 'room_target'];
+    check(temps.every((k) => /°C/.test(L[k])), `${lang}: temperature fields say °C (${temps.filter((k) => !/°C/.test(L[k])).join(', ') || 'all'})`);
+  }
+
   // 15. keyboard: tab stops, roles, labels, arrow keys, activation keys, focus frame
   {
     const s = setups[0];
@@ -2049,7 +2059,7 @@
     check(['hc2_room', 'hc2_room_target', 'hc6_room', 'hc6_room_target'].every((k) => names({ hc_count: 6 }).includes(k)) && !names({ hc_count: 2 }).some((k) => /^hc[3-6]_room/.test(k)) && !names({}).includes('hc2_room'),
       'editor offers the room keys in the groups of circuits 2 to 6');
     const lab = C._formSchema({}).computeLabel;
-    check(lab({ name: 'hc2_room' }) === lab({ name: 'room' }) && lab({ name: 'hc6_room_target' }) === lab({ name: 'room_target' }) && /^(Room temperature|Raumtemperatur)$/.test(lab({ name: 'hc3_room' })),
+    check(lab({ name: 'hc2_room' }) === lab({ name: 'room' }) && lab({ name: 'hc6_room_target' }) === lab({ name: 'room_target' }) && /^(Room temperature|Raumtemperatur) \(°C\)$/.test(lab({ name: 'hc3_room' })),
       `circuit rooms reuse the room labels (${lab({ name: 'hc2_room' })} / ${lab({ name: 'hc2_room_target' })})`);
     const report = C._diagnosticReport(cfg, hassOf(toStates(states)));
     check(/- hc2_room: sensor\.attic = 19\.4 °C/.test(report) && /- hc2_room_target: sensor\.attic_target = 20\.0 °C/.test(report) && /- hc4_room: not mapped/.test(report),
