@@ -100,6 +100,26 @@
   // 5. detection: the right preset for each installation, nothing for gas boilers or foreign entities
   check(HFC_PRESETS.heishamon.tested === true, 'HeishaMon preset is marked real-installation tested');
 
+  // 5-00. Two integrations for one heat pump (#143): the preset with more live core entities wins, a tie keeps the order
+  {
+    const vaillant = setups.find((s) => s.config.preset === 'vaillant'); const ebusd = setups.find((s) => s.config.preset === 'ebusd');
+    const both = hassOf(toStates({ ...vaillant.states('heat'), ...ebusd.states('heat') }), { ...(vaillant.registry || {}), ...(ebusd.registry || {}) });
+    const matches = C._presetMatches(both);
+    const score = (name) => matches.find((m) => m.name === name)?.score;
+    check(matches.map((m) => m.name).join() === 'ebusd,vaillant' && score('ebusd') > score('vaillant'),
+      `myPyllant and ebusd: both match, ebusd finds more core entities (${matches.map((m) => `${m.name} ${m.score}`).join(', ')})`);
+    check(C.getStubConfig(both).preset === 'ebusd', 'the stub takes the richer match, not the first preset in the list');
+    const tie = hassOf(toStates({ 'binary_sensor.vitocal_compressor': 'on', 'sensor.vitocal_refrigeration_circuit_mode': 'heating' }), {
+      'binary_sensor.vitocal_compressor': { platform: 'vicare', translation_key: 'compressor' },
+      'sensor.vitocal_refrigeration_circuit_mode': { platform: 'open3e', translation_key: 'refrigeration_circuit_mode' },
+    });
+    const tieMatches = C._presetMatches(tie);
+    check(tieMatches.length === 2 && tieMatches[0].score === tieMatches[1].score && C.getStubConfig(tie).preset === 'vicare',
+      `ViCare and Open3E with one core entity each: the order of the presets decides (${tieMatches.map((m) => `${m.name} ${m.score}`).join(', ')})`);
+    const unavailable = hassOf(toStates({ ...vaillant.states('heat'), ...Object.fromEntries(Object.keys(ebusd.states('heat')).map((id) => [id, 'unavailable'])) }), { ...(vaillant.registry || {}), ...(ebusd.registry || {}) });
+    check(C.getStubConfig(unavailable).preset === 'vaillant', 'an integration whose entities are all unavailable does not win');
+  }
+
   // 5-0. No supported integration (#142): the stub has no preset and the card shows its start state, not an error
   {
     const plain = hassOf(toStates({ 'sensor.living_room_temperature': ['21.0', '°C'], 'light.kitchen': 'on' }), {});
