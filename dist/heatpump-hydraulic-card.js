@@ -862,6 +862,8 @@ const HFC_PRESETS = {
   // derives the mode from the compressor, the defrost flag and the hot water flag; cooling is not shown.
   stiebel_isg: {
     name: 'Stiebel Eltron ISG (WPM, LWZ) / Tecalor',
+    // WPL-A for air sources (the integration does not name the model); brine units keep the loop symbol (#159).
+    unit_style: 'stiebel',
     // Optional parts are mapped by their readings: the card looks again every minute for parts that report late.
     dynamic: true,
     auto_circuits: false,
@@ -1196,7 +1198,7 @@ const HFC_EDITOR = {
     power_sources: 'PV / battery / grid', ps_auto: 'Energy dashboard, unless set below', ps_manual: 'Only the sensors below',
     source_type: 'Heat source', src_air: 'Air', src_brine: 'Ground (brine)', src_water: 'Groundwater',
     hc_count: 'Heating circuits', hc2_type: 'Circuit 2 emitter', hc3_type: 'Circuit 3 emitter', hc4_type: 'Circuit 4 emitter', hc5_type: 'Circuit 5 emitter', hc6_type: 'Circuit 6 emitter',
-    unit_style: 'Unit drawing', unit_auto: 'Automatic (from the preset)', unit_generic: 'Generic (fan)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox',
+    unit_style: 'Unit drawing', unit_auto: 'Automatic (from the preset)', unit_generic: 'Generic (fan)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
     unit_size: 'Vaillant size', size_small: '3.5 / 5.5 kW (1 fan, low)', size_medium: '7.5 kW (1 fan)', size_large: '10.5 / 12.5 kW (2 fans)',
     timeline: 'Timeline of the operating mode', timeline_hours: 'Timeline length (hours)', timeline_marks: 'Show the badges (e.g. Boost) as extra lanes',
     layout: 'Layout', layout_default: 'Default', layout_compact: 'Compact (narrow columns)', layout_wide: 'Wide (tiles beside the schematic)', layout_wall: 'Wall display (large, controls fade out)',
@@ -1265,7 +1267,7 @@ const HFC_EDITOR = {
     power_sources: 'PV / Akku / Netz', ps_auto: 'Energie-Dashboard, außer unten gesetzt', ps_manual: 'Nur die Sensoren unten',
     source_type: 'Wärmequelle', src_air: 'Luft', src_brine: 'Erdreich (Sole)', src_water: 'Grundwasser',
     hc_count: 'Heizkreise', hc2_type: 'Wärmeabgabe Heizkreis 2', hc3_type: 'Wärmeabgabe Heizkreis 3', hc4_type: 'Wärmeabgabe Heizkreis 4', hc5_type: 'Wärmeabgabe Heizkreis 5', hc6_type: 'Wärmeabgabe Heizkreis 6',
-    unit_style: 'Geräte-Zeichnung', unit_auto: 'Automatisch (aus der Voreinstellung)', unit_generic: 'Allgemein (Lüfter)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox',
+    unit_style: 'Geräte-Zeichnung', unit_auto: 'Automatisch (aus der Voreinstellung)', unit_generic: 'Allgemein (Lüfter)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
     unit_size: 'Vaillant-Größe', size_small: '3,5 / 5,5 kW (1 Lüfter, niedrig)', size_medium: '7,5 kW (1 Lüfter)', size_large: '10,5 / 12,5 kW (2 Lüfter)',
     timeline: 'Zeitleiste der Betriebsart', timeline_hours: 'Länge der Zeitleiste (Stunden)', timeline_marks: 'Badges (z. B. Boost) als zusätzliche Spuren zeigen',
     layout: 'Layout', layout_default: 'Standard', layout_compact: 'Kompakt (schmale Spalten)', layout_wide: 'Breit (Kacheln neben dem Schema)', layout_wall: 'Wanddisplay (groß, Bedienelemente blenden aus)',
@@ -1384,7 +1386,7 @@ const HFC_MAP_KEYS = ['valve_map', 'mode_map', 'dhw_mode_map', 'buffer_mode_map'
 // How the tap water is heated: a coil in the tank, a fresh-water station on the storage, or a tank in the combined storage.
 const HFC_DHW_TYPES = ['coil', 'fresh_water', 'tank_in_tank'];
 // Drawing of the outdoor unit: `auto` takes the style of the preset; `unit_size` picks the Vaillant aroTHERM plus class.
-const HFC_UNIT_STYLES = ['auto', 'generic', 'lambda', 'vaillant', 'panasonic', 'viessmann', 'bosch', 'saunier', 'samsung', 'wolf', 'kronoterm', 'alpha_innotec'];
+const HFC_UNIT_STYLES = ['auto', 'generic', 'lambda', 'vaillant', 'panasonic', 'viessmann', 'bosch', 'saunier', 'samsung', 'wolf', 'kronoterm', 'alpha_innotec', 'stiebel'];
 const HFC_UNIT_SIZES = ['small', 'medium', 'large'];
 const HFC_EMITTERS = ['underfloor', 'radiator', 'column'];
 // Wall display: seconds the quick controls and the details toggle stay visible after the last touch or mouse move.
@@ -3369,6 +3371,20 @@ class HeatpumpFlowCard extends HTMLElement {
         snows: [[...abs(cx, cy), 18]],
       };
     }
+    if (key === 'stiebel') {
+      // WPL-A: a dark box with a slightly arched lid, a plain panel on the left, fine horizontal louvres over the fan on the right
+      // two thirds, and a recessed base on short feet.
+      const x = 54; const y = 52; const w = 124; const h = 88; const gx = x + 42; const gw = w - 45;
+      const cx = gx + gw / 2; const cy = y + 46; const r = 33;
+      const body = `M${x} ${y + h} V${y + 5} Q${x} ${y + 2} ${x + 3} ${y + 2} Q${x + w / 2} ${y - 3} ${x + w - 3} ${y + 2} Q${x + w} ${y + 2} ${x + w} ${y + 5} V${y + h} Z`;
+      const slats = Array.from({ length: 20 }, (_, n) => `<path class="stb-slat" d="M${gx + 1} ${y + 7 + n * 4} H${gx + gw - 1}"/>`).join('');
+      return {
+        below: T(`<rect class="stb-foot" x="${x + 7}" y="${y + h}" width="9" height="7" rx="1"/><rect class="stb-foot" x="${x + w - 16}" y="${y + h}" width="9" height="7" rx="1"/><rect class="stb-base" x="${x + 5}" y="${y + h}" width="${w - 10}" height="4"/><path class="stb-body" d="${body}"/><rect class="stb-grille" x="${gx}" y="${y + 4}" width="${gw}" height="${h - 6}" rx="1"/>`),
+        fans: [[...abs(cx, cy), r, 'stb-fan']],
+        above: T(`<g>${slats}</g><path class="stb-seam" d="M${gx - 1} ${y + 3} V${y + h}"/><rect class="stb-plate" x="${x + 10}" y="${y + 13}" width="20" height="3" rx="0.5"/><path class="stb-rim" d="${body}"/>`),
+        snows: [[...abs(cx, cy), 18]],
+      };
+    }
     return { below: '<circle class="fan-ring" cx="170" cy="288" r="50"/>', fans: [[170, 288, 50, '']], above: '', snows: [[170, 288, 18]] };
   }
 
@@ -4598,9 +4614,9 @@ HeatpumpFlowCard.styles = `
   .lam-plinth { fill: color-mix(in srgb, var(--primary-text-color, #1f2937) 22%, var(--card-background-color, #fff)); }
   /* a rim in the theme text colour keeps the anthracite body visible on dark cards */
   .lam-rim { fill: none; stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 48%, transparent); stroke-width: 1.4; }
-  .fan.lam-fan .blade, .fan.vai-fan .blade, .fan.pana-fan .blade, .fan.vies-fan .blade, .fan.bosch-fan .blade, .fan.sd-fan .blade, .fan.sam-fan .blade, .fan.wolf-fan .blade, .fan.kro-fan .blade, .fan.ait-fan .blade { fill: #9aa3ad; opacity: .55; }
-  .fan.lam-fan .hub, .fan.vai-fan .hub, .fan.pana-fan .hub, .fan.vies-fan .hub, .fan.bosch-fan .hub, .fan.sd-fan .hub, .fan.sam-fan .hub, .fan.wolf-fan .hub, .fan.kro-fan .hub, .fan.ait-fan .hub { fill: #9aa3ad; }
-  .fan.lam-fan.on .blade, .fan.vai-fan.on .blade, .fan.pana-fan.on .blade, .fan.vies-fan.on .blade, .fan.bosch-fan.on .blade, .fan.sd-fan.on .blade, .fan.sam-fan.on .blade, .fan.wolf-fan.on .blade, .fan.kro-fan.on .blade, .fan.ait-fan.on .blade { fill: ${hfcVar('cool')}; opacity: .95; }
+  .fan.lam-fan .blade, .fan.vai-fan .blade, .fan.pana-fan .blade, .fan.vies-fan .blade, .fan.bosch-fan .blade, .fan.sd-fan .blade, .fan.sam-fan .blade, .fan.wolf-fan .blade, .fan.kro-fan .blade, .fan.ait-fan .blade, .fan.stb-fan .blade { fill: #9aa3ad; opacity: .55; }
+  .fan.lam-fan .hub, .fan.vai-fan .hub, .fan.pana-fan .hub, .fan.vies-fan .hub, .fan.bosch-fan .hub, .fan.sd-fan .hub, .fan.sam-fan .hub, .fan.wolf-fan .hub, .fan.kro-fan .hub, .fan.ait-fan .hub, .fan.stb-fan .hub { fill: #9aa3ad; }
+  .fan.lam-fan.on .blade, .fan.vai-fan.on .blade, .fan.pana-fan.on .blade, .fan.vies-fan.on .blade, .fan.bosch-fan.on .blade, .fan.sd-fan.on .blade, .fan.sam-fan.on .blade, .fan.wolf-fan.on .blade, .fan.kro-fan.on .blade, .fan.ait-fan.on .blade, .fan.stb-fan.on .blade { fill: ${hfcVar('cool')}; opacity: .95; }
   .vai-body { fill: ${hfcVar('casing')}; stroke: color-mix(in srgb, ${hfcVar('casing')} 80%, #6b7280); stroke-width: 1.5; }
   .vai-dark, .vai-foot { fill: color-mix(in srgb, ${hfcVar('anthracite')} 60%, #000); }
   .vai-gr { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 45%, #a0a8b0); stroke-width: 2; } .vai-gr.thin { stroke-width: 1; opacity: .85; }
@@ -4654,6 +4670,13 @@ HeatpumpFlowCard.styles = `
   .ait-base { fill: color-mix(in srgb, ${hfcVar('anthracite')} 55%, #000); }
   .ait-plate { fill: color-mix(in srgb, ${hfcVar('casing')} 55%, #64748b); opacity: .7; }
   .ait-rim { fill: none; stroke: color-mix(in srgb, ${hfcVar('casing')} 62%, #64748b); stroke-width: 1.2; }
+  .stb-body { fill: color-mix(in srgb, ${hfcVar('anthracite')} 78%, #000); }
+  .stb-grille { fill: color-mix(in srgb, ${hfcVar('anthracite')} 30%, #000); }
+  .stb-slat { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 62%, #000); stroke-width: 2.4; }
+  .stb-seam { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 55%, #000); stroke-width: 1.2; }
+  .stb-base, .stb-foot { fill: color-mix(in srgb, ${hfcVar('anthracite')} 50%, #000); }
+  .stb-plate { fill: color-mix(in srgb, ${hfcVar('casing')} 70%, #94a3b8); opacity: .75; }
+  .stb-rim { fill: none; stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 42%, transparent); stroke-width: 1.2; }
   /* timeline of the operating mode */
   .timeline { margin: 8px 4px 0; }
   .tl-head { display: flex; justify-content: space-between; gap: 8px; font-size: .82em; color: var(--hfc-muted); }
