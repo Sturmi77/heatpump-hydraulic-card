@@ -108,14 +108,16 @@
     for (let n = 0; n < text.length; n++) { h ^= text.charCodeAt(n); h = Math.imul(h, 0x01000193) >>> 0; }
     return h.toString(16).padStart(8, '0');
   };
-  // Waits until asynchronous answers (energy dashboard, statistics, history) have settled.
+  // Waits until asynchronous answers (energy dashboard, statistics, history) have settled: three identical readings in a row, the
+  // last two 5 ms apart. Two readings were not enough for the energy split of a demo, which once arrived between them.
   const settled = async (card) => {
-    let last = ''; let d;
+    let last = ''; let same = 0; let d;
     for (let n = 0; n < 40; n++) {
       await wait(n < 2 ? 0 : 5);
       d = describe(card);
       const now = hash(d.geo) + hash(d.state);
-      if (now === last) return d;
+      same = now === last ? same + 1 : 0;
+      if (same >= 2) return d;
       last = now;
     }
     return d;

@@ -2902,6 +2902,69 @@
     } finally { delete HFC_PRESETS.__valvetest; }
   }
 
+  // 18x. before 0.14.0: a preset with a combined storage, own texts for the storage parts, the standby loss with several circuits
+  {
+    const q = (c, id) => c.shadowRoot.getElementById(id);
+    // Lambda: the hot-water tank and buffer sensors of the preset become heights in one tank.
+    const s = setups[0];
+    let card = mount({ preset: 'lambda', storage: 'combined' }, hassOf(toStates(s.states('heat')), s.registry || {})); await wait(30);
+    const present = ['dhw_top', 'dhw_middle', 'dhw_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom'].filter((k) => card._has(k));
+    const stops = [...card.shadowRoot.querySelectorAll('#g-cs stop')].map((st) => st.id.replace('g-cs-', ''));
+    check(q(card, 'cs-tank') && card.shadowRoot.querySelectorAll('rect.tank').length === 1 && present.length >= 3 && stops.join() === present.join(),
+      `Lambda preset with a combined storage: one tank, one stop per preset sensor (${stops.join(', ')})`);
+    check(/°C/.test(q(card, 't-dhw-top').textContent) && /°C/.test(q(card, 't-buf-top').textContent), 'Lambda preset with a combined storage: tank and buffer temperatures in their zones');
+    card.remove();
+    // Own texts for the new storage parts.
+    const texts = { en: { combined_tank: 'Layered tank', heating_zone: 'Space heating', fresh_water_station: 'Tap water station' } };
+    const st = toStates({ 'sensor.f': ['35', '°C'], 'sensor.c': ['40', 'Hz'], 'sensor.t1': ['50', '°C'], 'sensor.t4': ['32', '°C'], 'binary_sensor.p1': 'on', 'binary_sensor.p2': 'off' });
+    const ents = { flow: 'sensor.f', compressor: 'sensor.c', dhw_top: 'sensor.t1', buffer_top: 'sensor.t4' };
+    card = mount({ entities: ents, storage: 'combined', texts }, hassOf(st)); await wait(20);
+    const titles = [...card.shadowRoot.querySelectorAll('.tank-title, .zone-title')].map((t) => t.textContent);
+    check(titles.includes('Layered tank') && titles.includes('Space heating'), `own texts for the combined storage and its heating zone (${titles.join(', ')})`);
+    card.remove();
+    card = mount({ entities: ents, dhw_type: 'fresh_water', texts }, hassOf(st)); await wait(20);
+    check([...card.shadowRoot.querySelectorAll('.tank-title')].some((t) => t.textContent === 'Tap water station'), 'own text for the fresh-water station');
+    card.remove();
+    // Standby loss with a combined storage needs the pump of every circuit (Codex review of #133).
+    const loss = (extra) => { const c = mount({ entities: { ...ents, ...extra }, storage: 'combined', hc_count: 2 }, hassOf(st)); const ids = c._lossIds(); c.remove(); return ids; };
+    check(loss({ hc_pump: 'binary_sensor.p1' }) === null, 'two circuits, one pump known: no standby-loss tile');
+    const both = loss({ hc_pump: 'binary_sensor.p1', hc2_pump: 'binary_sensor.p2' });
+    check(both && both.extra.includes('binary_sensor.p1') && both.extra.includes('binary_sensor.p2'), 'two circuits, both pumps known: both are part of the standby check');
+  }
+
+  // 18y. code audit before 0.14.0: no series_bypass default on save, hydraulic options in the report, a map under entities in the editor
+  {
+    const hass = hassOf(toStates({ 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.c': ['40', 'Hz'] }));
+    const ents = { flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c' };
+    const editor = (cfg) => {
+      const ed = document.createElement('heatpump-flow-card-editor'); const out = {};
+      ed.addEventListener('config-changed', (ev) => { out.config = ev.detail.config; });
+      ed.setConfig(cfg); ed.hass = hass; return [ed, out];
+    };
+    // An unrelated edit writes no series_bypass; false next to a series buffer stays.
+    let [ed, out] = editor({ entities: ents });
+    ed._changed({ ...ed._form.data, title: 'Renamed' });
+    check(!('series_bypass' in out.config), `an unrelated edit writes no series_bypass (${JSON.stringify(out.config)})`);
+    [ed, out] = editor({ entities: ents, series_buffer: true, series_bypass: false });
+    ed._changed({ ...ed._form.data, title: 'Renamed' });
+    check(out.config.series_buffer === true && out.config.series_bypass === false, 'series_bypass: false next to a series buffer is kept');
+    ed._changed({ ...ed._form.data, series_bypass: true });
+    check(out.config.series_buffer === true && !('series_bypass' in out.config), 'switching the bypass valve back on removes the option (default)');
+    // Report: storage, hot-water preparation, series buffer and primary pump in one line.
+    const line = (cfg) => (/\nStorage: [^\n]+/.exec(C._diagnosticReport(cfg, hass)) || [''])[0].trim();
+    check(line({ entities: ents }) === 'Storage: separate · hot water: coil · series buffer: no · primary pump: no', `report names the default hydraulics (${line({ entities: ents })})`);
+    check(line({ entities: ents, storage: 'combined', dhw_type: 'fresh_water', primary_pump: true }) === 'Storage: combined · hot water: fresh_water · series buffer: no · primary pump: yes', 'report names a combined storage with a fresh-water station');
+    check(line({ entities: ents, series_buffer: true, series_bypass: false }) === 'Storage: separate · hot water: coil · series buffer: yes, no bypass valve · primary pump: no', 'report names a series buffer without bypass valve');
+    check(/primary pump: yes$/.test(line({ preset: 'heishamon' })), 'report takes the primary pump from the preset');
+    // Editor: a value map under entities is named as ignored, and saving keeps it where it is.
+    [ed, out] = editor({ entities: { ...ents, valve_map: { 1: 'heating' } } });
+    check(/valve_map is under entities/.test(ed._warn.innerHTML), 'editor warns about a valve_map under entities');
+    ed._changed({ ...ed._form.data, title: 'Renamed' });
+    check(JSON.stringify(out.config.entities.valve_map) === '{"1":"heating"}', 'saving in the editor does not drop the misplaced map');
+    [ed, out] = editor({ entities: ents, valve_map: { 1: 'heating' } });
+    check(!/is under entities/.test(ed._warn.innerHTML), 'no such warning for a valve_map at the top level');
+  }
+
   // 19. diagnostic report, full-screen layer, custom texts and built-in card themes
   {
     const s = setups[0];

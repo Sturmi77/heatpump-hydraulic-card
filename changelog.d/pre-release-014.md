@@ -1,0 +1,5 @@
+- The `dhw_loss` tile with a combined storage needs the pump of every heating circuit; with one circuit unmonitored it is not offered, because that circuit could draw heat from the tank unnoticed.
+- New demo setups "Combined storage, tank in tank" and "Combined storage, fresh-water station".
+- The diagnostic report names the hydraulic options in one line: storage, hot-water preparation, series buffer (with or without bypass valve) and primary pump.
+- The visual editor warns when a value map such as `valve_map` sits under `entities`, where the card ignores it.
+- The visual editor no longer writes `series_bypass: true` into every configuration it saves; the option is only kept as `false` next to a series buffer.

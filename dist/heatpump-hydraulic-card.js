@@ -1216,6 +1216,7 @@ const HFC_EDITOR = {
     warn_temps: 'No flow or return temperature: no spread and no estimated heat output.',
     warn_heat: 'No heat output and no flow rate: no live COP.',
     warn_valve: 'The diverter valve reports a number and has no valve states: the card reads 1 as hot water. If 1 means heating on this valve, set its states under Advanced.',
+    warn_map_entities: '{maps} is under entities, where the card ignores it. In YAML it belongs at the top level of the card configuration.',
     preset_help: 'Found entities are filled in below. Pick another entity to override one, clear a field to hide it.',
     from_energy: 'Empty: taken from the Energy dashboard',
     errors: 'Error entities', error_ok_text: 'Text states that mean no error',
@@ -1282,6 +1283,7 @@ const HFC_EDITOR = {
     warn_temps: 'Kein Vor- oder Rücklauf: keine Spreizung und keine geschätzte Wärmeleistung.',
     warn_heat: 'Keine Wärmeleistung und kein Volumenstrom: kein Live-COP.',
     warn_valve: 'Das Umschaltventil meldet eine Zahl und hat keine Ventilstellungen: Die Karte liest 1 als Warmwasser. Bedeutet 1 bei diesem Ventil Heizen, die Stellungen unter „Erweitert“ eintragen.',
+    warn_map_entities: '{maps} steht unter entities und wird dort von der Karte ignoriert. In YAML gehört es auf die oberste Ebene der Kartenkonfiguration.',
     preset_help: 'Gefundene Entitäten sind unten eingetragen. Andere Entität wählen zum Überschreiben, Feld leeren zum Ausblenden.',
     from_energy: 'Leer: aus dem Energie-Dashboard',
     errors: 'Fehler-Entitäten', error_ok_text: 'Textzustände ohne Fehler',
@@ -1920,6 +1922,8 @@ class HeatpumpFlowCard extends HTMLElement {
       `Prefix: ${r.prefix || '(none)'}`,
       `Source type: ${config.source_type || 'air'}`,
       `Heating circuits: ${hfcHcCount(config)}`,
+      // The hydraulic options decide what the schematic draws, so a report of a storage or flow problem needs them.
+      `Storage: ${config.storage || 'separate'} · hot water: ${config.dhw_type || 'coil'} · series buffer: ${config.series_buffer ? (config.series_bypass === false ? 'yes, no bypass valve' : 'yes') : 'no'} · primary pump: ${(config.primary_pump ?? !!r.preset?.primary_pump) ? 'yes' : 'no'}`,
       `Layout: ${config.layout || 'default'}`,
       '',
       'Entity mappings:',
@@ -3411,12 +3415,14 @@ class HeatpumpFlowCard extends HTMLElement {
     const run = this._timelineIds();
     if (!temps.length || sensors[0] !== keys[0] || !run) return null;
     // A fresh-water station on the buffer has no tank of its own. In a combined storage the circuits draw heat from the same
-    // tank, so their pumps must be known and every window with a running circuit pump is left out (docs/TOPOLOGY.md, D3).
+    // tank, so the pump of every circuit must be known and every window with a running circuit pump is left out (docs/TOPOLOGY.md,
+    // D3): one unmonitored circuit could draw heat that would count as standby loss.
     const combined = this._config.storage === 'combined';
     // Both come from the configuration, so the editor's tile probe, which has no rendered parts, decides like the card.
     if (this._station()) return null;
-    const pumps = combined ? Array.from({ length: this._hcCount ?? hfcHcCount(this._config) }, (_, n) => this._hk(n + 1, 'pump')).filter((k) => this._has(k)) : [];
-    if (combined && !pumps.length) return null;
+    const circuits = combined ? Array.from({ length: this._hcCount ?? hfcHcCount(this._config) }, (_, n) => this._hk(n + 1, 'pump')) : [];
+    const pumps = circuits.filter((k) => this._has(k));
+    if (pumps.length < circuits.length) return null;
     return { temps, run, extra: ['dhw_heater', 'solar_pump', ...pumps].filter((k) => this._has(k)).map((k) => this._e[k]) };
   }
 
@@ -4704,6 +4710,9 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       // A numeric sensor as the valve without any map: 1 is read as hot water, which is wrong for valves that report 1 for heating.
       if (valveId && valveId.startsWith('sensor.') && /^-?\d+(\.\d+)?$/.test(String(valveState ?? '').trim()) && !Object.keys(valveMap).length) warn.push(L.warn_valve);
     }
+    // A value map under `entities` (the mistake in #109) is ignored by the card; say so, the editor cannot show or move it.
+    const misplacedMaps = HFC_MAP_KEYS.filter((name) => own && typeof own === 'object' && name in own);
+    if (misplacedMaps.length) warn.push(L.warn_map_entities.replace('{maps}', misplacedMaps.join(', ')));
     if (this._config.power_sources !== 'manual' && this._energyMissing?.length) {
       const names = this._energyMissing.map((type) => ({ solar: L.pv, battery: L.battery, grid: L.grid }[type])).join(', ');
       warn.push(L.warn_energy_sources.replace('{sources}', names));
@@ -4807,6 +4816,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     // editor hides its field and the card would reject the combination.
     if (!value.storage || value.storage === 'separate') delete config.storage;
     if (config.storage === 'combined') { delete config.series_buffer; delete config.series_bypass; }
+    // series_bypass only matters as false next to a series buffer; the switch's default (true) is not written.
+    if (!config.series_buffer || value.series_bypass !== false) delete config.series_bypass;
     if (!value.dhw_type || value.dhw_type === 'coil' || (value.dhw_type === 'tank_in_tank' && config.storage !== 'combined')) delete config.dhw_type;
     const errorOk = String(value.error_ok_text || '').split(',').map((state) => state.trim()).filter(Boolean);
     if (JSON.stringify(errorOk) !== JSON.stringify(this._presetErrorOk || [])) config.error_ok = errorOk; else delete config.error_ok;

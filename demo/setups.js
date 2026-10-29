@@ -810,5 +810,15 @@ setups.push({
     mode_map: { Heating: 'heating', 'Hot water': 'dhw', Defrost: 'defrost', Standby: 'idle' },
   },
 });
+// The two other hot-water preparations of a combined storage, on the same data (appended, so earlier demos keep their index).
+const combinedSetup = setups.find((s) => s.name === 'Combined storage');
+setups.push({
+  name: 'Combined storage, tank in tank', sub: 'no preset: layered tank with an inner hot-water tank (dhw_type: tank_in_tank)',
+  states: combinedStates, config: { ...combinedSetup.config, dhw_type: 'tank_in_tank' },
+});
+setups.push({
+  name: 'Combined storage, fresh-water station', sub: 'no preset: layered tank, the tap water heated by a fresh-water station (dhw_type: fresh_water)',
+  states: combinedStates, config: { ...combinedSetup.config, dhw_type: 'fresh_water', hc_type: 'underfloor' },
+});
 
 const scenarios = [['heat', 'Heating'], ['dhw', 'Hot water'], ['defrost', 'Defrost'], ['idle', 'Standby + error']];
