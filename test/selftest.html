@@ -1234,7 +1234,7 @@
     const hass = (scen, extra = {}) => hassOf(toStates({ ...s.states(scen), ...extra }), reg);
     const sid = (tk) => isgId('sensor', tk); const bid = (tk) => isgId('binary_sensor', tk);
     const r = C._resolve(s.config, hass('heat')); const e = r.entities;
-    check(HFC_PRESETS.stiebel_isg.tested !== true && r.ready && r.prefix === '', 'Stiebel ISG is detected through translation keys and marked untested');
+    check(HFC_PRESETS.stiebel_isg.tested === true && r.ready && r.prefix === '', 'Stiebel ISG is detected through translation keys and marked tested (WPMsystem, #69)');
     check(e.compressor === bid('compressor_on') && e.defrost === bid('evaporator_defrost') && e.valve === bid('is_heating_water') && e.mode === undefined, `Stiebel ISG compressor, defrost and hot water flag, no mode entity (${e.compressor})`);
     check(e.flow === sid('flow_temperature_wp1') && e.return === sid('return_temperature_wp1') && e.volume === sid('volume_stream_wp1') && e.outdoor === sid('outdoor_temperature'), 'Stiebel ISG heat pump 1 flow, return, flow rate and outdoor temperature');
     check(e.power === sid('current_power_consumption') && e.dhw_top === sid('actual_temperature_water') && e.dhw_target === sid('target_temperature_water') && e.buffer_top === sid('actual_temperature_buffer'), 'Stiebel ISG power, hot water with target, buffer');
