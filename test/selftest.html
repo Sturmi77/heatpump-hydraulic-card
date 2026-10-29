@@ -47,7 +47,8 @@
     card.hass = hass; card.hass = { ...hass };
     return card;
   };
-  const ok = (card) => !card._failed && !!card.shadowRoot.getElementById('svg');
+  // Rendered without an error: the drawing, or the start state of a card without preset and entities (#142).
+  const ok = (card) => !card._failed && (!!card.shadowRoot.getElementById('svg') || !!card.shadowRoot.getElementById('start-hint'));
 
   // 1. every installation and scenario renders, presets are detected
   for (const [i, s] of setups.entries()) {
@@ -98,6 +99,26 @@
 
   // 5. detection: the right preset for each installation, nothing for gas boilers or foreign entities
   check(HFC_PRESETS.heishamon.tested === true, 'HeishaMon preset is marked real-installation tested');
+
+  // 5-0. No supported integration (#142): the stub has no preset and the card shows its start state, not an error
+  {
+    const plain = hassOf(toStates({ 'sensor.living_room_temperature': ['21.0', '°C'], 'light.kitchen': 'on' }), {});
+    const stubbed = C.getStubConfig(plain);
+    check(stubbed.preset === undefined && !Object.keys(stubbed).length, `without a supported integration the stub has no preset (${JSON.stringify(stubbed)})`);
+    let card = mount(stubbed, plain); await wait(20);
+    const hint = card.shadowRoot.getElementById('start-hint');
+    check(!!hint && !card.shadowRoot.getElementById('svg') && !card._failed && /preset/i.test(hint.textContent) && hint.querySelector('a[href*="#quick-start"]'),
+      'the card without preset and entities shows the start hint with a link, no drawing and no error');
+    card.hass = { ...plain }; await wait(10);
+    check(!!card.shadowRoot.getElementById('start-hint') && !card._failed, 'state updates keep the start state without errors');
+    card.remove();
+    card = mount({ entities: { room: 'sensor.living_room_temperature' } }, plain); await wait(20);
+    check(!card.shadowRoot.getElementById('start-hint') && !!card.shadowRoot.getElementById('svg'), 'one mapped entity ends the start state');
+    card.remove();
+    card = mount({ preset: 'lambda' }, plain); await wait(20);
+    check(!card.shadowRoot.getElementById('start-hint') && /preset/i.test(card.shadowRoot.querySelector('.hint')?.textContent || ''), 'an explicit preset that finds nothing keeps its own hint');
+    card.remove();
+  }
   const stub = (states, registry) => C.getStubConfig(hassOf(toStates(states), registry));
   const expect = { 0: 'lambda', 1: 'lambda', 2: 'vicare', 3: 'vaillant', 4: 'emsesp', 5: 'heishamon', 6: 'emsesp', 8: 'wolf', 9: 'kronoterm', 10: 'ebusd', 11: 'samsung', 12: 'luxtronik', 15: 'stiebel_isg' };
   for (const [i, p] of Object.entries(expect)) {

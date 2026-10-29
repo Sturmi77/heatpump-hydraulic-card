@@ -172,6 +172,8 @@ Both types are the same card with the same options. If you only use this card, n
 
 ## Quick start
 
+Added from the card picker, the card looks for a supported integration and fills in its preset. Without one it shows a short start hint instead of a drawing: open the card editor and pick a preset, or map your entities (see [Configuration](#configuration)).
+
 ### Lambda (lambda_heat_pumps)
 ```yaml
 type: custom:heatpump-flow-card
