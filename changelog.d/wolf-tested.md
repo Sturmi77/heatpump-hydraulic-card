@@ -1,1 +1,0 @@
-- Wolf: the `wolf` preset is confirmed on a real installation (CHA with `wolf_smartset` 0.5.0, card 0.13.1) and no longer marked untested. The `wolflink` branch is built from the entity registry and states of the same installation.

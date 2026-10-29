@@ -279,7 +279,7 @@ Planned after 0a and 0b were merged (28 October 2026). Each item is one pull req
 
 Sprints 1 and 2 bring the card from about 73 % to about 85 % of installations in roughly 4–5 working days. Phase 3a follows when its data exists; until then the decision point is not reached.
 
-**Status (0.14.0):** sprints 1 and 2 are done and ship with 0.14.0. No input arrived for the open questions, so defaults D1 to D4 apply as planned; D5 holds (0a/0b ship as an internal entry). Two decisions were taken while testing the edge cases ([#134](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/134)): cooling runs through the heating zone of a combined storage (see phase 1), and the first stretch of flow and return that feeds several circuits is a pipe of its own. Phase 3a stays blocked until a hybrid installation sends its data.
+**Status (0.14.0):** sprints 1 and 2 are done and shipped with 0.14.0. No input arrived for the open questions, so defaults D1 to D4 apply as planned; D5 holds (0a/0b ship as an internal entry). Two decisions were taken while testing the edge cases ([#134](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/134)): cooling runs through the heating zone of a combined storage (see phase 1), and the first stretch of flow and return that feeds several circuits is a pipe of its own. Phase 3a stays blocked until a hybrid installation sends its data.
 
 **Planned defaults** (used when no input arrives; each can be changed later without breaking configurations):
 

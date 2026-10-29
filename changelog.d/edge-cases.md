@@ -1,3 +1,0 @@
-- Several heating circuits: the first stretch of flow and return that feeds all circuits is drawn as a trunk of its own and flows whenever any circuit runs. Before, it belonged to circuit 1, so with circuit 1 off and another circuit on the flow started at a standing pipe.
-- Combined storage: a sensor without a value (unavailable) takes the colour of the nearest sensor instead of drawing a grey band in the tank.
-- Documented: cooling runs through the heating zone of a combined storage; a fresh-water station on the buffer leaves solar thermal out; hot-water mode without any hot-water key shows the running heat pump without flowing pipes.
