@@ -117,6 +117,20 @@
     check(r.entities.hc_pressure === 'sensor.ebusd_hmu_flowpressure' && r.entities.hc2_pressure === undefined, 'ebusd: one system pressure, not copied to circuit 2');
     check(r.entities.buffer_top === undefined, 'ebusd: buffer stays unmapped');
     check(r.tiles.env_energy?.total === 'sensor.ebusd_hmu_statenvironmentenergysum', 'ebusd: environmental energy tile');
+    // Without the hydraulic station's hot water flag the operating state decides (#155): hwc_* is hot water, the zone valve
+    // status of the controller (open/closed) is no diverter valve and stays unmapped.
+    {
+      const ebusd = setups.find((s) => s.config.preset === 'ebusd');
+      const noFlag = (scen) => { const st = { ...ebusd.states(scen), 'sensor.ebusd_ctlv2_z1valvestatus': scen === 'heat' ? '1' : '0' }; delete st['sensor.ebusd_vwzio_statusdhw_dhwactive']; return st; };
+      const reg = Object.fromEntries(Object.keys(noFlag('dhw')).map((id) => [id, { platform: 'mqtt' }]));
+      const rv = C._resolve(ebusd.config, hassOf(toStates(noFlag('dhw')), reg));
+      check(rv.entities.valve === undefined, `ebusd: without the hot water flag no valve is mapped, not the zone valve (${rv.entities.valve})`);
+      for (const [scen, text] of [['dhw', HFC_I18N.en.valve_dhw], ['heat', HFC_I18N.en.valve_heating]]) {
+        const cv = mount({ ...ebusd.config, power_sources: 'manual' }, hassOf(toStates(noFlag(scen)), reg)); await wait(20);
+        check(cv.shadowRoot.getElementById('t-valve')?.textContent === text, `ebusd without hot water flag: valve follows the operating state (${scen}: ${cv.shadowRoot.getElementById('t-valve')?.textContent})`);
+        cv.remove();
+      }
+    }
     const modes = HFC_PRESETS.ebusd.mode_map;
     check(modes.deicing_active === 'defrost' && modes.hwc_overrun === 'dhw' && modes.heat_compressor_blocked === 'blocked' && modes.standby === 'idle', 'ebusd status codes normalized');
   }

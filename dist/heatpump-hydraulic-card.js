@@ -981,6 +981,9 @@ const HFC_PRESETS = {
       return {
         mode: h('rundatastatuscode'),
         compressor: h('rundatacompressorspeed'),
+        // The hydraulic station's hot water flag, where ebusd reports it. Without it the operating state (hwc_*) tells hot water.
+        // The controller's Z1ValveStatus is the zone 1 valve (open/closed), also closed in standby and while another zone heats,
+        // so it is no diverter valve and stays unmapped (#155).
         valve: w('statusdhw_dhwactive'),
         power: h('currentconsumedpower'),
         heat: h('currentyieldpower'),
