@@ -107,7 +107,7 @@ let lang = ['en', 'de', 'nl'].includes(q.get('lang')) ? q.get('lang') : 'en';
 if (q.get('embed') === '1') document.body.classList.add('embed');
 let layout = ['default', 'compact', 'wide', 'wall'].includes(q.get('layout')) ? q.get('layout') : 'default';
 let theme = ['auto', 'night', 'contrast'].includes(q.get('theme')) ? q.get('theme') : 'auto';
-const unitKeys = ['auto', 'generic', 'lambda', 'vaillant-small', 'vaillant-medium', 'vaillant-large', 'panasonic', 'viessmann', 'bosch', 'saunier', 'samsung', 'wolf'];
+const unitKeys = ['auto', 'generic', 'lambda', 'vaillant-small', 'vaillant-medium', 'vaillant-large', 'panasonic', 'viessmann', 'bosch', 'saunier', 'samsung', 'wolf', 'kronoterm', 'alpha_innotec', 'stiebel'];
 let unit = unitKeys.includes(q.get('unit')) ? q.get('unit') : 'auto';
 let palette = q.get('palette') === 'teal' ? 'teal' : 'default';
 const palettes = { teal: { '--hfc-heat': '#14b8a6', '--hfc-hot': '#e11d48', '--hfc-flow-cold': '#5eead4', '--hfc-flow-hot': '#e11d48', '--hfc-tank-cold': '#6366f1', '--hfc-tank-hot': '#f43f5e', '--hfc-pv': '#eab308' } };
@@ -210,7 +210,7 @@ scenarios.forEach(([k, l]) => mk('states', l, k, () => { scen = k; }));
   ['auto', 'Automatic'], ['generic', 'Generic'], ['lambda', 'Lambda'],
   ['vaillant-small', 'Vaillant 3.5 / 5.5 kW'], ['vaillant-medium', 'Vaillant 7.5 kW'], ['vaillant-large', 'Vaillant 10.5 / 12.5 kW'],
   ['panasonic', 'Panasonic Aquarea'], ['viessmann', 'Viessmann Vitocal'], ['bosch', 'Bosch / Buderus'],
-  ['saunier', 'Saunier Duval GeniaAir'], ['samsung', 'Samsung EHS Mono'], ['wolf', 'Wolf CHA'],
+  ['saunier', 'Saunier Duval GeniaAir'], ['samsung', 'Samsung EHS Mono'], ['wolf', 'Wolf CHA'], ['kronoterm', 'Kronoterm ADAPT'], ['alpha_innotec', 'Alpha Innotec Hybrox'], ['stiebel', 'Stiebel Eltron WPL-A'],
 ].forEach(([k, l]) => mk('units', l, k, () => { unit = k; }));
 [['default', 'Default'], ['teal', 'Teal']].forEach(([k, l]) => mk('palettes', l, k, () => { palette = k; }));
 mk('display', 'English', 'en', () => { lang = 'en'; });

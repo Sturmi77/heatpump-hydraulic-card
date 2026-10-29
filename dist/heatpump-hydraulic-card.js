@@ -710,6 +710,8 @@ const HFC_PRESETS = {
   kronoterm: {
     name: 'Kronoterm',
     tested: true,
+    // ADAPT air/water unit; brine and water units (ETERA, WPLV …) keep the loop symbol through source_type (#157).
+    unit_style: 'kronoterm',
     // The main circulation pump (register 2038, `main_pump_status`) belongs to the heat pump and runs for heating, hot water and defrost.
     primary_pump: true,
     // The hot water heat pumps of the Kronoterm DHW cloud have neither, so only heating heat pumps are detected.
@@ -781,6 +783,8 @@ const HFC_PRESETS = {
   // buffer is not exposed, so neither is mapped.
   luxtronik: {
     name: 'Luxtronik (Alpha Innotec, Novelan, Roth …)',
+    // Alpha Innotec Hybrox for air units; Novelan, Roth and the other brands share the controller, not the casing (#158).
+    unit_style: 'alpha_innotec',
     // A mixing circuit counts when its sensors report: the card looks again every minute for circuits that report late.
     dynamic: true,
     auto_circuits: false,
@@ -859,6 +863,8 @@ const HFC_PRESETS = {
   stiebel_isg: {
     name: 'Stiebel Eltron ISG (WPM, LWZ) / Tecalor',
     tested: true,
+    // WPL-A for air sources (the integration does not name the model); brine units keep the loop symbol (#159).
+    unit_style: 'stiebel',
     // Optional parts are mapped by their readings: the card looks again every minute for parts that report late.
     dynamic: true,
     auto_circuits: false,
@@ -1106,7 +1112,7 @@ const HFC_I18N = {
       suction_temp: 'Suction gas', hot_gas: 'Hot gas', liquid_temp: 'Liquid line', low_pressure: 'Low pressure', high_pressure: 'High pressure',
       eev: 'Expansion valve', superheat: 'Superheat', subcooling: 'Subcooling',
     },
-    source_flow: 'Source', target: 'Target', curve_offset: 'curve', curve_shift: 'shift', return_short: 'RL', middle: 'middle', bottom: 'bottom', error: 'Error', circulation: 'Circ.', valve_dhw: 'DHW', solar: 'Solar',
+    source_flow: 'Source', target: 'Target', curve_offset: 'curve', curve_shift: 'shift', return_short: 'RL', error: 'Error', circulation: 'Circ.', valve_dhw: 'DHW', solar: 'Solar',
     brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', pressure_normal: 'normal', pressure_warning: 'warning', pressure_critical: 'critical',
     timeline_title: 'Last {h} hours', timeline_gap: 'No data', timeline_aria: 'Operating mode of the last {h} hours. Arrow keys select a period.',
     programs: { eco: 'Eco', night: 'Night', party: 'Party', holiday: 'Holiday' },
@@ -1146,7 +1152,7 @@ const HFC_I18N = {
       suction_temp: 'Sauggas', hot_gas: 'Heißgas', liquid_temp: 'Flüssigkeitsleitung', low_pressure: 'Niederdruck', high_pressure: 'Hochdruck',
       eev: 'Expansionsventil', superheat: 'Überhitzung', subcooling: 'Unterkühlung',
     },
-    source_flow: 'Quelle', target: 'Soll', curve_offset: 'Kurve', curve_shift: 'Verschiebung', return_short: 'RL', middle: 'Mitte', bottom: 'unten', error: 'Fehler', circulation: 'Zirk.', valve_dhw: 'WW', solar: 'Solar',
+    source_flow: 'Quelle', target: 'Soll', curve_offset: 'Kurve', curve_shift: 'Verschiebung', return_short: 'RL', error: 'Fehler', circulation: 'Zirk.', valve_dhw: 'WW', solar: 'Solar',
     brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', pressure_normal: 'normal', pressure_warning: 'Warnung', pressure_critical: 'kritisch',
     timeline_title: 'Letzte {h} Stunden', timeline_gap: 'Keine Daten', timeline_aria: 'Betriebsart der letzten {h} Stunden. Mit den Pfeiltasten einen Zeitraum wählen.',
     programs: { eco: 'Eco', night: 'Nacht', party: 'Party', holiday: 'Urlaub' },
@@ -1193,7 +1199,7 @@ const HFC_EDITOR = {
     power_sources: 'PV / battery / grid', ps_auto: 'Energy dashboard, unless set below', ps_manual: 'Only the sensors below',
     source_type: 'Heat source', src_air: 'Air', src_brine: 'Ground (brine)', src_water: 'Groundwater',
     hc_count: 'Heating circuits', hc2_type: 'Circuit 2 emitter', hc3_type: 'Circuit 3 emitter', hc4_type: 'Circuit 4 emitter', hc5_type: 'Circuit 5 emitter', hc6_type: 'Circuit 6 emitter',
-    unit_style: 'Unit drawing', unit_auto: 'Automatic (from the preset)', unit_generic: 'Generic (fan)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA',
+    unit_style: 'Unit drawing', unit_auto: 'Automatic (from the preset)', unit_generic: 'Generic (fan)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
     unit_size: 'Vaillant size', size_small: '3.5 / 5.5 kW (1 fan, low)', size_medium: '7.5 kW (1 fan)', size_large: '10.5 / 12.5 kW (2 fans)',
     timeline: 'Timeline of the operating mode', timeline_hours: 'Timeline length (hours)', timeline_marks: 'Show the badges (e.g. Boost) as extra lanes',
     layout: 'Layout', layout_default: 'Default', layout_compact: 'Compact (narrow columns)', layout_wide: 'Wide (tiles beside the schematic)', layout_wall: 'Wall display (large, controls fade out)',
@@ -1235,6 +1241,8 @@ const HFC_EDITOR = {
     program: 'Heating program (eco, night, party, holiday)', solar_collector: 'Solar collector temperature', solar_pump: 'Solar pump running (binary)',
     source_out: 'Source outlet temperature', heater: 'Backup / inline heater active',
     dhw_heater: 'DHW heater rod active', buffer_heater: 'Buffer heater rod active',
+    dhw_heater_top: 'DHW heater rod at the top active', dhw_heater_middle: 'DHW heater rod in the middle active', dhw_heater_bottom: 'DHW heater rod at the bottom active',
+    buffer_heater_top: 'Buffer heater rod at the top active', buffer_heater_middle: 'Buffer heater rod in the middle active', buffer_heater_bottom: 'Buffer heater rod at the bottom active',
     hc_underfloor: 'Underfloor heating', hc_radiator: 'Panel radiators', hc_column: 'Column radiators',
     brine_pressure_min: 'Brine pressure warning below', brine_pressure_crit: 'Brine pressure critical below', brine_pressure_max: 'Brine pressure warning above',
     hc_pressure_min: 'Heating pressure warning below', hc_pressure_crit: 'Heating pressure critical below', hc_pressure_max: 'Heating pressure warning above',
@@ -1260,7 +1268,7 @@ const HFC_EDITOR = {
     power_sources: 'PV / Akku / Netz', ps_auto: 'Energie-Dashboard, außer unten gesetzt', ps_manual: 'Nur die Sensoren unten',
     source_type: 'Wärmequelle', src_air: 'Luft', src_brine: 'Erdreich (Sole)', src_water: 'Grundwasser',
     hc_count: 'Heizkreise', hc2_type: 'Wärmeabgabe Heizkreis 2', hc3_type: 'Wärmeabgabe Heizkreis 3', hc4_type: 'Wärmeabgabe Heizkreis 4', hc5_type: 'Wärmeabgabe Heizkreis 5', hc6_type: 'Wärmeabgabe Heizkreis 6',
-    unit_style: 'Geräte-Zeichnung', unit_auto: 'Automatisch (aus der Voreinstellung)', unit_generic: 'Allgemein (Lüfter)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA',
+    unit_style: 'Geräte-Zeichnung', unit_auto: 'Automatisch (aus der Voreinstellung)', unit_generic: 'Allgemein (Lüfter)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
     unit_size: 'Vaillant-Größe', size_small: '3,5 / 5,5 kW (1 Lüfter, niedrig)', size_medium: '7,5 kW (1 Lüfter)', size_large: '10,5 / 12,5 kW (2 Lüfter)',
     timeline: 'Zeitleiste der Betriebsart', timeline_hours: 'Länge der Zeitleiste (Stunden)', timeline_marks: 'Badges (z. B. Boost) als zusätzliche Spuren zeigen',
     layout: 'Layout', layout_default: 'Standard', layout_compact: 'Kompakt (schmale Spalten)', layout_wide: 'Breit (Kacheln neben dem Schema)', layout_wall: 'Wanddisplay (groß, Bedienelemente blenden aus)',
@@ -1302,6 +1310,8 @@ const HFC_EDITOR = {
     program: 'Heizprogramm (Eco, Nacht, Party, Urlaub)', solar_collector: 'Kollektortemperatur Solarthermie', solar_pump: 'Solarpumpe läuft (binär)',
     source_out: 'Quelle Austritt', heater: 'Heizstab / Zusatzheizer aktiv',
     dhw_heater: 'Heizstab Warmwasser aktiv', buffer_heater: 'Heizstab Puffer aktiv',
+    dhw_heater_top: 'Heizstab Warmwasser oben aktiv', dhw_heater_middle: 'Heizstab Warmwasser Mitte aktiv', dhw_heater_bottom: 'Heizstab Warmwasser unten aktiv',
+    buffer_heater_top: 'Heizstab Puffer oben aktiv', buffer_heater_middle: 'Heizstab Puffer Mitte aktiv', buffer_heater_bottom: 'Heizstab Puffer unten aktiv',
     hc_underfloor: 'Flächenheizung', hc_radiator: 'Plattenheizkörper', hc_column: 'Gliederheizkörper',
     brine_pressure_min: 'Soledruck Warnung unter', brine_pressure_crit: 'Soledruck kritisch unter', brine_pressure_max: 'Soledruck Warnung über',
     hc_pressure_min: 'Heizungsdruck Warnung unter', hc_pressure_crit: 'Heizungsdruck kritisch unter', hc_pressure_max: 'Heizungsdruck Warnung über',
@@ -1329,7 +1339,7 @@ const hfcHcCount = (config) => Math.min(Math.max(Math.round(+config?.hc_count) |
 
 const HFC_ENTITY_GROUPS = {
   sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost'],
-  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'dhw_heater', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'bypass_valve', 'solar_collector', 'solar_pump'],
+  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
   sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_pressure', 'room', 'room_target', 'program'],
   // The room of circuit 1 is the house (room, room_target); circuits 2 to 6 show theirs in their status line.
   sec_hc2: ['hc2_flow', 'hc2_return', 'hc2_setpoint', 'hc2_mode', 'hc2_pump', 'hc2_volume', 'hc2_curve_offset', 'hc2_room', 'hc2_room_target'],
@@ -1347,7 +1357,10 @@ const HFC_DIAGNOSTIC_KEYS = [...new Set(Object.values(HFC_ENTITY_GROUPS).flat())
 // Entity domains usable as quick controls and the service each one calls.
 const HFC_CONTROL_DOMAINS = ['switch', 'input_boolean', 'light', 'fan', 'automation', 'button', 'input_button', 'script', 'scene',
   'select', 'input_select', 'water_heater', 'climate', 'number', 'input_number'];
-const HFC_BINARY_KEYS = ['compressor', 'valve', 'hc_pump', 'hc2_pump', 'hc3_pump', 'hc4_pump', 'hc5_pump', 'hc6_pump', 'circulation', 'defrost', 'heater', 'dhw_heater', 'buffer_heater', 'bypass_valve', 'solar_pump'];
+// Heater rods of the tanks: the plain key keeps its place between the middle and the bottom sensor, a key with a position stands at
+// that height (a large tank can have a rod at the top, in the middle and at the bottom).
+const HFC_TANK_HEATERS = ['dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom'];
+const HFC_BINARY_KEYS = ['compressor', 'valve', 'hc_pump', 'hc2_pump', 'hc3_pump', 'hc4_pump', 'hc5_pump', 'hc6_pump', 'circulation', 'defrost', 'heater', ...HFC_TANK_HEATERS, 'bypass_valve', 'solar_pump'];
 // Climate and water heater entities keep their temperatures in attributes: the reading in `current_temperature`, the target in
 // `temperature`. Keys ending in _target or _setpoint read the target, so one thermostat can serve as dhw_top and dhw_target.
 const hfcTempAttr = (id, key) => (['climate', 'water_heater'].includes(String(id || '').split('.')[0])
@@ -1374,7 +1387,7 @@ const HFC_MAP_KEYS = ['valve_map', 'mode_map', 'dhw_mode_map', 'buffer_mode_map'
 // How the tap water is heated: a coil in the tank, a fresh-water station on the storage, or a tank in the combined storage.
 const HFC_DHW_TYPES = ['coil', 'fresh_water', 'tank_in_tank'];
 // Drawing of the outdoor unit: `auto` takes the style of the preset; `unit_size` picks the Vaillant aroTHERM plus class.
-const HFC_UNIT_STYLES = ['auto', 'generic', 'lambda', 'vaillant', 'panasonic', 'viessmann', 'bosch', 'saunier', 'samsung', 'wolf'];
+const HFC_UNIT_STYLES = ['auto', 'generic', 'lambda', 'vaillant', 'panasonic', 'viessmann', 'bosch', 'saunier', 'samsung', 'wolf', 'kronoterm', 'alpha_innotec', 'stiebel'];
 const HFC_UNIT_SIZES = ['small', 'medium', 'large'];
 const HFC_EMITTERS = ['underfloor', 'radiator', 'column'];
 // Wall display: seconds the quick controls and the details toggle stay visible after the last touch or mouse move.
@@ -2403,7 +2416,7 @@ class HeatpumpFlowCard extends HTMLElement {
       hcs: this._hcCount > 1 ? this._hcTypes.slice(0, this._hcCount).join() : '',
       src: this._sourceType,
       unit: this._unitKey(),
-      heaters: ['heater', 'dhw_heater', 'buffer_heater'].map((k) => (this._has(k) ? 1 : 0)).join(''),
+      heaters: ['heater', ...HFC_TANK_HEATERS].map((k) => (this._has(k) ? 1 : 0)).join(''),
       middle: [this._has('dhw_middle') ? 1 : 0, this._has('buffer_middle') ? 1 : 0].join(''),
       // The gradient of a combined storage has one stop per sensor present: a sensor that appears later rebuilds it.
       combinedSensors: combined ? this._combinedSensors().map(([k]) => k).join() : '',
@@ -2573,7 +2586,7 @@ class HeatpumpFlowCard extends HTMLElement {
             </g>
             ${this._has('dhw_middle') ? `<g class="tap" ${de('dhw_middle')}><text class="tank-sub" id="t-dhw-middle" x="580" y="166" text-anchor="middle"></text></g>` : ''}
             <g class="tap" ${de('dhw_bottom')}><text class="tank-sub" id="t-dhw-bottom" x="580" y="222" text-anchor="middle"></text></g>
-            ${this._heaterSvg('dhw_heater', 'dhw', 186)}
+            ${this._tankHeaters('dhw', P).map((h) => this._heaterSvg(...h)).join('')}
             ${P.circ ? `<g class="tap" ${de('circulation')}><text class="small circ" id="t-circ" x="650" y="60">↻ ${this._esc(i.circulation)}</text></g>` : ''}` : ''}
 
           ${P.buffer ? `
@@ -2586,7 +2599,7 @@ class HeatpumpFlowCard extends HTMLElement {
             </g>
             ${this._has('buffer_middle') ? `<g class="tap" ${de('buffer_middle')}><text class="tank-sub" id="t-buf-middle" x="580" y="446" text-anchor="middle"></text></g>` : ''}
             <g class="tap" ${de('buffer_bottom')}><text class="tank-sub" id="t-buf-bottom" x="580" y="502" text-anchor="middle"></text></g>
-            ${this._heaterSvg('buffer_heater', 'buf', 455)}` : ''}
+            ${this._tankHeaters('buffer', P).map((h) => this._heaterSvg(...h)).join('')}` : ''}
 
 
           ${P.solar ? this._solarSvg() : ''}
@@ -3334,6 +3347,45 @@ class HeatpumpFlowCard extends HTMLElement {
         snows: [[...abs(cx, cy), 18]],
       };
     }
+    if (key === 'kronoterm') {
+      // ADAPT / ADAPT 2: an almost square dark box, the whole front covered by horizontal louvres that hide the fan,
+      // a closed side panel on the left and a plinth band below the louvres.
+      const x = 62; const y = 40; const w = 114; const h = 112; const cx = 123; const cy = 89; const r = 34;
+      const slats = Array.from({ length: 15 }, (_, n) => `<path class="kro-slat" d="M${x + 15} ${y + 9 + n * 6} H${x + w - 6}"/>`).join('');
+      return {
+        below: T(`<rect class="kro-body" x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/><rect class="kro-side" x="${x + 2}" y="${y + 2}" width="9" height="${h - 4}" rx="1"/><rect class="kro-grille" x="${x + 13}" y="${y + 5}" width="${w - 17}" height="${h - 21}" rx="1"/>`),
+        fans: [[...abs(cx, cy), r, 'kro-fan']],
+        above: T(`<g>${slats}</g><rect class="kro-plinth" x="${x + 13}" y="${y + h - 14}" width="${w - 17}" height="11" rx="1"/><rect class="kro-plate" x="${x + 17}" y="${y + 2}" width="12" height="2.5" rx="1"/><rect class="kro-rim" x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/>`),
+        snows: [[...abs(cx, cy), 18]],
+      };
+    }
+    if (key === 'alpha_innotec') {
+      // Hybrox (Luxtronik 2.1, 1320 x 930 mm): a narrow silver panel on the left, a large black front with the open round fan,
+      // a red line along its lower edge, a column of short slots at the top right and a dark base.
+      const x = 54; const y = 56; const w = 124; const h = 86; const fx = x + 24; const fw = w - 27;
+      const cx = fx + fw / 2; const cy = y + 40; const r = 33;
+      const slots = Array.from({ length: 5 }, (_, n) => `<path class="ait-slot" d="M${x + w - 10} ${y + 9 + n * 4} H${x + w - 6}"/>`).join('');
+      return {
+        below: T(`<rect class="ait-base" x="${x + 2}" y="${y + h}" width="${w - 4}" height="6" rx="1"/><rect class="ait-body" x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/><rect class="ait-front" x="${fx}" y="${y + 3}" width="${fw}" height="${h - 9}" rx="1.5"/><circle class="ait-hole" cx="${cx}" cy="${cy}" r="${r + 1}"/>`),
+        fans: [[...abs(cx, cy), +(r * 0.86).toFixed(1), 'ait-fan']],
+        above: T(`<circle class="ait-ring" cx="${cx}" cy="${cy}" r="${r}"/>${slots}<path class="ait-red" d="M${fx + 2} ${y + h - 8} H${fx + fw - 2}"/><rect class="ait-plate" x="${x + 5}" y="${y + 6}" width="12" height="3" rx="1"/><rect class="ait-rim" x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/>`),
+        snows: [[...abs(cx, cy), 18]],
+      };
+    }
+    if (key === 'stiebel') {
+      // WPL-A: a dark box with a slightly arched lid, a plain panel on the left, fine horizontal louvres over the fan on the right
+      // two thirds, and a recessed base on short feet.
+      const x = 54; const y = 52; const w = 124; const h = 88; const gx = x + 42; const gw = w - 45;
+      const cx = gx + gw / 2; const cy = y + 46; const r = 33;
+      const body = `M${x} ${y + h} V${y + 5} Q${x} ${y + 2} ${x + 3} ${y + 2} Q${x + w / 2} ${y - 3} ${x + w - 3} ${y + 2} Q${x + w} ${y + 2} ${x + w} ${y + 5} V${y + h} Z`;
+      const slats = Array.from({ length: 20 }, (_, n) => `<path class="stb-slat" d="M${gx + 1} ${y + 7 + n * 4} H${gx + gw - 1}"/>`).join('');
+      return {
+        below: T(`<rect class="stb-foot" x="${x + 7}" y="${y + h}" width="9" height="7" rx="1"/><rect class="stb-foot" x="${x + w - 16}" y="${y + h}" width="9" height="7" rx="1"/><rect class="stb-base" x="${x + 5}" y="${y + h}" width="${w - 10}" height="4"/><path class="stb-body" d="${body}"/><rect class="stb-grille" x="${gx}" y="${y + 4}" width="${gw}" height="${h - 6}" rx="1"/>`),
+        fans: [[...abs(cx, cy), r, 'stb-fan']],
+        above: T(`<g>${slats}</g><path class="stb-seam" d="M${gx - 1} ${y + 3} V${y + h}"/><rect class="stb-plate" x="${x + 10}" y="${y + 13}" width="20" height="3" rx="0.5"/><path class="stb-rim" d="${body}"/>`),
+        snows: [[...abs(cx, cy), 18]],
+      };
+    }
     return { below: '<circle class="fan-ring" cx="170" cy="288" r="50"/>', fans: [[170, 288, 50, '']], above: '', snows: [[170, 288, 18]] };
   }
 
@@ -3440,7 +3492,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const circuits = combined ? Array.from({ length: this._hcCount ?? hfcHcCount(this._config) }, (_, n) => this._hk(n + 1, 'pump')) : [];
     const pumps = circuits.filter((k) => this._has(k));
     if (pumps.length < circuits.length) return null;
-    return { temps, run, extra: ['dhw_heater', 'solar_pump', ...pumps].filter((k) => this._has(k)).map((k) => this._e[k]) };
+    // Every rod in the hot-water tank heats it; in a combined storage the rods of the heating zone heat the same tank.
+    const rods = HFC_TANK_HEATERS.filter((k) => combined || k.startsWith('dhw_'));
+    return { temps, run, extra: [...rods, 'solar_pump', ...pumps].filter((k) => this._has(k)).map((k) => this._e[k]) };
   }
 
   // Loss over the last HFC_LOSS.hours from the recorder history, cached like the other recorder queries.
@@ -3748,16 +3802,29 @@ class HeatpumpFlowCard extends HTMLElement {
     });
   }
 
-  // Heater rod entering a tank from the right wall at height y; backup / inline heater as a box inside the heat pump.
-  _heaterSvg(key, id, y) {
+  // Heater rods of a tank as [key, id, y, left end]. The plain key keeps its place; the top rod stays clear of the large top value,
+  // the middle and bottom rods stand at their sensor's label unless a pipe enters the right wall there (solar loop, fresh-water
+  // station, buffer return).
+  _tankHeaters(tank, P = {}) {
+    const dhw = tank === 'dhw';
+    const y = dhw ? { '': 186, top: 74, middle: P.solar ? 184 : 162, bottom: P.dhwType === 'fresh_water' ? 244 : 218 } : { '': 455, top: 340, middle: 442, bottom: 476 };
+    return Object.entries(y).map(([pos, h]) => [`${tank}_heater${pos ? `_${pos}` : ''}`, `${dhw ? 'dhw' : 'buf'}${pos ? `-${pos}` : ''}`, h, pos ? 612 : dhw ? 604 : 578]);
+  }
+
+  // Heater rod entering a tank from the right wall at height y, reaching left to x; backup / inline heater as a box inside the heat pump.
+  _heaterSvg(key, id, y, left) {
     if (!this._has(key)) return '';
     const de = `data-entity="${this._esc(this._e[key])}"`;
     if (id === 'inline') {
       return `<g class="tap heater" id="heater-${id}" ${de}><rect class="heater-box" x="230" y="266" width="46" height="30" rx="6"/>
         <path class="heater-el" d="M236 281 l4 -8 l6 16 l6 -16 l6 16 l6 -16 l6 16 l4 -8"/></g>`;
     }
-    return `<g class="tap heater" id="heater-${id}" ${de}><rect class="heater-flange" x="638" y="${y - 9}" width="9" height="18" rx="2"/>
-      <path class="heater-el" d="M640 ${y - 4} H${id === 'dhw' ? 610 : 584} Q${id === 'dhw' ? 604 : 578} ${y - 4} ${id === 'dhw' ? 604 : 578} ${y} Q${id === 'dhw' ? 604 : 578} ${y + 4} ${id === 'dhw' ? 610 : 584} ${y + 4} H640"/></g>`;
+    // A running rod is red like the hot-water phase of the timeline, with rising heat waves like the emitters; a dark casing keeps
+    // it visible in a tank of a similar colour.
+    const d = `M640 ${y - 4} H${left + 6} Q${left} ${y - 4} ${left} ${y} Q${left} ${y + 4} ${left + 6} ${y + 4} H640`;
+    const waves = [0, 1, 2].map((n) => `<path class="wave" d="M${left + 6 + n * (634 - left - 6) / 2} ${y - 7} q4 -4 0 -8 q-4 -4 0 -8"/>`).join('');
+    return `<g class="tap heater rod" id="heater-${id}" ${de}><rect class="heater-flange" x="638" y="${y - 9}" width="9" height="18" rx="2"/>
+      <path class="heater-case" d="${d}"/><path class="heater-el" d="${d}"/><g class="waves rod-waves">${waves}</g></g>`;
   }
 
   // Solar thermal collector on the roof edge of the house, with a loop into the right side of the DHW tank.
@@ -4192,10 +4259,11 @@ class HeatpumpFlowCard extends HTMLElement {
     }
 
     // heaters
-    [['heater', 'inline'], ['dhw_heater', 'dhw'], ['buffer_heater', 'buf']].forEach(([key, id]) => {
+    [['heater', 'inline'], ...this._tankHeaters('dhw'), ...this._tankHeaters('buffer')].forEach(([key, id]) => {
       const el = this._$(`heater-${id}`); if (!el) return;
       const lv = this._level(key);
       el.classList.toggle('on', lv > 0); el.classList.toggle('stage2', lv > 1);
+      el.querySelector('.waves')?.classList.toggle('on', lv > 0);
     });
 
     this._txtPre('t-vl', 'VL', this._has('flow') ? this._t(tFlow) : '');
@@ -4250,10 +4318,9 @@ class HeatpumpFlowCard extends HTMLElement {
       if (this._has('dhw_middle')) this._$('g-dhw-middle')?.setAttribute('stop-color', this._tankColor(this._n('dhw_middle')));
       this._$('g-dhw-bottom').setAttribute('stop-color', this._tankColor(bot));
       this._txt('t-dhw-top', hasTop ? this._t(top) : '');
-      this._txt('t-dhw-middle', this._has('dhw_middle') ? `${i.middle} ${this._t(this._n('dhw_middle'))}` : '');
-      // The position label only tells sensors apart; a single bottom sensor shows the bare value at the bottom.
-      const onlyBottom = !hasTop && !this._has('dhw_middle');
-      this._txt('t-dhw-bottom', this._has('dhw_bottom') ? `${onlyBottom ? '' : `${i.bottom} `}${this._t(this._n('dhw_bottom'))}` : '');
+      this._txt('t-dhw-middle', this._has('dhw_middle') ? this._t(this._n('dhw_middle')) : '');
+      // Each value stands at the height of its sensor, so it needs no position word.
+      this._txt('t-dhw-bottom', this._has('dhw_bottom') ? this._t(this._n('dhw_bottom')) : '');
       const tgt = this._n('dhw_target');
       const parts = [];
       if (this._has('dhw_mode')) parts.push(this._modeLabel(dhwMode, this._s('dhw_mode')));
@@ -4268,8 +4335,8 @@ class HeatpumpFlowCard extends HTMLElement {
       this._$('g-buf-bottom').setAttribute('stop-color', this._tankColor(bot));
       // A combined storage may have no sensor in its heating zone: the zone then stays without a value.
       this._txt('t-buf-top', P.combined && !this._has('buffer_top') ? '' : this._t(top));
-      this._txt('t-buf-middle', this._has('buffer_middle') ? `${i.middle} ${this._t(this._n('buffer_middle'))}` : '');
-      this._txt('t-buf-bottom', this._has('buffer_bottom') ? `${i.bottom} ${this._t(this._n('buffer_bottom'))}` : '');
+      this._txt('t-buf-middle', this._has('buffer_middle') ? this._t(this._n('buffer_middle')) : '');
+      this._txt('t-buf-bottom', this._has('buffer_bottom') ? this._t(this._n('buffer_bottom')) : '');
       this._txt('t-buf-mode', this._has('buffer_mode') ? this._modeLabel(bufMode, this._s('buffer_mode')) : '');
     }
 
@@ -4493,10 +4560,12 @@ HeatpumpFlowCard.styles = `
   .collector { fill: var(--secondary-background-color, rgba(127,127,127,.15)); stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 2; transition: fill .4s, stroke .4s; }
   .collector-cells { fill: none; stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 1.5; }
   .solar.on .collector { fill: ${hfcTint('pv', 28)}; stroke: ${hfcVar('pv')}; }
+  .heater-case { fill: none; stroke: rgba(0,0,0,.45); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
   .heater-el { fill: none; stroke: var(--disabled-text-color, #9e9e9e); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
   .heater-flange, .heater-box { fill: var(--secondary-background-color, rgba(127,127,127,.15)); stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 1.5; }
   .heater.on .heater-el { stroke: ${hfcVar('heat')}; filter: url(#glow); }
   .heater.on.stage2 .heater-el { stroke: ${hfcVar('hot')}; }
+  .heater.rod.on .heater-el, .rod-waves .wave { stroke: ${hfcVar('hot')}; } .rod-waves .wave { stroke-width: 2; }
   .ground { fill: none; stroke: ${hfcVar('ground')}; stroke-width: 3; stroke-dasharray: 10 5; opacity: .7; }
   .well { fill: none; stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 2; }
   .water { fill: none; stroke: ${hfcVar('cool')}; stroke-width: 2; }
@@ -4546,9 +4615,9 @@ HeatpumpFlowCard.styles = `
   .lam-plinth { fill: color-mix(in srgb, var(--primary-text-color, #1f2937) 22%, var(--card-background-color, #fff)); }
   /* a rim in the theme text colour keeps the anthracite body visible on dark cards */
   .lam-rim { fill: none; stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 48%, transparent); stroke-width: 1.4; }
-  .fan.lam-fan .blade, .fan.vai-fan .blade, .fan.pana-fan .blade, .fan.vies-fan .blade, .fan.bosch-fan .blade, .fan.sd-fan .blade, .fan.sam-fan .blade, .fan.wolf-fan .blade { fill: #9aa3ad; opacity: .55; }
-  .fan.lam-fan .hub, .fan.vai-fan .hub, .fan.pana-fan .hub, .fan.vies-fan .hub, .fan.bosch-fan .hub, .fan.sd-fan .hub, .fan.sam-fan .hub, .fan.wolf-fan .hub { fill: #9aa3ad; }
-  .fan.lam-fan.on .blade, .fan.vai-fan.on .blade, .fan.pana-fan.on .blade, .fan.vies-fan.on .blade, .fan.bosch-fan.on .blade, .fan.sd-fan.on .blade, .fan.sam-fan.on .blade, .fan.wolf-fan.on .blade { fill: ${hfcVar('cool')}; opacity: .95; }
+  .fan.lam-fan .blade, .fan.vai-fan .blade, .fan.pana-fan .blade, .fan.vies-fan .blade, .fan.bosch-fan .blade, .fan.sd-fan .blade, .fan.sam-fan .blade, .fan.wolf-fan .blade, .fan.kro-fan .blade, .fan.ait-fan .blade, .fan.stb-fan .blade { fill: #9aa3ad; opacity: .55; }
+  .fan.lam-fan .hub, .fan.vai-fan .hub, .fan.pana-fan .hub, .fan.vies-fan .hub, .fan.bosch-fan .hub, .fan.sd-fan .hub, .fan.sam-fan .hub, .fan.wolf-fan .hub, .fan.kro-fan .hub, .fan.ait-fan .hub, .fan.stb-fan .hub { fill: #9aa3ad; }
+  .fan.lam-fan.on .blade, .fan.vai-fan.on .blade, .fan.pana-fan.on .blade, .fan.vies-fan.on .blade, .fan.bosch-fan.on .blade, .fan.sd-fan.on .blade, .fan.sam-fan.on .blade, .fan.wolf-fan.on .blade, .fan.kro-fan.on .blade, .fan.ait-fan.on .blade, .fan.stb-fan.on .blade { fill: ${hfcVar('cool')}; opacity: .95; }
   .vai-body { fill: ${hfcVar('casing')}; stroke: color-mix(in srgb, ${hfcVar('casing')} 80%, #6b7280); stroke-width: 1.5; }
   .vai-dark, .vai-foot { fill: color-mix(in srgb, ${hfcVar('anthracite')} 60%, #000); }
   .vai-gr { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 45%, #a0a8b0); stroke-width: 2; } .vai-gr.thin { stroke-width: 1; opacity: .85; }
@@ -4586,6 +4655,29 @@ HeatpumpFlowCard.styles = `
   .wolf-lid { stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 34%, transparent); stroke-width: 1; }
   .wolf-seam { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 62%, #000); stroke-width: 1.2; }
   .wolf-rim { fill: none; stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 42%, transparent); stroke-width: 1.2; }
+  .kro-body { fill: color-mix(in srgb, ${hfcVar('anthracite')} 70%, #000); }
+  .kro-side { fill: color-mix(in srgb, ${hfcVar('anthracite')} 92%, #9ca3af); }
+  .kro-grille { fill: color-mix(in srgb, ${hfcVar('anthracite')} 28%, #000); }
+  .kro-slat { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 62%, #000); stroke-width: 3.2; }
+  .kro-plinth { fill: color-mix(in srgb, ${hfcVar('anthracite')} 82%, #000); }
+  .kro-plate { fill: color-mix(in srgb, ${hfcVar('casing')} 60%, #64748b); opacity: .8; }
+  .kro-rim { fill: none; stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 42%, transparent); stroke-width: 1.2; }
+  .ait-body { fill: color-mix(in srgb, ${hfcVar('casing')} 82%, #94a3b8); }
+  .ait-front { fill: color-mix(in srgb, ${hfcVar('anthracite')} 40%, #000); }
+  .ait-hole { fill: color-mix(in srgb, ${hfcVar('anthracite')} 18%, #000); }
+  .ait-ring { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 70%, #94a3b8); stroke-width: 1.6; }
+  .ait-slot { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 70%, #94a3b8); stroke-width: 1.4; stroke-linecap: round; }
+  .ait-red { fill: none; stroke: ${hfcVar('hot')}; stroke-width: 2; }
+  .ait-base { fill: color-mix(in srgb, ${hfcVar('anthracite')} 55%, #000); }
+  .ait-plate { fill: color-mix(in srgb, ${hfcVar('casing')} 55%, #64748b); opacity: .7; }
+  .ait-rim { fill: none; stroke: color-mix(in srgb, ${hfcVar('casing')} 62%, #64748b); stroke-width: 1.2; }
+  .stb-body { fill: color-mix(in srgb, ${hfcVar('anthracite')} 78%, #000); }
+  .stb-grille { fill: color-mix(in srgb, ${hfcVar('anthracite')} 30%, #000); }
+  .stb-slat { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 62%, #000); stroke-width: 2.4; }
+  .stb-seam { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 55%, #000); stroke-width: 1.2; }
+  .stb-base, .stb-foot { fill: color-mix(in srgb, ${hfcVar('anthracite')} 50%, #000); }
+  .stb-plate { fill: color-mix(in srgb, ${hfcVar('casing')} 70%, #94a3b8); opacity: .75; }
+  .stb-rim { fill: none; stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 42%, transparent); stroke-width: 1.2; }
   /* timeline of the operating mode */
   .timeline { margin: 8px 4px 0; }
   .tl-head { display: flex; justify-content: space-between; gap: 8px; font-size: .82em; color: var(--hfc-muted); }
