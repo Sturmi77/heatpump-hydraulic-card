@@ -1783,7 +1783,55 @@
     check(!!w && w.customElements.get('heatpump-hydraulic-card')?.hfcOwner === 'sturmi77', 'in the collision page this card is still available under its own name');
     check(!!w && (w.__warns || []).some((m) => /custom:heatpump-hydraulic-card/.test(m)), 'the console says which name to use');
     check(!!w && w.customCards.length === 1 && w.customCards[0].type === 'heatpump-hydraulic-card' && w.customCards[0].name === 'Heatpump Hydraulic Card', 'the card picker then lists the unique name');
+    check(!!w && !(w.__warns || []).some((m) => /older copy/.test(m)), 'a foreign card with the same name is no older copy');
     fr.remove();
+
+    // #171: an older copy of this card took the names first (a resource from before the rename); and the same version twice
+    check(!!hfcOlderCopy(class HeatpumpFlowCard {}) && !!hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: '0.1.0' }))
+      && !hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: HFC_VERSION }))
+      && !hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: '99.0.0' })) && !hfcOlderCopy(class Other {}) && !hfcOlderCopy(undefined),
+    'an own copy without version marker or with a lower version is older; the same, a newer or a foreign class is not');
+    try { sessionStorage.removeItem('hfc-old-copy'); } catch (e) { /* storage blocked */ }
+    const copyFrame = async (marker) => {
+      const f = document.createElement('iframe');
+      f.srcdoc = `<!doctype html><meta charset="utf-8"><script>
+        window.__warns = []; window.__calls = []; const warn = console.warn;
+        console.warn = (...a) => { window.__warns.push(a.join(' ')); warn.apply(console, a); };
+        const ha = document.createElement('home-assistant');
+        ha.hass = { callService: (...a) => { window.__calls.push(a); return Promise.resolve(); } };
+        document.documentElement.appendChild(ha);
+        // In a block: Home Assistant loads each copy as a module; two classic scripts would share the global class name.
+        {
+          class HeatpumpFlowCard extends HTMLElement {} HeatpumpFlowCard.hfcOwner = 'sturmi77'; ${marker ? `HeatpumpFlowCard.hfcVersion = '${marker}';` : ''}
+          customElements.define('heatpump-flow-card', HeatpumpFlowCard); customElements.define('heatpump-hydraulic-card', class HeatpumpHydraulicCard extends HeatpumpFlowCard {});
+        }
+        <\/script><script src="../dist/heatpump-hydraulic-card.js"><\/script>`;
+      f.style.cssText = 'width:10px;height:10px;position:absolute;left:-99px';
+      document.body.appendChild(f);
+      await new Promise((resolve) => { f.onload = resolve; setTimeout(resolve, 3000); });
+      await wait(20);
+      const out = { warns: [...(f.contentWindow?.__warns || [])], calls: [...(f.contentWindow?.__calls || [])] };
+      f.remove(); return out;
+    };
+    let cf = await copyFrame('');
+    check(cf.warns.some((m) => /older copy/.test(m) && m.includes(HFC_VERSION)) && !cf.warns.some((m) => /another card/.test(m)),
+      `an older copy without version marker is reported in the console, not as a foreign card (${cf.warns.length} warnings)`);
+    check(cf.calls.length === 1 && cf.calls[0][0] === 'persistent_notification' && cf.calls[0][1] === 'create' && /Resources/.test(cf.calls[0][2].message),
+      `one Home Assistant notification for the older copy (${cf.calls.length})`);
+    cf = await copyFrame('');
+    check(cf.calls.length === 0, 'the notification comes once per browser session');
+    try { sessionStorage.removeItem('hfc-old-copy'); } catch (e) { /* storage blocked */ }
+    cf = await copyFrame(HFC_VERSION);
+    check(!cf.warns.some((m) => /older copy/.test(m)) && cf.calls.length === 0, 'the same version loaded twice is no conflict');
+    try { sessionStorage.removeItem('hfc-old-copy'); } catch (e) { /* storage blocked */ }
+
+    // The diagnostic report names a second card script on the page
+    const fake = document.createElement('script'); fake.type = 'text/plain'; fake.src = '/hacsfiles/heatpump-flow-card/heatpump-hydraulic-card.js';
+    document.head.appendChild(fake);
+    const rep = C._diagnosticReport({ preset: 'lambda' }, hassOf(toStates(setups[1].states('heat')), setups[1].registry || {}));
+    fake.remove();
+    check(/Card scripts on this page: .*heatpump-flow-card\/heatpump-hydraulic-card\.js/.test(rep), 'the diagnostic report lists a second script of the card');
+    check(!/Card scripts on this page/.test(C._diagnosticReport({ preset: 'lambda' }, hassOf(toStates(setups[1].states('heat')), setups[1].registry || {}))), 'with one script the line is left out');
   }
 
   // 18. timeline of the operating mode and the gradient of the heating surface
