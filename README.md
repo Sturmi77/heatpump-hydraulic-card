@@ -22,7 +22,7 @@ It shows electricity flowing from **PV, battery and grid** into the heat pump, t
 |---|---|---|---|---|
 | `lambda` | **Lambda** (EU-L series) | [lambda_heat_pumps](https://github.com/GuidoJeuken-6512/lambda_heat_pumps) (HACS) | Lambda EU-L | tested on a real installation |
 | `heishamon` | **Panasonic** Aquarea (H, J, K, L generation; monoblock, split, all-in-one) | [HeishaMon](https://github.com/heishamon/HeishaMon) + [heishamon-homeassistant](https://github.com/kamaradclimber/heishamon-homeassistant) (HACS) | Panasonic Aquarea | confirmed on a real installation |
-| `kronoterm` | **Kronoterm** (ADAPT, ETERA, VERSI, WPLV …) | [Kronoterm](https://github.com/Favio25/Kronoterm-homeassistant) (HACS), Cloud API or Modbus | generic (no Kronoterm drawing yet) | Cloud API confirmed on a real installation; Modbus from the integration source |
+| `kronoterm` | **Kronoterm** (ADAPT, ETERA, VERSI, WPLV …) | [Kronoterm](https://github.com/Favio25/Kronoterm-homeassistant) (HACS), Cloud API or Modbus | Kronoterm ADAPT (air units) | Cloud API confirmed on a real installation; Modbus from the integration source |
 | `vicare` | **Viessmann** (Vitocal) | [ViCare](https://www.home-assistant.io/integrations/vicare/) (core) | Viessmann Vitocal 250-A | untested |
 | `open3e` | **Viessmann** (Vitocal) | [Open3E](https://github.com/MojoOli/open3e-ha) (HACS, MQTT) | Viessmann Vitocal 250-A | untested |
 | `vaillant` | **Vaillant** (aroTHERM, aroTHERM plus), **Saunier Duval**, **Bulex**, **Glow-worm**, **DemirDöküm** | [myPyllant](https://github.com/signalkraft/mypyllant-component) (HACS) | Vaillant aroTHERM plus by default; Saunier Duval GeniaAir Mono by manual override | untested |
@@ -65,7 +65,7 @@ The completed release history and the prioritized post-0.14.0 backlog are mainta
 
 - **Power sources:** PV / battery / grid → heat pump, animated whenever more than 10 W flow. Taken automatically from your **Energy dashboard** (its power sensors), or from your own sensors.
 - **Heat pump:** the fan spins while the compressor runs, faster at higher compressor modulation (or higher power, when the integration has no modulation value); the circuit pumps and the flow lines follow the modulation as well. Shows mode and sub-state, electrical power → heat output, and live COP. Defrost is shown with a snowflake, restrained vapour and an icy flow line. The frame of the block is orange while heating, red for hot water and blue while defrosting or cooling, grey in standby. A long status line wraps into mode and status. A backup / inline heater (`heater`) glows inside the unit while it runs. With a fan speed entity (`fan_speed`) the fan follows its own speed and runs on after the compressor stops. The heat pump's own **primary pump** (`primary_pump`) is drawn on the flow pipe next to the block, turning with the flow rate; the flow dashes of the pipes move in proportion to the flow rate.
-- **Unit drawing:** the heat pump block can show simplified, logo-free outdoor units for Lambda, Viessmann, Vaillant, Bosch/Buderus, Panasonic, Saunier Duval, Samsung and Wolf. Presets select a style where the integration identifies the product family; every style is also available manually. The fan spins, the blades turn blue while running, and each fan gets its own snowflake while defrosting.
+- **Unit drawing:** the heat pump block can show simplified, logo-free outdoor units for Lambda, Viessmann, Vaillant, Bosch/Buderus, Panasonic, Saunier Duval, Samsung, Wolf and Kronoterm. Presets select a style where the integration identifies the product family; every style is also available manually. The fan spins, the blades turn blue while running, and each fan gets its own snowflake while defrosting.
 - **Heat source:** air (the outdoor temperature is shown under the unit; default), **ground** with a brine loop or **groundwater** with two wells (`source_type`), with source inlet and outlet temperatures and the source flow rate. Optional brine and heating-circuit pressures are normalized to bar and can show warning/critical thresholds with text symbols as well as colour.
 - **Diverter valve:** shows DHW or heating; the active circuit is animated.
 - **Tanks:** DHW tank and buffer with a top/bottom temperature gradient, optionally refined by a middle sensor (`dhw_middle`, `buffer_middle`; blue = cold, then cyan and orange, red = hot), target, mode, a heat-exchanger coil while charging, and the circulation pump. **Heater rods** (`dhw_heater`, `buffer_heater`) glow orange while on, red at stage 2 or higher. A **series buffer** (`series_buffer: true`) sits in the return of the heating circuits with a 3-way bypass valve (`bypass_valve`, or the defrost signal) so that the heat pump defrosts from the buffer water; without a bypass valve set `series_bypass: false`. A **combined storage** (`storage: combined`) is drawn as one tall tank with the hot-water zone on top and the heating zone below; the six storage sensors are heights in it. `dhw_type` draws a **fresh-water station** (beside the combined storage, or on a parallel buffer instead of a hot-water tank) or a **tank in tank**.
@@ -108,7 +108,7 @@ The completed release history and the prioritized post-0.14.0 backlog are mainta
 
 | `unit_style` | Schematic based on | Brands / families covered | Automatic selection |
 |---|---|---|---|
-| `generic` | Neutral fan symbol | Any air-source heat pump | Fallback without a known style, also `preset: luxtronik`, `preset: stiebel_isg` and `preset: kronoterm`; ground and groundwater sources show their loop symbol instead |
+| `generic` | Neutral fan symbol | Any air-source heat pump | Fallback without a known style, also `preset: luxtronik` and `preset: stiebel_isg`; ground and groundwater sources show their loop symbol instead |
 | `lambda` | Lambda EU-L | Lambda | `preset: lambda` |
 | `viessmann` | Viessmann Vitocal 250-A | Viessmann Vitocal | `preset: vicare`, `preset: open3e` |
 | `vaillant` | Vaillant aroTHERM plus | Vaillant; default fallback for the shared myPyllant brands | `preset: vaillant` |
@@ -117,6 +117,7 @@ The completed release history and the prioritized post-0.14.0 backlog are mainta
 | `panasonic` | Panasonic Aquarea | Panasonic Aquarea | `preset: heishamon` |
 | `samsung` | Samsung EHS Mono HT Quiet | Samsung EHS Mono / Mono HT Quiet | `preset: samsung` |
 | `wolf` | Wolf CHA monoblock | Wolf CHA-07/10 and CHA-16/20 (same proportions) | `preset: wolf` |
+| `kronoterm` | Kronoterm ADAPT | Kronoterm ADAPT and ADAPT 2 air/water units (louvred front); brine and water units keep the loop symbol | `preset: kronoterm` |
 
 These are deliberately simplified original drawings without manufacturer logos. Related brands can share an integration even when their enclosures differ; set `unit_style` explicitly whenever the automatic family drawing does not match the installed unit.
 
@@ -575,7 +576,7 @@ Everything can be set in the **UI editor**. With a preset, the editor shows whet
 | `source_spread` | Show `source_in − source_out` on a running ground/groundwater loop (default `true`). |
 | `brine_pressure_min`, `brine_pressure_crit`, `brine_pressure_max` | Optional brine-pressure thresholds in bar. Below `crit` is critical; below `min` or above `max` is a warning. |
 | `hc_pressure_min`, `hc_pressure_crit`, `hc_pressure_max` | Optional heating-pressure thresholds in bar, with the same warning/critical logic. |
-| `unit_style` | Drawing of the outdoor unit: `auto` (default, uses the preset style), `generic`, `lambda`, `viessmann`, `vaillant`, `saunier`, `bosch`, `panasonic`, `samsung` or `wolf`. Ground and groundwater sources keep their loop symbol. See [Outdoor-unit style coverage](#outdoor-unit-style-coverage). |
+| `unit_style` | Drawing of the outdoor unit: `auto` (default, uses the preset style), `generic`, `lambda`, `viessmann`, `vaillant`, `saunier`, `bosch`, `panasonic`, `samsung`, `wolf` or `kronoterm`. Ground and groundwater sources keep their loop symbol. See [Outdoor-unit style coverage](#outdoor-unit-style-coverage). |
 | `unit_size` | Vaillant aroTHERM plus class: `small` (3.5 and 5.5 kW, one fan, low), `medium` (7.5 kW, one fan, default) or `large` (10.5 and 12.5 kW, two fans). |
 | `timeline` | `true` shows a strip with the operating mode of the last hours under the schematic (needs the `mode` entity, or the `compressor` and optionally the `valve`, and the Home Assistant history). |
 | `timeline_hours` | Length of the timeline in hours, 3 to 72 (default 24). |
