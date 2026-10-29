@@ -1261,7 +1261,7 @@ const HFC_EDITOR = {
     error_ok_help: 'Comma-separated, case-insensitive; for example: No Error, OK. Any other known text then shows the error chip.',
     total_cop_help: 'Total heat, environmental energy and electricity must cover the same time range. Without total heat, COP uses environmental energy plus electricity.',
     language_help: 'Additional languages and custom labels are configured with texts in YAML; missing labels fall back to English.',
-    detected: 'Detected', entities_found: 'entities', not_detected: 'Not found in this Home Assistant - check the integration, the prefix or choose another preset',
+    detected: 'Detected', entities_found: 'entities', also_detected: 'Also detected here:', not_detected: 'Not found in this Home Assistant - check the integration, the prefix or choose another preset',
     program: 'Heating program (eco, night, party, holiday)', solar_collector: 'Solar collector temperature (°C)', solar_pump: 'Solar pump running (on/off)',
     source_out: 'Source outlet temperature (°C: brine or well water out)', heater: 'Backup / inline heater of the heat pump active (on/off, stage 1 to 3, or W)',
     dhw_heater: 'DHW heater rod active (on/off, or W)', buffer_heater: 'Buffer heater rod active (on/off, or W)',
@@ -1330,7 +1330,7 @@ const HFC_EDITOR = {
     error_ok_help: 'Kommagetrennt, ohne Beachtung der Groß-/Kleinschreibung; zum Beispiel: No Error, OK. Jeder andere bekannte Text zeigt dann den Fehler-Chip.',
     total_cop_help: 'Gesamtwärme, Umweltenergie und Gesamtstrom müssen denselben Zeitraum abdecken. Ohne Gesamtwärme nutzt der COP Umweltenergie plus Strom.',
     language_help: 'Weitere Sprachen und eigene Beschriftungen werden mit texts im YAML konfiguriert; fehlende Texte fallen auf Englisch zurück.',
-    detected: 'Erkannt', entities_found: 'Entitäten', not_detected: 'In diesem Home Assistant nicht gefunden - Integration und Präfix prüfen oder andere Voreinstellung wählen',
+    detected: 'Erkannt', entities_found: 'Entitäten', also_detected: 'Hier ebenfalls erkannt:', not_detected: 'In diesem Home Assistant nicht gefunden - Integration und Präfix prüfen oder andere Voreinstellung wählen',
     program: 'Heizprogramm (Eco, Nacht, Party, Urlaub)', solar_collector: 'Kollektortemperatur Solarthermie (°C)', solar_pump: 'Solarpumpe läuft (ein/aus)',
     source_out: 'Quelle Austritt (°C: Sole oder Brunnenwasser raus)', heater: 'Heizstab / Zusatzheizer der Wärmepumpe aktiv (ein/aus, Stufe 1 bis 3, oder W)',
     dhw_heater: 'Heizstab Warmwasser aktiv (ein/aus, oder W)', buffer_heater: 'Heizstab Puffer aktiv (ein/aus, oder W)',
@@ -1717,7 +1717,9 @@ class HeatpumpFlowCard extends HTMLElement {
       if (n > 1) stub.hc_count = n;
       if (preset.source_type) { const st = preset.source_type(base, hass); if (st && st !== 'air') stub.source_type = st; }
       const score = HFC_CORE_KEYS.filter((k) => [].concat(base[k] || []).some(live)).length;
-      matches.push({ name, score, stub, order });
+      // The live entities the preset maps, each counted once (the editor shows them next to the preset, #145).
+      const found = new Set(Object.values(base).flat().filter(live)).size;
+      matches.push({ name, score, found, stub, order });
     });
     return matches.sort((a, b) => b.score - a.score || a.order - b.order);
   }
@@ -1759,7 +1761,15 @@ class HeatpumpFlowCard extends HTMLElement {
       schema: [
         {
           name: 'preset',
-          selector: { select: { mode: 'dropdown', options: [{ value: 'none', label: '—' }, ...Object.entries(HFC_PRESETS).map(([k, p]) => ({ value: k, label: p.tested ? p.name : `${p.name} · ${L.untested}` }))] } },
+          // Presets detected in this Home Assistant come first, best match first, with the number of entities they find (#145).
+          selector: { select: { mode: 'dropdown', options: [{ value: 'none', label: '—' }, ...[
+            ...(opts.matches || []).map((m) => m.name).filter((k) => HFC_PRESETS[k]),
+            ...Object.keys(HFC_PRESETS).filter((k) => !(opts.matches || []).some((m) => m.name === k)),
+          ].map((k) => {
+            const p = HFC_PRESETS[k]; const m = (opts.matches || []).find((x) => x.name === k);
+            const label = m ? `${p.name} · ${L.detected} (${m.found} ${L.entities_found})` : p.name;
+            return { value: k, label: p.tested ? label : `${label} · ${L.untested}` };
+          })] } },
         },
         {
           type: 'grid', name: '', schema: [
@@ -4992,7 +5002,9 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     const statesOf = (side) => Object.entries(valveMap).filter(([, v]) => hfcValveSide(v) === side).map(([k]) => k).join(', ');
     this._valveText = { dhw: statesOf('dhw'), heating: statesOf('heating') };
     this._valveShown = !!valveId;
-    const { schema, computeLabel, L } = HeatpumpFlowCard._formSchema(this._config, tiles, { valve: !!valveId });
+    // Preset detection for the dropdown (#145): once per registry, not on every change in the form.
+    if (this._matchesFor !== this._hass.entities) { this._matches = HeatpumpFlowCard._presetMatches(this._hass); this._matchesFor = this._hass.entities; }
+    const { schema, computeLabel, L } = HeatpumpFlowCard._formSchema(this._config, tiles, { valve: !!valveId, matches: this._matches });
     const own = this._config.entities || {};
     const shown = { ...this._fromPreset };
     Object.entries(own).forEach(([k, v]) => { if (v === null || v === 'none') delete shown[k]; else if (v) shown[k] = v; });
@@ -5023,9 +5035,12 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     this._form.computeLabel = computeLabel;
     this._form.computeHelper = (s) => {
       if (s.name === 'preset') {
-        if (!r.preset) return '';
+        // Further detected presets: another integration for the same heat pump may suit better (#145).
+        const others = (this._matches || []).filter((m) => m.name !== this._config.preset).map((m) => HFC_PRESETS[m.name].name);
+        const also = others.length ? ` ${L.also_detected} ${others.join(', ')}.` : '';
+        if (!r.preset) return also.trim();
         const status = r.ready ? `${L.detected}${r.prefix ? ` · ${r.prefix}` : ''} · ${found} ${L.entities_found}. ${L.preset_help}` : L.not_detected;
-        return r.preset.tested ? status : `${status} ${L.untested_help}`;
+        return `${r.preset.tested ? status : `${status} ${L.untested_help}`}${also}`;
       }
       if (s.name === 'tiles_custom') return tiles.editable ? L.tiles_custom_help : L.tiles_yaml;
       if (s.name === 'price_entity') return L.price_help;
