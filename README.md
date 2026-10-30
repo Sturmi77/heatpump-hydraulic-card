@@ -170,7 +170,7 @@ type: custom:heatpump-hydraulic-card   # instead of custom:heatpump-flow-card
 preset: lambda
 ```
 
-Both types are the same card with the same options. If you only use this card, nothing changes. If another card already owns the generic name, this card says so in the browser console and the card picker lists it as "Heatpump Hydraulic Card"; use that type in your configuration.
+Both types are the same card with the same options. If you only use this card, nothing changes. If another card already owns the generic name, this card says so in the browser console and the card picker adds it with the type `custom:heatpump-hydraulic-card`; use that type in your configuration. In the card picker the card is always called "Heat Pump Hydraulic Card".
 
 ## Quick start
 

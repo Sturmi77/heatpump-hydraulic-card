@@ -1796,6 +1796,8 @@
     check(ok(a) && !!a.shadowRoot.querySelector('.lam-body'), 'the alias renders the same card');
     a.remove();
     check(window.customCards.filter((c) => /^heatpump-(flow|hydraulic)-card$/.test(c.type)).length === 1 && window.customCards.some((c) => c.type === 'heatpump-flow-card'), 'the card picker lists the card once, under the generic name');
+    const pick = window.customCards.find((c) => c.type === 'heatpump-flow-card');
+    check(pick.name === 'Heat Pump Hydraulic Card' && /Viessmann/.test(pick.description) && pick.description.length < 260, `#144: the card picker shows "Heat Pump Hydraulic Card" (${pick.name})`);
     // another card got the generic names first (iframe with a stand-in)
     const fr = document.createElement('iframe');
     // srcdoc inherits the parent origin. That keeps the collision test readable in Firefox, which otherwise gives each
@@ -1813,7 +1815,7 @@
     check(!!w && w.customElements.get('heatpump-flow-card') && w.customElements.get('heatpump-flow-card').hfcOwner === undefined, 'in the collision page the generic name belongs to the other card');
     check(!!w && w.customElements.get('heatpump-hydraulic-card')?.hfcOwner === 'sturmi77', 'in the collision page this card is still available under its own name');
     check(!!w && (w.__warns || []).some((m) => /custom:heatpump-hydraulic-card/.test(m)), 'the console says which name to use');
-    check(!!w && w.customCards.length === 1 && w.customCards[0].type === 'heatpump-hydraulic-card' && w.customCards[0].name === 'Heatpump Hydraulic Card', 'the card picker then lists the unique name');
+    check(!!w && w.customCards.length === 1 && w.customCards[0].type === 'heatpump-hydraulic-card' && w.customCards[0].name === 'Heat Pump Hydraulic Card', 'the card picker then lists the unique name');
     check(!!w && !(w.__warns || []).some((m) => /older copy/.test(m)), 'a foreign card with the same name is no older copy');
     fr.remove();
 
@@ -3539,6 +3541,32 @@
     check(!/looked for/.test(none) && /- Heat pump integrations here: none found/.test(none) && /- Presets that match here: none/.test(none) && /- flow: sensor\.f = 30 °C \[own\]/.test(none),
       'without a preset: no detection line, every mapping is own');
     check(Object.keys(HFC_PRESETS).every((name) => C._detectProbe(HFC_PRESETS[name], hassOf({})).looked.length > 0), 'every preset detection records what it looks for');
+  }
+
+  // #146: entities the preset would map but that are disabled in Home Assistant
+  {
+    const lux = setups.find((s) => s.config.preset === 'luxtronik');
+    const base = toStates(lux.states('heat')); const reg = { ...(lux.registry || {}) };
+    const powerId = C._resolve(lux.config, hassOf(base, reg)).entities.power;
+    const { [powerId]: powerReg, ...regLeft } = reg; const { [powerId]: gone, ...statesLeft } = base;
+    const calls = [];
+    const entries = [{ entity_id: powerId, ...powerReg, disabled_by: 'integration', original_name: 'Current power consumption', config_entry_id: 'secret', options: { x: 1 } },
+      { entity_id: 'sensor.other_disabled', platform: 'other', translation_key: 'x', disabled_by: 'user' }];
+    const admin = { ...hassOf(statesLeft, regLeft), callWS: (m) => { calls.push(m.type); return m.type === 'config/entity_registry/list' ? Promise.resolve(entries) : Promise.reject(new Error('n/a')); } };
+    check(powerId && !C._resolve(lux.config, admin).entities.power, 'the disabled power entity is not mapped without the registry');
+    const found = C._disabledMappings(lux.config, admin, [{ entity_id: powerId, ...powerReg, name: 'Current power consumption' }]);
+    check(found.length === 1 && found[0].key === 'power' && found[0].id === powerId, `the preset names the disabled entity with its key (${JSON.stringify(found)})`);
+    const ed = document.createElement('heatpump-flow-card-editor'); ed.hass = admin; ed.setConfig(lux.config); await wait(20);
+    check(ed._warn.innerHTML.includes(powerId) && ed._warn.innerHTML.includes('Current power consumption') && /Electrical power of the heat pump: Current power consumption/.test(ed._warn.innerHTML),
+      'the editor lists the disabled entity with the field it would fill');
+    check(calls.every((t) => t === 'config/entity_registry/list') && !JSON.stringify(ed._disabled).includes('secret') && !ed._disabled.some((e) => 'options' in e),
+      'nothing is enabled, and no other registry data is kept');
+    ed.remove();
+    const user = hassOf(statesLeft, regLeft);
+    const ed2 = document.createElement('heatpump-flow-card-editor'); ed2.hass = user; ed2.setConfig(lux.config); await wait(20);
+    check(!ed2._warn.innerHTML.includes(powerId) && !(ed2._disabled || []).length, 'without registry access nothing is listed');
+    ed2.remove();
+    check(!C._disabledMappings({ ...lux.config, entities: { power: 'sensor.own_power' } }, admin, [{ entity_id: powerId, ...powerReg }]).length, 'an own entity for the key hides the hint');
   }
 
   log.push(`${checks} checks, ${fails.length} failed`);
