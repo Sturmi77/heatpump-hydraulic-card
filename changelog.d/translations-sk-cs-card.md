@@ -1,1 +1,1 @@
-- Slovak and Czech now also cover the texts on the card (titles, modes, tiles, details drawer, timeline) and the newer editor labels, by Havinko1991 (#177, #182).
+- Slovak and Czech now cover every text of the card and the editor (titles, modes, tiles, details drawer, timeline, the newer editor labels and the "also detected" hint), by Havinko1991 (#177, #182, #191).
