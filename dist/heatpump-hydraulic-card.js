@@ -1748,6 +1748,7 @@ const HFC_LOSS = { hours: 48, minWindow: 3, settle: 0.5, drawOff: 1.5, rise: 1.0
 class HeatpumpFlowCard extends HTMLElement {
   static _registries = new WeakMap();
   static _pointtStates = new WeakMap();
+  static _pointtLast = { key: undefined, revision: undefined };
 
   static _registryKey(hass) { return hass?.connection || hass?.callWS; }
 
@@ -1755,6 +1756,8 @@ class HeatpumpFlowCard extends HTMLElement {
   // integration's enabled ids, then check their presence once per states object.
   // Comparing each id also catches removals/additions with an unchanged count.
   // Cards and the editor share the result; ordinary value changes keep its identity.
+  // HA also sends a new registry object after a change to any entity anywhere: the revision follows the enabled and present
+  // ids, not the object, because a new revision rebuilds the card and drops styles injected by card-mod (#164).
   static _pointtRevision(hass) {
     if (!hass?.entities || !hass.states) return undefined;
     let cache = this._pointtStates.get(hass.entities);
@@ -1762,19 +1765,16 @@ class HeatpumpFlowCard extends HTMLElement {
       cache = { ids: Object.keys(hass.entities).filter((id) => {
         const e = hass.entities[id];
         return e?.platform === 'bosch_buderus_heating' && !e.disabled_by;
-      }), present: [], revision: {} };
+      }), present: [] };
       this._pointtStates.set(hass.entities, cache);
     }
     if (cache.states !== hass.states) {
-      let changed = false;
-      cache.ids.forEach((id, n) => {
-        const present = !!hass.states[id];
-        if (cache.present[n] !== present) { cache.present[n] = present; changed = true; }
-      });
+      cache.ids.forEach((id, n) => { cache.present[n] = !!hass.states[id]; });
       cache.states = hass.states;
-      if (changed) cache.revision = {};
+      cache.key = cache.ids.filter((id, n) => cache.present[n]).join();
     }
-    return cache.revision;
+    if (this._pointtLast.key !== cache.key) this._pointtLast = { key: cache.key, revision: {} };
+    return this._pointtLast.revision;
   }
 
   static _registry(hass) {
@@ -1791,26 +1791,37 @@ class HeatpumpFlowCard extends HTMLElement {
     const key = this._registryKey(hass);
     let cache = this._registries.get(key);
     if (!cache || cache.display !== hass.entities) {
+      const old = cache;
       cache = { display: hass.entities };
       this._registries.set(key, cache);
+      // Until the new list arrives, the PointT entries of the previous one stay in use on top of the new compact registry.
+      if (old?.pointtFull) { cache.entries = { ...cache.display, ...old.pointtFull }; cache.carriedSig = old.sig; }
       const pointt = Object.entries(hass.entities || {}).filter(([, e]) => e.platform === 'bosch_buderus_heating');
       // The demo and tests may already provide the full registry.
       const full = pointt.length && pointt.every(([, e]) => typeof e.unique_id === 'string');
       cache.promise = Promise.resolve().then(() => full ? pointt.map(([entity_id, e]) => ({ ...e, entity_id }))
         : hass.callWS({ type: 'config/entity_registry/list' })).then((entries) => {
         if (!Array.isArray(entries)) throw new Error('Invalid entity registry response');
-        cache.entries = { ...cache.display };
+        cache.pointtFull = {};
         // Do not retain unrelated registry data, options, user names or credentials.
         entries.filter((e) => e?.platform === 'bosch_buderus_heating' && typeof e.entity_id === 'string')
           .forEach(({ entity_id, platform, unique_id, device_id, disabled_by, translation_key }) => {
-            cache.entries[entity_id] = { platform, unique_id, device_id, disabled_by, translation_key };
+            cache.pointtFull[entity_id] = { platform, unique_id, device_id, disabled_by, translation_key };
           });
+        cache.entries = { ...cache.display, ...cache.pointtFull };
+        cache.sig = JSON.stringify(Object.entries(cache.pointtFull).sort(([a], [b]) => (a < b ? -1 : 1)));
       }).catch(() => { cache.entries = null; });
     }
     if (host._registryRequest === cache.promise) return;
     host._registryRequest = cache.promise;
+    // HA sends a new compact registry after a change to any entity. The host rebuilds only when the PointT entries differ from
+    // the ones it was built with: a rebuild makes the card flicker and drops styles set with card-mod (#164).
+    // Without carried-over entries (first list of a connection) the host drew without the registry and needs the update.
     cache.promise.then(() => {
-      if (host._registryRequest === cache.promise && host._hass?.entities === cache.display) update();
+      if (host._registryRequest !== cache.promise || host._hass?.entities !== cache.display) return;
+      if (cache.sig !== undefined && cache.sig === host._registrySig && cache.carriedSig === host._registrySig) return;
+      host._registrySig = cache.sig;
+      update();
     });
   }
 
