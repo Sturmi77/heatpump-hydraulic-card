@@ -547,6 +547,16 @@ const HFC_PRESETS = {
     name: 'Panasonic Aquarea (HeishaMon)',
     tested: true,
     unit_style: 'panasonic',
+    // Size of the drawing from the model HeishaMon reports ("WH-MXC09H3E5 9 1ph T-CAP"): T-CAP units, 12 and 16 kW and the 9 kW
+    // units of the H generation have the tall casing with two fans; the J generation monobloc up to 9 kW has one (#176).
+    unit_size: (e, hass) => {
+      const text = String(hass?.states?.[e.model]?.state || '');
+      // All-in-one models carry two capacities in the code (WH-ADC0916H9E8 12 3ph T-CAP); the number after the code counts.
+      const m = /WH-[A-Z]{3}(\d{2,4})([A-Z])\w*\s+(\d+)/.exec(text);
+      if (!m) return undefined;
+      const kw = +m[3]; const generation = m[2];
+      return /T-CAP/i.test(text) || kw >= 12 || (kw >= 9 && generation === 'H') ? 'large' : 'medium';
+    },
     // The primary pump sits in the heat pump (outdoor unit of the monobloc, hydro module of the split) and also runs for hot water.
     primary_pump: true,
     auto_circuits: false,
@@ -565,6 +575,8 @@ const HFC_PRESETS = {
       const zoneFlow = parseFloat(ctx.state(`sensor.${m}${z}_water_temp`));
       const curve = ctx.state(`sensor.${m}heating_mode`) === 'compensation curve';
       return {
+        // The model text ("Aquarea Heatpump model") only picks the size of the drawing (unit_size above).
+        model: `sensor.${m}heat_pump_model`,
         compressor: `sensor.${m}compressor_freq`,
         // The fan runs on for about a minute after the compressor stops.
         fan_speed: `sensor.${m}fan1_motor_speed`,
@@ -1115,11 +1127,12 @@ const HFC_PRESETS = {
 // Built-in languages: one entry here, one block in HFC_I18N (card texts) and one in HFC_EDITOR (editor labels), see
 // docs/TRANSLATING.md. The value is the name of the language in that language. A language may be translated in part:
 // every missing text falls back to English. `npm run i18n:check` verifies the blocks.
-const HFC_LANGUAGES = { en: 'English', de: 'Deutsch' };
+const HFC_LANGUAGES = { en: 'English', de: 'Deutsch', sk: 'Slovenčina', cs: 'Čeština' };
 
 const HFC_I18N = {
   en: {
     not_found: 'No entities of this preset found. Check the integration and the prefix, or open the card editor.',
+    start: 'No supported heat pump integration found. Open the card editor to pick a preset or to map your entities.', start_link: 'Supported integrations',
     title: 'Heat pump', heat_pump: 'Heat pump', dhw: 'Hot water', buffer: 'Buffer', series_tank: 'Series buffer', combined_tank: 'Combined storage', heating_zone: 'Heating', fresh_water_station: 'Fresh-water station', heating_circuit: 'Heating circuit',
     house: 'Rooms', room: 'Room', room_target: 'Room target', running: 'running', compressor_off: 'Compressor off', source_in: 'Air inlet', outdoor: 'Outdoor',
     energy_missing: 'Energy dashboard: no power sensor for {sources}; energy counters alone cannot show live flow.',
@@ -1160,6 +1173,7 @@ const HFC_I18N = {
   },
   de: {
     not_found: 'Keine Entitäten dieser Voreinstellung gefunden. Integration und Präfix prüfen oder den Karteneditor öffnen.',
+    start: 'Keine unterstützte Wärmepumpen-Integration gefunden. Im Karteneditor eine Voreinstellung wählen oder die Entitäten selbst zuordnen.', start_link: 'Unterstützte Integrationen',
     title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', dhw: 'Warmwasser', buffer: 'Puffer', series_tank: 'Reihenpuffer', combined_tank: 'Kombispeicher', heating_zone: 'Heizung', fresh_water_station: 'Frischwasserstation', heating_circuit: 'Heizkreis',
     house: 'Wohnräume', room: 'Raum', room_target: 'Raum-Soll', running: 'läuft', compressor_off: 'Verdichter aus', source_in: 'Luft-Eintritt', outdoor: 'Außen',
     energy_missing: 'Energie-Dashboard: kein Leistungssensor für {sources}; Energiezähler allein zeigen keinen aktuellen Fluss.',
@@ -1198,6 +1212,89 @@ const HFC_I18N = {
       frost: 'Frostschutz', circulate: 'Umwälzen', off: 'Aus', legionella: 'Legionellenschutz', trailing: 'Nachlauf',
     },
   },
+  // Slovak and Czech by Havinko1991 (#177, #182).
+  sk: {
+    not_found: 'Nenašli sa žiadne entity tejto predvoľby. Skontrolujte integráciu a predponu, alebo otvorte editor karty.',
+    start: 'Nenašla sa žiadna podporovaná integrácia tepelného čerpadla. Otvorte editor karty a vyberte predvoľbu alebo priraďte svoje entity.', start_link: 'Podporované integrácie',
+    title: 'Tepelné čerpadlo', heat_pump: 'Tepelné čerpadlo', dhw: 'Teplá voda', buffer: 'Akumulačný zásobník', series_tank: 'Sériový akumulačný zásobník', combined_tank: 'Kombinovaný zásobník', heating_zone: 'Vykurovanie', fresh_water_station: 'Čerstvá voda (stanica)', heating_circuit: 'Vykurovací okruh',
+    house: 'Miestnosti', room: 'Miestnosť', room_target: 'Cieľová teplota', running: 'beží', compressor_off: 'Kompresor vypnutý', source_in: 'Prívod vzduchu', outdoor: 'Vonku',
+    energy_missing: 'Energetický panel: chýba senzor výkonu pre {sources}; samotné merače energie nedokážu zobraziť aktuálny prietok.',
+    brine_in: 'Vstup nemrznúcej zmesi', brine_out: 'Výstup nemrznúcej zmesi', well_in: 'Vstup zo studne', well_out: 'Výstup do studne',
+    details: 'Podrobnosti', sec_operation: 'Prevádzka', sec_hydraulic: 'Hydraulické tlaky', sec_refrigerant: 'Chladiaci okruh', sec_cutouts: 'Vypnutia (počet udalostí)', sec_more: 'Viac',
+    diagnostic_copy: 'Kopírovať diagnostickú správu', diagnostic_copied: 'Diagnostická správa bola skopírovaná', diagnostic_failed: 'Nepodarilo sa skopírovať diagnostickú správu',
+    fullscreen_open: 'Otvoriť na celú obrazovku', fullscreen_close: 'Zatvoriť celú obrazovku',
+    det: {
+      hours: 'Prevádzkové hodiny kompresora', starts_total: 'Celkový počet štartov kompresora', aux_hours: 'Hodiny prídavného ohrevu', energy_total: 'Celková elektrina',
+      cutout_high_pressure: 'Vysokotlakové vypnutia', cutout_low_pressure: 'Nízkotlakové vypnutia', cutout_temperature: 'Teplotné vypnutia',
+      env_energy: 'Celková energia prostredia', heat_total: 'Celkové vyrobené teplo', cop_total: 'Celkové COP', compressor_speed: 'Kompresor', evap_temp: 'Odparovanie', cond_temp: 'Kondenzácia',
+      suction_temp: 'Nasávaný plyn', hot_gas: 'Horúci plyn', liquid_temp: 'Kvapalinové potrubie', low_pressure: 'Nízky tlak', high_pressure: 'Vysoký tlak',
+      eev: 'Expanzný ventil', superheat: 'Prehriatie', subcooling: 'Podchladenie',
+    },
+    source_flow: 'Zdroj', target: 'Cieľ', curve_offset: 'krivka', curve_shift: 'posun', return_short: 'RL', error: 'Chyba', circulation: 'Cirk.', valve_dhw: 'TÚV', solar: 'Solár',
+    brine_pressure: 'Tlak nemrznúcej zmesi', hc_pressure: 'Tlak vykurovania', pressure_normal: 'normálny', pressure_warning: 'varovanie', pressure_critical: 'kritický',
+    timeline_title: 'Posledných {h} hodín', timeline_gap: 'Žiadne dáta', timeline_aria: 'Prevádzkový režim za posledných {h} hodín. Šípkami vyberte obdobie.',
+    programs: { eco: 'Eko', night: 'Nočný', party: 'Párty', holiday: 'Dovolenka' },
+    valve_heating: 'Vykurovanie', valve_cooling: 'Chladenie', bypass: 'Obtok (Bypass)', pv: 'FVE', pv_boost: 'Prebytok FVE', battery: 'Batéria', grid: 'Sieť',
+    stat_cop_heating: 'COP vykurovania dnes', stat_cop_dhw: 'COP TÚV dnes', stat_energy: 'Energia dnes',
+    stat_starts: 'Štarty dnes', stat_spread: 'Rozpätie', stat_volume: 'Prietok', stat_heat: 'Tepelný výkon', pv_share: 'FVE',
+    tiles: {
+      cop_live: 'Aktuálne COP', cop_heating: 'COP vykurovania', cop_dhw: 'COP TÚV', cop_cooling: 'EER chladenia', cop_total: 'Celkové COP', spf: 'SPF (rok)',
+      energy: 'Elektrina', env_energy: 'Energia prostredia', energy_heating: 'Elektrina na vykurovanie', energy_dhw: 'Elektrina na TÚV', energy_cooling: 'Elektrina na chladenie',
+      energy_defrost: 'Elektrina na odmrazovanie', energy_standby: 'Pohotovostný režim', energy_aux: 'Elektrina prídavného ohrevu',
+      heat: 'Teplo', heat_heating: 'Teplo na vykurovanie', heat_dhw: 'Teplo na TÚV', heat_cooling: 'Chladiaci výkon', heat_defrost: 'Teplo na odmrazovanie',
+      starts: 'Štarty kompresora', cycles_heating: 'Vykurovacie cykly', cycles_dhw: 'Cykly TÚV', cycles_cooling: 'Chladiace cykly', defrosts: 'Odmrazovania',
+      hours: 'Prevádzkové hodiny', hours_per_start: 'Doba behu na štart', load_classes: 'Záťažové triedy 1-5', aux_hours: 'Hodiny prídavného ohrevu', aux_starts: 'Štarty prídavného ohrevu',
+      spread: 'Rozpätie', volume: 'Prietok', heat_estimated: 'Tepelný výkon', power: 'Výkon', heat_live: 'Tepelný výkon', compressor_speed: 'Kompresor',
+      source_spread: 'Rozpätie zdroja', outdoor: 'Vonku', dhw_top: 'Nádrž TÚV', room: 'Izba', brine_pressure: 'Tlak nemrznúcej zmesi', hc_pressure: 'Tlak vykurovania', pv_share: 'Podiel FVE dnes',
+      pv_boost_share: 'Podiel prebytku FVE na vykurovaní', pv_production: 'Výnos FVE', solar_thermal: 'Solárne teplo', cost: 'Náklady', dhw_loss: 'Pohotovostná strata TÚV',
+    },
+    periods: { now: 'teraz', today: 'dnes', yesterday: 'včera', week: 'týždeň', month: 'mesiac', year: 'rok', total: 'celkovo' },
+    modes: {
+      idle: 'Pohotovostný režim', heating: 'Vykurovanie', dhw: 'Teplá voda', cooling: 'Chladenie', defrost: 'Odmrazovanie', blocked: 'Blokované',
+      frost: 'Protimrazová ochrana', circulate: 'Cirkulácia', off: 'Vypnuté', legionella: 'Antilegionela', trailing: 'Dobeh',
+    },
+  },
+  cs: {
+    not_found: 'Nenalezeny žádné entity této předvolby. Zkontrolujte integraci a předponu, nebo otevřete editor karty.',
+    start: 'Nenalezena žádná podporovaná integrace tepelného čerpadla. Otevřete editor karty a vyberte předvolbu nebo přiřaďte své entity.', start_link: 'Podporované integrace',
+    title: 'Tepelné čerpadlo', heat_pump: 'Tepelné čerpadlo', dhw: 'Teplá voda', buffer: 'Akumulační zásobník', series_tank: 'Sériový akumulační zásobník', combined_tank: 'Kombinovaný zásobník', heating_zone: 'Vytápění', fresh_water_station: 'Čerstvá voda (stanice)', heating_circuit: 'Topný okruh',
+    house: 'Místnosti', room: 'Místnost', room_target: 'Cílová teplota', running: 'běží', compressor_off: 'Kompresor vypnutý', source_in: 'Přívod vzduchu', outdoor: 'Venku',
+    energy_missing: 'Energetický panel: chybí senzor výkonu pro {sources}; samotné měřiče energie nedokážou zobrazit aktuální průtok.',
+    brine_in: 'Vstup nemrznoucí směsi', brine_out: 'Výstup nemrznoucí směsi', well_in: 'Vstup ze studny', well_out: 'Výstup do studny',
+    details: 'Podrobnosti', sec_operation: 'Provoz', sec_hydraulic: 'Hydraulické tlaky', sec_refrigerant: 'Chladicí okruh', sec_cutouts: 'Vypnutí (počet událostí)', sec_more: 'Více',
+    diagnostic_copy: 'Kopírovat diagnostickou zprávu', diagnostic_copied: 'Diagnostická zpráva byla zkopírována', diagnostic_failed: 'Nepodařilo se zkopírovat diagnostickou zprávu',
+    fullscreen_open: 'Otevřít na celou obrazovku', fullscreen_close: 'Zavřít celou obrazovku',
+    det: {
+      hours: 'Provozní hodiny kompresoru', starts_total: 'Celkový počet startů kompresoru', aux_hours: 'Hodiny přídavného ohřevu', energy_total: 'Celková elektřina',
+      cutout_high_pressure: 'Vysokotlaká vypnutí', cutout_low_pressure: 'Nízkotlaká vypnutí', cutout_temperature: 'Teplotní vypnutí',
+      env_energy: 'Celková energie prostředí', heat_total: 'Celkové vyrobené teplo', cop_total: 'Celkové COP', compressor_speed: 'Kompresor', evap_temp: 'Odpařování', cond_temp: 'Kondenzace',
+      suction_temp: 'Nasávaný plyn', hot_gas: 'Horký plyn', liquid_temp: 'Kapalinové potrubí', low_pressure: 'Nízký tlak', high_pressure: 'Vysoký tlak',
+      eev: 'Expanzní ventil', superheat: 'Přehřátí', subcooling: 'Podchlazení',
+    },
+    source_flow: 'Zdroj', target: 'Cíl', curve_offset: 'křivka', curve_shift: 'posun', return_short: 'RL', error: 'Chyba', circulation: 'Cirk.', valve_dhw: 'TUV', solar: 'Solár',
+    brine_pressure: 'Tlak nemrznoucí směsi', hc_pressure: 'Tlak vytápění', pressure_normal: 'normální', pressure_warning: 'varování', pressure_critical: 'kritický',
+    timeline_title: 'Posledních {h} hodin', timeline_gap: 'Žádná data', timeline_aria: 'Provozní režim za posledních {h} hodin. Šipkami vyberte období.',
+    programs: { eco: 'Eko', night: 'Noční', party: 'Párty', holiday: 'Dovolená' },
+    valve_heating: 'Vytápění', valve_cooling: 'Chlazení', bypass: 'Obtok (Bypass)', pv: 'FVE', pv_boost: 'Přebytek FVE', battery: 'Baterie', grid: 'Síť',
+    stat_cop_heating: 'COP vytápění dnes', stat_cop_dhw: 'COP TUV dnes', stat_energy: 'Energie dnes',
+    stat_starts: 'Starty dnes', stat_spread: 'Rozpětí', stat_volume: 'Průtok', stat_heat: 'Tepelný výkon', pv_share: 'FVE',
+    tiles: {
+      cop_live: 'Aktuální COP', cop_heating: 'COP vytápění', cop_dhw: 'COP TUV', cop_cooling: 'EER chlazení', cop_total: 'Celkové COP', spf: 'SPF (rok)',
+      energy: 'Elektřina', env_energy: 'Energie prostředí', energy_heating: 'Elektřina pro vytápění', energy_dhw: 'Elektřina pro TUV', energy_cooling: 'Elektřina pro chlazení',
+      energy_defrost: 'Elektřina pro odmrazování', energy_standby: 'Pohotovostní režim', energy_aux: 'Elektřina přídavného ohřevu',
+      heat: 'Teplo', heat_heating: 'Teplo pro vytápění', heat_dhw: 'Teplo pro TUV', heat_cooling: 'Chladicí výkon', heat_defrost: 'Teplo pro odmrazování',
+      starts: 'Starty kompresoru', cycles_heating: 'Topné cykly', cycles_dhw: 'Cykly TUV', cycles_cooling: 'Chladicí cykly', defrosts: 'Odmrazování',
+      hours: 'Provozní hodiny', hours_per_start: 'Doba běhu na start', load_classes: 'Zátěžové třídy 1-5', aux_hours: 'Hodiny přídavného ohřevu', aux_starts: 'Starty přídavného ohřevu',
+      spread: 'Rozpětí', volume: 'Průtok', heat_estimated: 'Tepelný výkon', power: 'Výkon', heat_live: 'Tepelný výkon', compressor_speed: 'Kompresor',
+      source_spread: 'Rozpětí zdroje', outdoor: 'Venku', dhw_top: 'Nádrž TUV', room: 'Pokoj', brine_pressure: 'Tlak nemrznoucí směsi', hc_pressure: 'Tlak vytápění', pv_share: 'Podíl FVE dnes',
+      pv_boost_share: 'Podíl přebytku FVE na vytápění', pv_production: 'Výnos FVE', solar_thermal: 'Solární teplo', cost: 'Náklady', dhw_loss: 'Pohotovostní ztráta TUV',
+    },
+    periods: { now: 'nyní', today: 'dnes', yesterday: 'včera', week: 'týden', month: 'měsíc', year: 'rok', total: 'celkově' },
+    modes: {
+      idle: 'Pohotovostní režim', heating: 'Vytápění', dhw: 'Teplá voda', cooling: 'Chlazení', defrost: 'Odmrazování', blocked: 'Blokováno',
+      frost: 'Protimrazová ochrana', circulate: 'Cirkulace', off: 'Vypnuto', legionella: 'Antilegionela', trailing: 'Doběh',
+    },
+  },
 };
 
 // Translation objects are a public configuration surface. Merge them recursively so a custom language only needs to
@@ -1222,7 +1319,7 @@ const HFC_EDITOR = {
     source_type: 'Heat source', src_air: 'Air', src_brine: 'Ground (brine)', src_water: 'Groundwater',
     hc_count: 'Heating circuits', hc2_type: 'Circuit 2 emitter', hc3_type: 'Circuit 3 emitter', hc4_type: 'Circuit 4 emitter', hc5_type: 'Circuit 5 emitter', hc6_type: 'Circuit 6 emitter',
     unit_style: 'Unit drawing', unit_auto: 'Automatic (from the preset)', unit_generic: 'Generic (fan)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
-    unit_size: 'Vaillant size', size_small: '3.5 / 5.5 kW (1 fan, low)', size_medium: '7.5 kW (1 fan)', size_large: '10.5 / 12.5 kW (2 fans)',
+    unit_size: 'Size of the unit drawing', size_pana_medium: '1 fan (3 to 9 kW)', size_pana_large: '2 fans (T-CAP, 12 and 16 kW)', size_small: '3.5 / 5.5 kW (1 fan, low)', size_medium: '7.5 kW (1 fan)', size_large: '10.5 / 12.5 kW (2 fans)',
     timeline: 'Timeline of the operating mode', timeline_hours: 'Timeline length (hours)', timeline_marks: 'Show the badges (e.g. Boost) as extra lanes',
     layout: 'Layout', layout_default: 'Default', layout_compact: 'Compact (narrow columns)', layout_wide: 'Wide (tiles beside the schematic)', layout_wall: 'Wall display (large, controls fade out)',
     animations: 'Animations', animations_auto: 'Automatic (respect reduced motion)', animations_always: 'Always', animations_off: 'Off',
@@ -1259,28 +1356,28 @@ const HFC_EDITOR = {
     error_ok_help: 'Comma-separated, case-insensitive; for example: No Error, OK. Any other known text then shows the error chip.',
     total_cop_help: 'Total heat, environmental energy and electricity must cover the same time range. Without total heat, COP uses environmental energy plus electricity.',
     language_help: 'Additional languages and custom labels are configured with texts in YAML; missing labels fall back to English.',
-    detected: 'Detected', entities_found: 'entities', not_detected: 'Not found in this Home Assistant - check the integration, the prefix or choose another preset',
-    program: 'Heating program (eco, night, party, holiday)', solar_collector: 'Solar collector temperature', solar_pump: 'Solar pump running (binary)',
-    source_out: 'Source outlet temperature', heater: 'Backup / inline heater active',
-    dhw_heater: 'DHW heater rod active', buffer_heater: 'Buffer heater rod active',
-    dhw_heater_top: 'DHW heater rod at the top active', dhw_heater_middle: 'DHW heater rod in the middle active', dhw_heater_bottom: 'DHW heater rod at the bottom active',
-    buffer_heater_top: 'Buffer heater rod at the top active', buffer_heater_middle: 'Buffer heater rod in the middle active', buffer_heater_bottom: 'Buffer heater rod at the bottom active',
+    detected: 'Detected', entities_found: 'entities', also_detected: 'Also detected here:', not_detected: 'Not found in this Home Assistant - check the integration, the prefix or choose another preset',
+    program: 'Heating program (eco, night, party, holiday)', solar_collector: 'Solar collector temperature (°C)', solar_pump: 'Solar pump running (on/off)',
+    source_out: 'Source outlet temperature (°C: brine or well water out)', heater: 'Backup / inline heater of the heat pump active (on/off, stage 1 to 3, or W)',
+    dhw_heater: 'DHW heater rod active (on/off, or W)', buffer_heater: 'Buffer heater rod active (on/off, or W)',
+    dhw_heater_top: 'DHW heater rod at the top active (on/off, or W)', dhw_heater_middle: 'DHW heater rod in the middle active (on/off, or W)', dhw_heater_bottom: 'DHW heater rod at the bottom active (on/off, or W)',
+    buffer_heater_top: 'Buffer heater rod at the top active (on/off, or W)', buffer_heater_middle: 'Buffer heater rod in the middle active (on/off, or W)', buffer_heater_bottom: 'Buffer heater rod at the bottom active (on/off, or W)',
     hc_underfloor: 'Underfloor heating', hc_radiator: 'Panel radiators', hc_column: 'Column radiators',
     brine_pressure_min: 'Brine pressure warning below', brine_pressure_crit: 'Brine pressure critical below', brine_pressure_max: 'Brine pressure warning above',
     hc_pressure_min: 'Heating pressure warning below', hc_pressure_crit: 'Heating pressure critical below', hc_pressure_max: 'Heating pressure warning above',
     sec_hp: 'Heat pump', sec_storage: 'Storage', sec_hc: 'Heating circuit & house', sec_power: 'Power sources', sec_stats: 'Statistics',
-    mode: 'Operating mode', status: 'Status / sub-state', compressor: 'Compressor running (binary or frequency)', defrost: 'Defrost active (binary)', fan_speed: 'Fan speed (rpm or binary)', power: 'Electrical power',
-    heat: 'Heat output', flow: 'Flow temperature', return: 'Return temperature', volume: 'Flow rate heating side',
-    source_volume: 'Flow rate source side', source_in: 'Source / air inlet temperature', outdoor: 'Outdoor temperature',
-    valve: 'Diverter valve on DHW (binary or Tank/Room)', bypass_valve: 'Series buffer bypass valve (on = bypass; default: defrost)',
+    mode: 'Operating mode (state text)', status: 'Status / sub-state (text)', compressor: 'Compressor running (on/off, or frequency / speed above 0)', defrost: 'Defrost active (on/off)', fan_speed: 'Fan speed (rpm, or on/off)', power: 'Electrical power of the heat pump (W or kW)',
+    heat: 'Heat output (kW or W)', flow: 'Heat pump flow temperature (°C)', return: 'Heat pump return temperature (°C)', volume: 'Flow rate of the heat pump loop (l/h or l/min, primary pump)',
+    source_volume: 'Flow rate of the brine or well loop (l/h or l/min, not for air)', source_in: 'Source inlet temperature (°C: air, brine or well water in)', outdoor: 'Outdoor temperature (°C)',
+    valve: 'Diverter valve towards hot water (on/off, or a state like Tank/Room)', bypass_valve: 'Series buffer bypass valve (on = bypass; default: defrost)',
     pv_boost: 'PV surplus mode (on, or a power above 0)',
-    dhw_top: 'DHW tank top', dhw_middle: 'DHW tank middle', dhw_bottom: 'DHW tank bottom', dhw_target: 'DHW target', dhw_mode: 'DHW mode',
-    circulation: 'Circulation pump', buffer_top: 'Buffer top', buffer_middle: 'Buffer middle', buffer_bottom: 'Buffer bottom', buffer_mode: 'Buffer mode',
-    hc_flow: 'Circuit flow temperature', hc_return: 'Circuit return temperature', hc_setpoint: 'Circuit flow target',
-    hc_mode: 'Circuit mode', hc_pump: 'Circuit pump running (binary)', hc_volume: 'Circuit flow rate', hc_curve_offset: 'Heating curve shift (K)', hc_pressure: 'Heating circuit pressure', brine_pressure: 'Brine circuit pressure',
+    dhw_top: 'DHW tank top (°C)', dhw_middle: 'DHW tank middle (°C)', dhw_bottom: 'DHW tank bottom (°C)', dhw_target: 'DHW target (°C)', dhw_mode: 'DHW mode (state text)',
+    circulation: 'Circulation pump running (on/off)', buffer_top: 'Buffer top (°C)', buffer_middle: 'Buffer middle (°C)', buffer_bottom: 'Buffer bottom (°C)', buffer_mode: 'Buffer mode (state text)',
+    hc_flow: 'Circuit flow temperature (°C)', hc_return: 'Circuit return temperature (°C)', hc_setpoint: 'Circuit flow target (°C)',
+    hc_mode: 'Circuit mode (state text)', hc_pump: 'Circuit pump running (on/off)', hc_volume: 'Flow rate of the heating circuit (l/h or l/min, circuit pump)', hc_curve_offset: 'Heating curve shift (K)', hc_pressure: 'Heating circuit pressure (bar)', brine_pressure: 'Brine circuit pressure (bar)',
     cutout_high_pressure: 'High-pressure cut-outs (count of events, not a pressure)', cutout_low_pressure: 'Low-pressure cut-outs (count of events, not a pressure)', cutout_temperature: 'Temperature cut-outs (count of events, not a temperature)',
-    room: 'Room temperature', room_target: 'Room target',
-    env_energy: 'Environmental energy total', pv: 'Power from PV (W)', battery: 'Power from battery (W)', grid: 'Power from grid (W)',
+    room: 'Room temperature (°C)', room_target: 'Room target (°C)',
+    env_energy: 'Environmental energy total (kWh)', pv: 'Power from PV (W)', battery: 'Power from battery (W)', grid: 'Power from grid (W)',
     cop_heating_today: 'COP heating today', cop_dhw_today: 'COP DHW today', energy_today: 'Energy today (kWh)',
     pv_share_today: 'PV share today (%)', starts_today: 'Compressor starts today',
   },
@@ -1291,7 +1388,7 @@ const HFC_EDITOR = {
     source_type: 'Wärmequelle', src_air: 'Luft', src_brine: 'Erdreich (Sole)', src_water: 'Grundwasser',
     hc_count: 'Heizkreise', hc2_type: 'Wärmeabgabe Heizkreis 2', hc3_type: 'Wärmeabgabe Heizkreis 3', hc4_type: 'Wärmeabgabe Heizkreis 4', hc5_type: 'Wärmeabgabe Heizkreis 5', hc6_type: 'Wärmeabgabe Heizkreis 6',
     unit_style: 'Geräte-Zeichnung', unit_auto: 'Automatisch (aus der Voreinstellung)', unit_generic: 'Allgemein (Lüfter)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
-    unit_size: 'Vaillant-Größe', size_small: '3,5 / 5,5 kW (1 Lüfter, niedrig)', size_medium: '7,5 kW (1 Lüfter)', size_large: '10,5 / 12,5 kW (2 Lüfter)',
+    unit_size: 'Größe der Geräte-Zeichnung', size_pana_medium: '1 Lüfter (3 bis 9 kW)', size_pana_large: '2 Lüfter (T-CAP, 12 und 16 kW)', size_small: '3,5 / 5,5 kW (1 Lüfter, niedrig)', size_medium: '7,5 kW (1 Lüfter)', size_large: '10,5 / 12,5 kW (2 Lüfter)',
     timeline: 'Zeitleiste der Betriebsart', timeline_hours: 'Länge der Zeitleiste (Stunden)', timeline_marks: 'Badges (z. B. Boost) als zusätzliche Spuren zeigen',
     layout: 'Layout', layout_default: 'Standard', layout_compact: 'Kompakt (schmale Spalten)', layout_wide: 'Breit (Kacheln neben dem Schema)', layout_wall: 'Wanddisplay (groß, Bedienelemente blenden aus)',
     animations: 'Animationen', animations_auto: 'Automatisch (reduzierte Bewegung beachten)', animations_always: 'Immer', animations_off: 'Aus',
@@ -1328,35 +1425,209 @@ const HFC_EDITOR = {
     error_ok_help: 'Kommagetrennt, ohne Beachtung der Groß-/Kleinschreibung; zum Beispiel: No Error, OK. Jeder andere bekannte Text zeigt dann den Fehler-Chip.',
     total_cop_help: 'Gesamtwärme, Umweltenergie und Gesamtstrom müssen denselben Zeitraum abdecken. Ohne Gesamtwärme nutzt der COP Umweltenergie plus Strom.',
     language_help: 'Weitere Sprachen und eigene Beschriftungen werden mit texts im YAML konfiguriert; fehlende Texte fallen auf Englisch zurück.',
-    detected: 'Erkannt', entities_found: 'Entitäten', not_detected: 'In diesem Home Assistant nicht gefunden - Integration und Präfix prüfen oder andere Voreinstellung wählen',
-    program: 'Heizprogramm (Eco, Nacht, Party, Urlaub)', solar_collector: 'Kollektortemperatur Solarthermie', solar_pump: 'Solarpumpe läuft (binär)',
-    source_out: 'Quelle Austritt', heater: 'Heizstab / Zusatzheizer aktiv',
-    dhw_heater: 'Heizstab Warmwasser aktiv', buffer_heater: 'Heizstab Puffer aktiv',
-    dhw_heater_top: 'Heizstab Warmwasser oben aktiv', dhw_heater_middle: 'Heizstab Warmwasser Mitte aktiv', dhw_heater_bottom: 'Heizstab Warmwasser unten aktiv',
-    buffer_heater_top: 'Heizstab Puffer oben aktiv', buffer_heater_middle: 'Heizstab Puffer Mitte aktiv', buffer_heater_bottom: 'Heizstab Puffer unten aktiv',
+    detected: 'Erkannt', entities_found: 'Entitäten', also_detected: 'Hier ebenfalls erkannt:', not_detected: 'In diesem Home Assistant nicht gefunden - Integration und Präfix prüfen oder andere Voreinstellung wählen',
+    program: 'Heizprogramm (Eco, Nacht, Party, Urlaub)', solar_collector: 'Kollektortemperatur Solarthermie (°C)', solar_pump: 'Solarpumpe läuft (ein/aus)',
+    source_out: 'Quelle Austritt (°C: Sole oder Brunnenwasser raus)', heater: 'Heizstab / Zusatzheizer der Wärmepumpe aktiv (ein/aus, Stufe 1 bis 3, oder W)',
+    dhw_heater: 'Heizstab Warmwasser aktiv (ein/aus, oder W)', buffer_heater: 'Heizstab Puffer aktiv (ein/aus, oder W)',
+    dhw_heater_top: 'Heizstab Warmwasser oben aktiv (ein/aus, oder W)', dhw_heater_middle: 'Heizstab Warmwasser Mitte aktiv (ein/aus, oder W)', dhw_heater_bottom: 'Heizstab Warmwasser unten aktiv (ein/aus, oder W)',
+    buffer_heater_top: 'Heizstab Puffer oben aktiv (ein/aus, oder W)', buffer_heater_middle: 'Heizstab Puffer Mitte aktiv (ein/aus, oder W)', buffer_heater_bottom: 'Heizstab Puffer unten aktiv (ein/aus, oder W)',
     hc_underfloor: 'Flächenheizung', hc_radiator: 'Plattenheizkörper', hc_column: 'Gliederheizkörper',
     brine_pressure_min: 'Soledruck Warnung unter', brine_pressure_crit: 'Soledruck kritisch unter', brine_pressure_max: 'Soledruck Warnung über',
     hc_pressure_min: 'Heizungsdruck Warnung unter', hc_pressure_crit: 'Heizungsdruck kritisch unter', hc_pressure_max: 'Heizungsdruck Warnung über',
     sec_hp: 'Wärmepumpe', sec_storage: 'Speicher', sec_hc: 'Heizkreis & Haus', sec_power: 'Stromquellen', sec_stats: 'Kennzahlen',
-    mode: 'Betriebsart', status: 'Status / Unterzustand', compressor: 'Verdichter läuft (binär oder Frequenz)', defrost: 'Abtauen aktiv (binär)', fan_speed: 'Lüfterdrehzahl (U/min oder binär)', power: 'Leistungsaufnahme',
-    heat: 'Wärmeleistung', flow: 'Vorlauftemperatur', return: 'Rücklauftemperatur', volume: 'Volumenstrom Heizseite',
-    source_volume: 'Volumenstrom Quelle', source_in: 'Quelle / Luft-Eintritt', outdoor: 'Außentemperatur',
-    valve: 'Umschaltventil auf WW (binär oder Tank/Room)', bypass_valve: 'Bypass-Ventil Reihenpuffer (ein = Bypass; Standard: Abtauen)',
+    mode: 'Betriebsart (Statustext)', status: 'Status / Unterzustand (Text)', compressor: 'Verdichter läuft (ein/aus, oder Frequenz / Drehzahl über 0)', defrost: 'Abtauen aktiv (ein/aus)', fan_speed: 'Lüfterdrehzahl (U/min, oder ein/aus)', power: 'Elektrische Leistungsaufnahme der Wärmepumpe (W oder kW)',
+    heat: 'Wärmeleistung (kW oder W)', flow: 'Vorlauftemperatur der Wärmepumpe (°C)', return: 'Rücklauftemperatur der Wärmepumpe (°C)', volume: 'Volumenstrom Wärmepumpenkreis (l/h oder l/min, Primärpumpe)',
+    source_volume: 'Volumenstrom Sole- oder Brunnenkreis (l/h oder l/min, nicht bei Luft)', source_in: 'Quelle Eintritt (°C: Luft, Sole oder Brunnenwasser rein)', outdoor: 'Außentemperatur (°C)',
+    valve: 'Umschaltventil auf Warmwasser (ein/aus, oder Zustand wie Tank/Room)', bypass_valve: 'Bypass-Ventil Reihenpuffer (ein = Bypass; Standard: Abtauen)',
     pv_boost: 'PV-Überschussbetrieb (ein, oder Leistung über 0)',
-    dhw_top: 'WW-Speicher oben', dhw_middle: 'WW-Speicher Mitte', dhw_bottom: 'WW-Speicher unten', dhw_target: 'WW-Soll', dhw_mode: 'WW-Betriebsart',
-    circulation: 'Zirkulationspumpe', buffer_top: 'Puffer oben', buffer_middle: 'Puffer Mitte', buffer_bottom: 'Puffer unten', buffer_mode: 'Puffer-Betriebsart',
-    hc_flow: 'Heizkreis-Vorlauf', hc_return: 'Heizkreis-Rücklauf', hc_setpoint: 'Heizkreis-Vorlauf-Soll',
-    hc_mode: 'Heizkreis-Betriebsart', hc_pump: 'Heizkreispumpe läuft (binär)', hc_volume: 'Volumenstrom Heizkreis', hc_curve_offset: 'Heizkurven-Verschiebung (K)', hc_pressure: 'Heizkreis-Druck', brine_pressure: 'Solekreis-Druck',
+    dhw_top: 'WW-Speicher oben (°C)', dhw_middle: 'WW-Speicher Mitte (°C)', dhw_bottom: 'WW-Speicher unten (°C)', dhw_target: 'WW-Soll (°C)', dhw_mode: 'WW-Betriebsart (Statustext)',
+    circulation: 'Zirkulationspumpe läuft (ein/aus)', buffer_top: 'Puffer oben (°C)', buffer_middle: 'Puffer Mitte (°C)', buffer_bottom: 'Puffer unten (°C)', buffer_mode: 'Puffer-Betriebsart (Statustext)',
+    hc_flow: 'Heizkreis-Vorlauf (°C)', hc_return: 'Heizkreis-Rücklauf (°C)', hc_setpoint: 'Heizkreis-Vorlauf-Soll (°C)',
+    hc_mode: 'Heizkreis-Betriebsart (Statustext)', hc_pump: 'Heizkreispumpe läuft (ein/aus)', hc_volume: 'Volumenstrom Heizkreis (l/h oder l/min, Heizkreispumpe)', hc_curve_offset: 'Heizkurven-Verschiebung (K)', hc_pressure: 'Heizkreis-Druck (bar)', brine_pressure: 'Solekreis-Druck (bar)',
     cutout_high_pressure: 'Hochdruck-Abschaltungen (Anzahl der Ereignisse, kein Druck)', cutout_low_pressure: 'Niederdruck-Abschaltungen (Anzahl der Ereignisse, kein Druck)', cutout_temperature: 'Temperatur-Abschaltungen (Anzahl der Ereignisse, keine Temperatur)',
-    room: 'Raumtemperatur', room_target: 'Raum-Soll',
-    env_energy: 'Umweltenergie gesamt', pv: 'Strom aus PV (W)', battery: 'Strom aus Akku (W)', grid: 'Strom aus Netz (W)',
+    room: 'Raumtemperatur (°C)', room_target: 'Raum-Soll (°C)',
+    env_energy: 'Umweltenergie gesamt (kWh)', pv: 'Strom aus PV (W)', battery: 'Strom aus Akku (W)', grid: 'Strom aus Netz (W)',
     cop_heating_today: 'COP Heizen heute', cop_dhw_today: 'COP WW heute', energy_today: 'Verbrauch heute (kWh)',
     pv_share_today: 'PV-Anteil heute (%)', starts_today: 'Verdichterstarts heute',
+  },
+  // Slovak by Havinko1991 (#177): the editor labels; the card texts fall back to English.
+  sk: {
+    preset: 'Predvoľba', prefix: 'Predpona (prázdne = automatická detekcia)', device: 'Zariadenie (voliteľné, obmedzuje predvoľbu)',
+    title: 'Názov', language: 'Jazyk', power_threshold: 'Beží nad (W)', hc_type: 'Vykurovacie teleso',
+    power_sources: 'FVE / batéria / sieť', ps_auto: 'Energetický panel, pokiaľ nie je nastavené nižšie', ps_manual: 'Iba senzory nižšie',
+    source_type: 'Zdroj tepla', src_air: 'Vzduch', src_brine: 'Zem (nemrznúca zmes)', src_water: 'Podzemná voda',
+    hc_count: 'Vykurovacie okruhy', hc2_type: 'Teleso okruhu 2', hc3_type: 'Teleso okruhu 3', hc4_type: 'Teleso okruhu 4', hc5_type: 'Teleso okruhu 5', hc6_type: 'Teleso okruhu 6',
+    unit_style: 'Nákres jednotky', unit_auto: 'Automaticky (z predvoľby)', unit_generic: 'Všeobecná (ventilátor)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono',
+    unit_size: 'Veľkosť Vaillant', size_small: '3.5 / 5.5 kW (1 ventilátor, nízky)', size_medium: '7.5 kW (1 ventilátor)', size_large: '10.5 / 12.5 kW (2 ventilátory)',
+    timeline: 'Časová os prevádzkového režimu', timeline_hours: 'Dĺžka časovej osi (hodiny)', timeline_marks: 'Zobraziť odznaky (napr. Boost) ako extra riadky',
+    layout: 'Rozloženie', layout_default: 'Predvolené', layout_compact: 'Kompaktné (úzke stĺpce)', layout_wide: 'Široké (dlaždice vedľa schémy)', layout_wall: 'Nástenný displej (veľký, ovládacie prvky miznú)',
+    animations: 'Animácie', animations_auto: 'Automaticky (rešpektovať obmedzenie pohybu)', animations_always: 'Vždy', animations_off: 'Vypnuté',
+    flow_speed: 'Rýchlosť animácie', source_spread: 'Zobraziť rozpätie (spread) zdroja',
+    theme: 'Téma karty', theme_auto: 'Automaticky (podľa panelu)', theme_night: 'Nočná', theme_contrast: 'Vysoký kontrast', fullscreen: 'Tlačidlo na celú obrazovku',
+    wall_timeout: 'Skryť ovládacie prvky po (sekundy, 0 = nikdy)',
+    hc_return_label: 'Zobraziť spiatočku okruhu', series_buffer: 'Sériový akumulačný zásobník na spiatočke', series_bypass: 'Sériový akumulačný zásobník s obtokovým ventilom (vypnuté: okruhy bežia v odmrazovaní)', primary_pump: 'Primárne čerpadlo', hc_name: 'Názov okruhu 1', hc2_name: 'Názov okruhu 2', hc3_name: 'Názov okruhu 3', hc4_name: 'Názov okruhu 4', hc5_name: 'Názov okruhu 5', hc6_name: 'Názov okruhu 6',
+    sec_hc2: 'Vykurovací okruh 2', sec_hc3: 'Vykurovací okruh 3', sec_hc4: 'Vykurovací okruh 4', sec_hc5: 'Vykurovací okruh 5', sec_hc6: 'Vykurovací okruh 6', sec_details: 'Podrobnosti: prevádzka', sec_refrigerant: 'Podrobnosti: chladiaci okruh', sec_cutouts: 'Podrobnosti: počítadlá vypnutí',
+    controls: 'Rýchle ovládanie (prepínač, tlačidlo, výber, číslo…)', details_open: 'Podrobnosti predvolene otvorené',
+    from_preset: 'Nájdené predvoľbou',
+    sum_help: 'Súčet týchto entít',
+    sec_advanced: 'Pokročilé',
+    tiles_custom: 'Vlastný výber dlaždíc', tiles: 'Dlaždice (potiahnutím zoradíte)',
+    tiles_custom_help: 'Vypnuté: predvolené dlaždice. Zapnuté: vyberte dlaždice a obdobia z toho, čo táto inštalácia poskytuje; prázdny zoznam riadok skryje.',
+    tiles_yaml: 'Niektoré dlaždice majú vlastný názov, entitu, cenu alebo akciu: upravte ich v YAML.',
+    price_fixed: 'Cena elektriny za kWh', price_entity: 'Entita ceny elektriny',
+    price_help: 'Aktivuje dlaždicu nákladov. S entitou, ktorá má dlhodobé štatistiky (napr. dynamická tarifa), sa náklady účtujú po hodinách.',
+    untested: 'netestované',
+    untested_help: 'Zatiaľ netestované na reálnej inštalácii. Nahláste prosím, či to funguje na: github.com/Sturmi77/heatpump-hydraulic-card/issues (Spätná väzba k predvoľbám).',
+    warn_title: 'Chýba na karte',
+    warn_running: 'Žiadny prevádzkový režim, kompresor, stav ani výkon: karta nedokáže určiť, či tepelné čerpadlo beží.',
+    warn_power: 'Žiadny elektrický výkon: chýba aktuálne COP a rozdelenie FVE / batéria / sieť z energetického panelu.',
+    warn_energy_sources: 'Energetický panel: chýba senzor výkonu pre {sources}; samotné merače energie nedokážu zobraziť aktuálny prietok.',
+    warn_temps: 'Žiadna teplota na prívode ani spiatočke: žiadne rozpätie (spread) a žiadny odhadovaný tepelný výkon.',
+    warn_heat: 'Žiadny tepelný výkon ani prietok: chýba aktuálne COP.',
+    preset_help: 'Nájdené entity sú vyplnené nižšie. Vyberte inú entitu na prepísanie hodnoty, alebo vymažte pole pre jej skrytie.',
+    from_energy: 'Prázdne: prebraté z energetického panelu',
+    errors: 'Chybové entity', error_ok_text: 'Textové stavy znamenajúce bezchybný stav',
+    errors_help: 'Aktívne pre číslo iné ako 0 alebo stav zapnuté. Text vyžaduje bezchybné stavy uvedené nižšie; neznáme, nedostupné, vypnuté a prázdne hodnoty sa ignorujú.',
+    error_ok_help: 'Oddelené čiarkou, bez ohľadu na veľkosť písmen; napríklad: No Error, OK. Akýkoľvek iný známy text potom zobrazí chybový štítok.',
+    total_cop_help: 'Celkové teplo, energia prostredia a elektrina musia pokrývať rovnaký časový rozsah. Bez celkového tepla využíva COP energiu prostredia plus elektrinu.',
+    language_help: 'Ďalšie jazyky a vlastné štítky sa konfigurujú pomocou textov v YAML; chýbajúce štítky sa nahradia angličtinou.',
+    detected: 'Zistené', entities_found: 'entít', not_detected: 'Nenašlo sa v tomto Home Assistante – skontrolujte integráciu, predponu alebo zvoľte inú predvoľbu',
+    program: 'Vykurovací program (eko, nočný, párty, dovolenka)', solar_collector: 'Teplota solárneho kolektora', solar_pump: 'Solárne čerpadlo beží (binárne)',
+    source_out: 'Teplota na výstupe zdroja', heater: 'Záložný / prídavný ohrev aktívny',
+    dhw_heater: 'Vykurovacia tyč TÚV aktívna', buffer_heater: 'Vykurovacia tyč akumulačného zásobníka aktívna',
+    hc_underfloor: 'Podlahové vykurovanie', hc_radiator: 'Doskové radiátory', hc_column: 'Článkové radiátory',
+    brine_pressure_min: 'Varovanie: nízky tlak nemrznúcej zmesi pod', brine_pressure_crit: 'Kritický nízky tlak nemrznúcej zmesi pod', brine_pressure_max: 'Varovanie: vysoký tlak nemrznúcej zmesi nad',
+    hc_pressure_min: 'Varovanie: nízky tlak vykurovania pod', hc_pressure_crit: 'Kritický nízky tlak vykurovania pod', hc_pressure_max: 'Varovanie: vysoký tlak vykurovania nad',
+    sec_hp: 'Tepelné čerpadlo', sec_storage: 'Zásobník', sec_hc: 'Vykurovací okruh a dom', sec_power: 'Zdroje energie', sec_stats: 'Štatistiky',
+    mode: 'Prevádzkový režim', status: 'Stav / podstav', compressor: 'Kompresor beží (binárne alebo frekvencia)', defrost: 'Odmrazovanie aktívne (binárne)', fan_speed: 'Rýchlosť ventilátora (ot/min alebo binárne)', power: 'Elektrický výkon',
+    heat: 'Tepelný výkon', flow: 'Teplota na prívode', return: 'Teplota na spiatočke', volume: 'Prietok na strane vykurovania',
+    source_volume: 'Prietok na strane zdroja', source_in: 'Teplota zdroja / prívodu vzduchu', outdoor: 'Vonkajšia teplota',
+    valve: 'Prepínací ventil na TÚV (binárne alebo Nádrž/Miestnosť)', bypass_valve: 'Obtokový ventil sériového akumulačného zásobníka (zapnuté = obtok; predvolené: odmrazovanie)',
+    pv_boost: 'Režim prebytku FVE (zapnuté, alebo výkon nad 0)',
+    dhw_top: 'Nádrž TÚV hore', dhw_middle: 'Nádrž TÚV v strede', dhw_bottom: 'Nádrž TÚV dole', dhw_target: 'Cieľová teplota TÚV', dhw_mode: 'Režim TÚV',
+    circulation: 'Cirkulačné čerpadlo', buffer_top: 'Akumulačný zásobník hore', buffer_middle: 'Akumulačný zásobník v strede', buffer_bottom: 'Akumulačný zásobník dole', buffer_mode: 'Režim akumulačného zásobníka',
+    hc_flow: 'Teplota prívodu okruhu', hc_return: 'Teplota spiatočky okruhu', hc_setpoint: 'Cieľová teplota prívodu okruhu',
+    hc_mode: 'Režim okruhu', hc_pump: 'Čerpadlo okruhu beží (binárne)', hc_volume: 'Prietok okruhu', hc_curve_offset: 'Posun vykurovacej krivky (K)', hc_pressure: 'Tlak vo vykurovacom okruhu', brine_pressure: 'Tlak v okruhu nemrznúcej zmesi',
+    cutout_high_pressure: 'Vysokotlakové vypnutia (počet udalostí, nie tlak)', cutout_low_pressure: 'Nízkotlakové vypnutia (počet udalostí, nie tlak)', cutout_temperature: 'Teplotné vypnutia (počet udalostí, nie teplota)',
+    room: 'Teplota v miestnosti', room_target: 'Cieľová teplota v miestnosti',
+    env_energy: 'Celková energia prostredia', pv: 'Výkon z FVE (W)', battery: 'Výkon z batérie (W)', grid: 'Výkon zo siete (W)',
+    cop_heating_today: 'COP vykurovania dnes', cop_dhw_today: 'COP TÚV dnes', energy_today: 'Energia dnes (kWh)',
+    pv_share_today: 'Podiel FVE dnes (%)', starts_today: 'Počet štartov kompresora dnes',
+    unit_wolf: 'Wolf CHA',
+    unit_kronoterm: 'Kronoterm ADAPT',
+    unit_alpha_innotec: 'Alpha Innotec Hybrox',
+    unit_stiebel: 'Stiebel Eltron WPL-A',
+    storage: 'Zásobník',
+    storage_separate: 'Samostatná nádrž na teplú vodu a akumulačný zásobník',
+    storage_combined: 'Kombinovaný zásobník (jedna nádrž, zóna teplej vody hore)',
+    dhw_type: 'Príprava teplej vody',
+    dhw_type_coil: 'Nádrž s vnútorným výmenníkom (hadom)',
+    dhw_type_fresh_water: 'Stanica na čerstvú vodu (na akumulačnom alebo kombinovanom zásobníku)',
+    dhw_type_tank_in_tank: 'Nádrž v nádrži (kombinovaný zásobník)',
+    warn_valve: 'Prepínací ventil hlási číslo a nemá nastavené stavy ventilu: karta číta hodnotu 1 ako teplú vodu. Ak 1 znamená vykurovanie, nastavte jeho stavy v sekcii Pokročilé.',
+    warn_map_entities: 'Parameter {maps} sa nachádza pod entitami (entities), kde ho karta ignoruje. V YAML patrí na najvyššiu úroveň konfigurácie karty.',
+    valve_dhw_text: 'Stavy ventilu pre teplú vodu',
+    valve_heating_text: 'Stavy ventilu pre vykurovanie',
+    valve_help: 'Čiarkou oddelené surové stavy entity ventilu, napríklad 0, 1 alebo Tank. Aktuálny stav: {state}.',
+    dhw_heater_top: 'Vykurovacia tyč TÚV hore aktívna (zap/vyp, alebo W)',
+    dhw_heater_middle: 'Vykurovacia tyč TÚV v strede aktívna (zap/vyp, alebo W)',
+    dhw_heater_bottom: 'Vykurovacia tyč TÚV dole aktívna (zap/vyp, alebo W)',
+    buffer_heater_top: 'Vykurovacia tyč akumulačného zásobníka hore aktívna (zap/vyp, alebo W)',
+    buffer_heater_middle: 'Vykurovacia tyč akumulačného zásobníka v strede aktívna (zap/vyp, alebo W)',
+    buffer_heater_bottom: 'Vykurovacia tyč akumulačného zásobníka dole aktívna (zap/vyp, alebo W)',
+  },
+  // Czech by Havinko1991 (#182): the editor labels; the card texts fall back to English.
+  cs: {
+    preset: 'Předvolba', prefix: 'Předpona (prázdné = automatická detekce)', device: 'Zařízení (volitelné, omezuje předvolbu)',
+    title: 'Název', language: 'Jazyk', power_threshold: 'Běží nad (W)', hc_type: 'Topné těleso',
+    power_sources: 'FVE / baterie / síť', ps_auto: 'Energetický panel, pokud není nastaveno níže', ps_manual: 'Pouze senzory níže',
+    source_type: 'Zdroj tepla', src_air: 'Vzduch', src_brine: 'Země (nemrznoucí směs)', src_water: 'Podzemní voda',
+    hc_count: 'Topné okruhy', hc2_type: 'Těleso okruhu 2', hc3_type: 'Těleso okruhu 3', hc4_type: 'Těleso okruhu 4', hc5_type: 'Těleso okruhu 5', hc6_type: 'Těleso okruhu 6',
+    unit_style: 'Nákres jednotky', unit_auto: 'Automaticky (z předvolby)', unit_generic: 'Obecná (ventilátor)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono',
+    unit_size: 'Velikost Vaillant', size_small: '3.5 / 5.5 kW (1 ventilátor, nízký)', size_medium: '7.5 kW (1 ventilátor)', size_large: '10.5 / 12.5 kW (2 ventilátory)',
+    timeline: 'Časová osa provozního režimu', timeline_hours: 'Délka časové osy (hodiny)', timeline_marks: 'Zobrazit odznaky (např. Boost) jako extra řádky',
+    layout: 'Rozvržení', layout_default: 'Výchozí', layout_compact: 'Kompaktní (úzké sloupce)', layout_wide: 'Široké (dlaždice vedle schématu)', layout_wall: 'Nástěnný displej (velký, ovládací prvky mizí)',
+    animations: 'Animace', animations_auto: 'Automaticky (respektovat omezení pohybu)', animations_always: 'Vždy', animations_off: 'Vypnuto',
+    flow_speed: 'Rychlost animace', source_spread: 'Zobrazit rozpětí (spread) zdroje',
+    theme: 'Téma karty', theme_auto: 'Automaticky (podle panelu)', theme_night: 'Noční', theme_contrast: 'Vysoký kontrast', fullscreen: 'Tlačítko na celou obrazovku',
+    wall_timeout: 'Skrýt ovládací prvky po (sekundy, 0 = nikdy)',
+    hc_return_label: 'Zobrazit zpátečku okruhu', series_buffer: 'Sériový akumulační zásobník na zpátečce', series_bypass: 'Sériový akumulační zásobník s obtokovým ventilem (vypnuto: okruhy běží v odmrazování)', primary_pump: 'Primární čerpadlo', hc_name: 'Název okruhu 1', hc2_name: 'Název okruhu 2', hc3_name: 'Název okruhu 3', hc4_name: 'Název okruhu 4', hc5_name: 'Název okruhu 5', hc6_name: 'Název okruhu 6',
+    sec_hc2: 'Topný okruh 2', sec_hc3: 'Topný okruh 3', sec_hc4: 'Topný okruh 4', sec_hc5: 'Topný okruh 5', sec_hc6: 'Topný okruh 6', sec_details: 'Podrobnosti: provoz', sec_refrigerant: 'Podrobnosti: chladicí okruh', sec_cutouts: 'Podrobnosti: počítadla vypnutí',
+    controls: 'Rychlé ovládání (přepínač, tlačítko, výběr, číslo…)', details_open: 'Podrobnosti výchozně otevřené',
+    from_preset: 'Nalezeno předvolbou',
+    sum_help: 'Součet těchto entit',
+    sec_advanced: 'Pokročilé',
+    tiles_custom: 'Vlastní výběr dlaždic', tiles: 'Dlaždice (tažením seřadíte)',
+    tiles_custom_help: 'Vypnuto: výchozí dlaždice. Zapnuto: vyberte dlaždice a období z toho, co tato instalace poskytuje; prázdny seznam řádek skryje.',
+    tiles_yaml: 'Některé dlaždice mají vlastní název, entitu, cenu nebo akci: upravte je v YAML.',
+    price_fixed: 'Cena elektřiny za kWh', price_entity: 'Entita ceny elektřiny',
+    price_help: 'Aktivuje dlaždici nákladů. S entitou, která má dlouhodobé statistiky (např. dynamická tarifa), se náklady účtují po hodinách.',
+    untested: 'netestováno',
+    untested_help: 'Zatím netestováno na reálné instalaci. Nahlaste prosím, zda to funguje na: github.com/Sturmi77/heatpump-hydraulic-card/issues (Zpětná vazba k předvolbám).',
+    warn_title: 'Chybí na kartě',
+    warn_running: 'Žádný provozní režim, kompresor, stav ani výkon: karta nedokáže určit, zda tepelné čerpadlo běží.',
+    warn_power: 'Žádný elektrický výkon: chybí aktuální COP a rozdělení FVE / baterie / síť z energetického panelu.',
+    warn_energy_sources: 'Energetický panel: chýba senzor výkonu pro {sources}; samotné měřiče energie nedokážou zobrazit aktuální průtok.',
+    warn_temps: 'Žádná teplota na přívodu ani zpátečce: žádné rozpětí (spread) a žádný odhadovaný tepelný výkon.',
+    warn_heat: 'Žao dný tepelný výkon ani průtok: chybí aktuální COP.',
+    preset_help: 'Nalezené entity jsou vyplněny níže. Vyberte jinou entitu pro přepsání hodnoty, nebo vymažte pole pro její skrytí.',
+    from_energy: 'Prázdné: převzato z energetického panelu',
+    errors: 'Chybové entity', error_ok_text: 'Textové stavy znamenající bezchybný stav',
+    errors_help: 'Aktivní pro číslo jiné než 0 nebo stav zapnuto. Text vyžaduje bezchybné stavy uvedené níže; neznámé, nedostupné, vypnuté a prázdné hodnoty se ignorují.',
+    error_ok_help: 'Oddělené čárkou, bez ohledu na velikost písmen; například: No Error, OK. Jakýkoli jiný známý text pak zobrazí chybový štítek.',
+    total_cop_help: 'Celkové teplo, energie prostředí a elektřina musí pokrývat stejný časový rozsah. Bez celkového tepla využívá COP energii prostředí plus elektřinu.',
+    language_help: 'Další jazyky a vlastní štítky se konfigurují pomocí textů v YAML; chybějící štítky se nahradí angličtinou.',
+    detected: 'Zjištěno', entities_found: 'entit', not_detected: 'Nenalezeno v tomto Home Assistantovi – zkontrolujte integraci, předponu nebo zvolte jinou předvolbu',
+    program: 'Topný program (eko, noční, párty, dovolená)', solar_collector: 'Teplota solárního kolektoru', solar_pump: 'Solární čerpadlo běží (binární)',
+    source_out: 'Teplota na výstupu zdroje', heater: 'Záložní / přídavný ohřev aktivní',
+    dhw_heater: 'Topná tyč TUV aktivní', buffer_heater: 'Topná tyč akumulačního zásobníku aktivní',
+    hc_underfloor: 'Podlahové vytápění', hc_radiator: 'Deskové radiátory', hc_column: 'Článkové radiátory',
+    brine_pressure_min: 'Varování: nízký tlak nemrznoucí směsi pod', brine_pressure_crit: 'Kritický nízký tlak nemrznoucí směsi pod', brine_pressure_max: 'Varování: vysoký tlak nemrznoucí směsi nad',
+    hc_pressure_min: 'Varování: nízký tlak vytápění pod', hc_pressure_crit: 'Kritický nízký tlak vytápění pod', hc_pressure_max: 'Varování: vysoký tlak vytápění nad',
+    sec_hp: 'Tepelné čerpadlo', sec_storage: 'Zásobník', sec_hc: 'Topný okruh a dům', sec_power: 'Zdroje energie', sec_stats: 'Statistiky',
+    mode: 'Provozní režim', status: 'Stav / podstav', compressor: 'Kompresor běží (binární nebo frekvence)', defrost: 'Odmrazování aktivní (binární)', fan_speed: 'Rychlost ventilátoru (ot/min nebo binární)', power: 'Elektrický výkon',
+    heat: 'Tepelný výkon', flow: 'Teplota na přívodu', return: 'Teplota na zpátečce', volume: 'Průtok na straně vytápění',
+    source_volume: 'Průtok na strane zdroje', source_in: 'Teplota zdroje / přívodu vzduchu', outdoor: 'Venkovní teplota',
+    valve: 'Přepínací ventil na TUV (binární nebo Nádrž/Místnost)', bypass_valve: 'Obtokový ventil sériového akumulačního zásobníku (zapnuto = obtok; výchozí: odmrazování)',
+    pv_boost: 'Režim přebytku FVE (zapnuto, nebo výkon nad 0)',
+    dhw_top: 'Nádrž TUV nahoře', dhw_middle: 'Nádrž TUV uprostřed', dhw_bottom: 'Nádrž TUV dole', dhw_target: 'Cílová teplota TUV', dhw_mode: 'Režim TUV',
+    circulation: 'Cirkulační čerpadlo', buffer_top: 'Akumulační zásobník nahoře', buffer_middle: 'Akumulační zásobník uprostřed', buffer_bottom: 'Akumulační zásobník dole', buffer_mode: 'Režim akumulačního zásobníku',
+    hc_flow: 'Teplota přívodu okruhu', hc_return: 'Teplota zpátečky okruhu', hc_setpoint: 'Cílová teplota přívodu okruhu',
+    hc_mode: 'Režim okruhu', hc_pump: 'Čerpadlo okruhu běží (binární)', hc_volume: 'Průtok okruhu', hc_curve_offset: 'Posun topné křivky (K)', hc_pressure: 'Tlak v topném okruhu', brine_pressure: 'Tlak v okruhu nemrznoucí směsi',
+    cutout_high_pressure: 'Vysokotlaká vypnutí (počet událostí, nikoli tlak)', cutout_low_pressure: 'Nízkotlaká vypnutí (počet událostí, nikoli tlak)', cutout_temperature: 'Teplotní vypnutí (počet událostí, nikoli teplota)',
+    room: 'Teplota v místnosti', room_target: 'Cílová teplota v místnosti',
+    env_energy: 'Celková energie prostředí', pv: 'Výkon z FVE (W)', battery: 'Výkon z baterie (W)', grid: 'Výkon ze sítě (W)',
+    cop_heating_today: 'COP vytápění dnes', cop_dhw_today: 'COP TUV dnes', energy_today: 'Energie dnes (kWh)',
+    pv_share_today: 'Podíl FVE dnes (%)', starts_today: 'Počet startů kompresoru dnes',
+    unit_wolf: 'Wolf CHA',
+    unit_kronoterm: 'Kronoterm ADAPT',
+    unit_alpha_innotec: 'Alpha Innotec Hybrox',
+    unit_stiebel: 'Stiebel Eltron WPL-A',
+    storage: 'Zásobník',
+    storage_separate: 'Samostatná nádrž na teplou vodu a akumulační zásobník',
+    storage_combined: 'Kombinovaný zásobník (jedna nádrž, zóna teplé vody nahoře)',
+    dhw_type: 'Příprava teplé vody',
+    dhw_type_coil: 'Nádrž s vnitřním výměníkem (hadem)',
+    dhw_type_fresh_water: 'Stanice na čerstvou vodu (na akumulačním nebo kombinovaném zásobníku)',
+    dhw_type_tank_in_tank: 'Nádrž v nádrži (kombinovaný zásobník)',
+    warn_valve: 'Přepínací ventil hlásí číslo a nemá nastavené stavy ventilu: karta čte hodnotu 1 jako teplou vodu. Pokud 1 znamená vytápění, nastavte jeho stavy v sekci Pokročilé.',
+    warn_map_entities: 'Parametr {maps} se nachází pod entitami (entities), kde jej karta ignoruje. V YAML patří na nejvyšší úroveň konfigurace karty.',
+    valve_dhw_text: 'Stavy ventilu pro teplou vodu',
+    valve_heating_text: 'Stavy ventilu pro vytápění',
+    valve_help: 'Čárkou oddělené surové stavy entity ventilu, například 0, 1 nebo Tank. Aktuální stav: {state}.',
+    dhw_heater_top: 'Topná tyč TUV nahoře aktivní (zap/vyp, nebo W)',
+    dhw_heater_middle: 'Topná tyč TUV uprostřed aktivní (zap/vyp, nebo W)',
+    dhw_heater_bottom: 'Topná tyč TUV dole aktivní (zap/vyp, nebo W)',
+    buffer_heater_top: 'Topná tyč akumulačního zásobníku nahoře aktivní (zap/vyp, nebo W)',
+    buffer_heater_middle: 'Topná tyč akumulačního zásobníku uprostřed aktivní (zap/vyp, nebo W)',
+    buffer_heater_bottom: 'Topná tyč akumulačního zásobníku dole aktivní (zap/vyp, nebo W)',
   },
 };
 
 // Heating circuits the card can draw; circuit 1 uses the plain hc_ keys, circuits 2 to 6 hc2_ to hc6_.
 const HFC_MAX_HC = 6;
+// Entities that make a preset match useful; the best match is the preset that finds most of them live (#143).
+const HFC_CORE_KEYS = ['mode', 'compressor', 'power', 'flow', 'return', 'dhw_top'];
 const hfcHcCount = (config) => Math.min(Math.max(Math.round(+config?.hc_count) || 1, 1), HFC_MAX_HC);
 
 const HFC_ENTITY_GROUPS = {
@@ -1572,21 +1843,42 @@ class HeatpumpFlowCard extends HTMLElement {
   }
 
   static getStubConfig(hass) {
-    for (const [name, preset] of Object.entries(HFC_PRESETS)) {
+    // The preset that finds the most live core entities; on a tie the order of HFC_PRESETS (#143).
+    // No supported integration: no preset. The card shows its start state instead of a preset that finds nothing (#142).
+    return HeatpumpFlowCard._presetMatches(hass)[0]?.stub || {};
+  }
+
+  // Every preset whose detection matches, best first: { name, score, stub }. The score counts the live core entities
+  // (mode, compressor, power, flow, return, hot water) the preset maps, so with two integrations for one heat pump
+  // (myPyllant and ebusd, ViCare and Open3E) the richer one wins, not the order of HFC_PRESETS (#143).
+  static _presetMatches(hass) {
+    if (!hass) return [];
+    const live = (id) => id && hass.states[id] && !['unknown', 'unavailable'].includes(hass.states[id].state);
+    const matches = [];
+    Object.entries(HFC_PRESETS).forEach(([name, preset], order) => {
       const ctx = HeatpumpFlowCard._ctx(hass, undefined, { hp: 1, dhw: 1, buffer: 1, hc: 1, ...(preset.index || {}) });
-      if (hass && preset.detect(ctx) !== undefined) {
-        const stub = { preset: name };
-        // Further circuits count when the preset finds a different, reporting flow or mode entity for them.
-        const base = HeatpumpFlowCard._resolve({ preset: name, hc_count: HFC_MAX_HC }, hass).fromPreset;
-        const live = (id) => id && hass.states[id] && !['unknown', 'unavailable'].includes(hass.states[id].state);
-        let n = 1;
-        while (n < HFC_MAX_HC && preset.auto_circuits !== false && ['flow', 'mode', 'pump'].some((k) => live(base[`hc${n + 1}_${k}`]) && base[`hc${n + 1}_${k}`] !== base[`hc_${k}`])) n++;
-        if (n > 1) stub.hc_count = n;
-        if (preset.source_type) { const st = preset.source_type(base, hass); if (st && st !== 'air') stub.source_type = st; }
-        return stub;
-      }
-    }
-    return { preset: 'lambda' };
+      if (preset.detect(ctx) === undefined) return;
+      const stub = { preset: name };
+      // Further circuits count when the preset finds a different, reporting flow or mode entity for them.
+      const base = HeatpumpFlowCard._resolve({ preset: name, hc_count: HFC_MAX_HC }, hass).fromPreset;
+      let n = 1;
+      while (n < HFC_MAX_HC && preset.auto_circuits !== false && ['flow', 'mode', 'pump'].some((k) => live(base[`hc${n + 1}_${k}`]) && base[`hc${n + 1}_${k}`] !== base[`hc_${k}`])) n++;
+      if (n > 1) stub.hc_count = n;
+      if (preset.source_type) { const st = preset.source_type(base, hass); if (st && st !== 'air') stub.source_type = st; }
+      const score = HFC_CORE_KEYS.filter((k) => [].concat(base[k] || []).some(live)).length;
+      // The live entities the preset maps, each counted once (the editor shows them next to the preset, #145).
+      const found = new Set(Object.values(base).flat().filter(live)).size;
+      matches.push({ name, score, found, stub, order });
+    });
+    return matches.sort((a, b) => b.score - a.score || a.order - b.order);
+  }
+
+  // Start state: no preset and nothing of its own (entities, error entities, badges, quick controls), so there is nothing to
+  // show yet: a new card without a detected integration.
+  _startState() {
+    const c = this._config || {};
+    return !this._preset && !Object.values(c.entities || {}).some((v) => v && v !== 'none')
+      && !['errors', 'badges', 'controls'].some((k) => Array.isArray(c[k]) && c[k].length);
   }
 
   static getConfigElement() { return document.createElement('heatpump-flow-card-editor'); }
@@ -1618,7 +1910,15 @@ class HeatpumpFlowCard extends HTMLElement {
       schema: [
         {
           name: 'preset',
-          selector: { select: { mode: 'dropdown', options: [{ value: 'none', label: '—' }, ...Object.entries(HFC_PRESETS).map(([k, p]) => ({ value: k, label: p.tested ? p.name : `${p.name} · ${L.untested}` }))] } },
+          // Presets detected in this Home Assistant come first, best match first, with the number of entities they find (#145).
+          selector: { select: { mode: 'dropdown', options: [{ value: 'none', label: '—' }, ...[
+            ...(opts.matches || []).map((m) => m.name).filter((k) => HFC_PRESETS[k]),
+            ...Object.keys(HFC_PRESETS).filter((k) => !(opts.matches || []).some((m) => m.name === k)),
+          ].map((k) => {
+            const p = HFC_PRESETS[k]; const m = (opts.matches || []).find((x) => x.name === k);
+            const label = m ? `${p.name} · ${L.detected} (${m.found} ${L.entities_found})` : p.name;
+            return { value: k, label: p.tested ? label : `${label} · ${L.untested}` };
+          })] } },
         },
         {
           type: 'grid', name: '', schema: [
@@ -1675,6 +1975,9 @@ class HeatpumpFlowCard extends HTMLElement {
               { name: 'unit_style', selector: { select: { mode: 'dropdown', options: HFC_UNIT_STYLES.map((v) => ({ value: v, label: L[`unit_${v}`] })) } } },
               ...(config && (config.unit_style === 'vaillant' || ((!config.unit_style || config.unit_style === 'auto') && config.preset === 'vaillant'))
                 ? [{ name: 'unit_size', selector: { select: { mode: 'dropdown', options: HFC_UNIT_SIZES.map((v) => ({ value: v, label: L[`size_${v}`] })) } } }] : []),
+              // Panasonic: one or two fans; left empty, the HeishaMon preset takes the size from the model (#176).
+              ...(config && (config.unit_style === 'panasonic' || ((!config.unit_style || config.unit_style === 'auto') && config.preset === 'heishamon'))
+                ? [{ name: 'unit_size', selector: { select: { mode: 'dropdown', options: ['medium', 'large'].map((v) => ({ value: v, label: L[`size_pana_${v}`] })) } } }] : []),
               { name: 'primary_pump', selector: { boolean: {} } },
               { name: 'timeline', selector: { boolean: {} } },
               ...(config && config.timeline ? [{ name: 'timeline_hours', selector: { number: { min: 3, max: 72, step: 1, mode: 'box', unit_of_measurement: 'h' } } }, { name: 'timeline_marks', selector: { boolean: {} } }] : []),
@@ -1964,6 +2267,8 @@ class HeatpumpFlowCard extends HTMLElement {
       '',
       `Card version: ${HFC_VERSION}`,
       `Loaded from: ${clean(HFC_SCRIPT_URL.replace(/[?#].*$/, '')) || 'unknown'}`,
+      // Two scripts of this card mean an old resource next to the new one: the first loaded wins the element names (#171).
+      ...(hfcCardScripts().length > 1 ? [`Card scripts on this page: ${hfcCardScripts().map(clean).join(', ')} (only one should be loaded)`] : []),
       `Home Assistant: ${clean(hass.config?.version) || 'unknown'}`,
       `Browser language: ${clean(navigator.language) || 'unknown'}`,
       `Card language: ${HeatpumpFlowCard._language(config, hass)}`,
@@ -2504,6 +2809,12 @@ class HeatpumpFlowCard extends HTMLElement {
     const e = this._e;
     const i = this._i;
     const T = this._esc(this._config.title ?? i.title);
+    if (this._startState()) {
+      this.shadowRoot.innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card class="start"><div class="head">${T ? `<div class="title">${T}</div>` : '<div></div>'}</div>
+        <div class="hint" id="start-hint">${this._esc(i.start)} <a href="https://github.com/Sturmi77/heatpump-hydraulic-card#quick-start" target="_blank" rel="noopener noreferrer">${this._esc(i.start_link)}</a></div></ha-card>`;
+      this._rendered = true;
+      return;
+    }
     const fullLabel = this._fullscreenOpen ? i.fullscreen_close : i.fullscreen_open;
     const diagnosticIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v18H7zM10 7h4M10 11h4M10 15h4"/></svg>';
     const fullscreenIcon = this._fullscreenOpen
@@ -3264,7 +3575,13 @@ class HeatpumpFlowCard extends HTMLElement {
   _unitKey() {
     if (this._sourceType !== 'air') return 'generic';
     const style = this._config.unit_style && this._config.unit_style !== 'auto' ? this._config.unit_style : (this._preset?.unit_style || 'generic');
-    return style === 'vaillant' ? `vaillant-${this._config.unit_size || 'medium'}` : style;
+    if (style === 'vaillant') return `vaillant-${this._config.unit_size || 'medium'}`;
+    // Panasonic: one fan, or two for the large units; without unit_size the preset may tell the size from the model (#176).
+    if (style === 'panasonic') {
+      const size = this._config.unit_size || this._preset?.unit_size?.(this._e || {}, this._hass);
+      return size === 'large' ? 'panasonic-large' : 'panasonic';
+    }
+    return style;
   }
 
   // One blade, scaled to a fan of radius r at (cx, cy); the group spins around its own centre.
@@ -3310,12 +3627,25 @@ class HeatpumpFlowCard extends HTMLElement {
         snows: grilles.map(([cx, cy, r]) => [...abs(cx, cy), +Math.min(19, r * 0.58).toFixed(1)]),
       };
     }
-    if (key === 'panasonic') {
+    if (key.startsWith('panasonic')) {
+      const ring = (cx, cy, r) => `<circle class="pana-gr" cx="${cx}" cy="${cy}" r="${r}"/><circle class="pana-gr thin" cx="${cx}" cy="${cy}" r="${(r * 0.78).toFixed(1)}"/><circle class="pana-gr thin" cx="${cx}" cy="${cy}" r="${(r * 0.54).toFixed(1)}"/>${Array.from({ length: 16 }, (_, m) => { const a = (m * Math.PI) / 8; return `<line class="pana-gr thin" x1="${(cx + Math.cos(a) * 7).toFixed(1)}" y1="${(cy + Math.sin(a) * 7).toFixed(1)}" x2="${(cx + Math.cos(a) * r).toFixed(1)}" y2="${(cy + Math.sin(a) * r).toFixed(1)}"/>`; }).join('')}`;
+      if (key === 'panasonic-large') {
+        // T-CAP and the larger units (bi-bloc 1340 x 900 mm, monobloc 1410 mm high): a tall pale casing with two fans one above
+        // the other on the left and the service panel on the right (#176).
+        const x = 66; const y = 32; const w = 112; const h = 118;
+        const grilles = [[107, y + 32, 25], [107, y + 86, 25]];
+        return {
+          below: T(`<rect class="pana-foot" x="${x + 10}" y="${y + h}" width="15" height="6" rx="1.5"/><rect class="pana-foot" x="${x + w - 25}" y="${y + h}" width="15" height="6" rx="1.5"/><rect class="pana-body" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/><path class="pana-top" d="M${x + 3} ${y + 5} H${x + w - 3}"/>${grilles.map(([cx, cy, r]) => ring(cx, cy, r)).join('')}`),
+          fans: grilles.map(([cx, cy, r]) => [...abs(cx, cy), +(r * 0.82).toFixed(1), 'pana-fan']),
+          above: T(`<path class="pana-seam" d="M146 ${y + 8} V${y + h - 7}"/><path class="pana-vents" d="M152 ${y + 44}h18M152 ${y + 50}h18M152 ${y + 56}h18M152 ${y + 62}h18M152 ${y + 68}h18M152 ${y + 74}h18"/><rect class="pana-panel" x="154" y="${y + h - 22}" width="15" height="12" rx="1.5"/>`),
+          snows: grilles.map(([cx, cy]) => [...abs(cx, cy), 15]),
+        };
+      }
       // Aquarea H/J/K outdoor units: a pale rectangular casing, large left-hand grille and a narrow service panel.
       // This is an original simplified drawing without branding; proportions follow the common single-fan 824/875 mm units.
       const x = 58; const y = 48; const w = 124; const h = 96;
       const cx = 102; const cy = 95; const r = 37;
-      const grille = `<circle class="pana-gr" cx="${cx}" cy="${cy}" r="${r}"/><circle class="pana-gr thin" cx="${cx}" cy="${cy}" r="${(r * 0.78).toFixed(1)}"/><circle class="pana-gr thin" cx="${cx}" cy="${cy}" r="${(r * 0.54).toFixed(1)}"/>${Array.from({ length: 16 }, (_, m) => { const a = (m * Math.PI) / 8; return `<line class="pana-gr thin" x1="${(cx + Math.cos(a) * 7).toFixed(1)}" y1="${(cy + Math.sin(a) * 7).toFixed(1)}" x2="${(cx + Math.cos(a) * r).toFixed(1)}" y2="${(cy + Math.sin(a) * r).toFixed(1)}"/>`; }).join('')}`;
+      const grille = ring(cx, cy, r);
       return {
         below: T(`<rect class="pana-foot" x="${x + 10}" y="${y + h}" width="15" height="6" rx="1.5"/><rect class="pana-foot" x="${x + w - 25}" y="${y + h}" width="15" height="6" rx="1.5"/><rect class="pana-body" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/><path class="pana-top" d="M${x + 3} ${y + 7} H${x + w - 3}"/>${grille}`),
         fans: [[...abs(cx, cy), +(r * 0.82).toFixed(1), 'pana-fan']],
@@ -4173,7 +4503,7 @@ class HeatpumpFlowCard extends HTMLElement {
 
   /* ---------- update ---------- */
   _update() {
-    if (!this._rendered || !this._hass) return;
+    if (!this._rendered || !this._hass || this._startState()) return;
     const i = this._i;
     const P = this._parts;
     const F = this._flowModel();
@@ -4612,6 +4942,7 @@ HeatpumpFlowCard.styles = `
   .waves.on .wave { animation: hfc-rise var(--hfc-wave, 2.4s) ease-in-out infinite; }
   .waves.on .wave:nth-child(2) { animation-delay: var(--hfc-wave-delay, .8s); } .waves.on .wave:nth-child(3) { animation-delay: var(--hfc-wave-delay2, 1.6s); }
   .hint { margin: 4px 4px 8px; padding: 8px 12px; border-radius: 8px; background: ${hfcTint('heat', 14)}; color: var(--primary-text-color); font-size: .9em; }
+  .hint a { color: var(--primary-color, #03a9f4); }
   .controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 4px 0; }
   .ctl { font: inherit; font-size: .88em; color: var(--primary-text-color); background: var(--secondary-background-color, rgba(127,127,127,.12));
     border: 1px solid var(--divider-color, rgba(127,127,127,.3)); border-radius: 999px; padding: 5px 12px; display: inline-flex; align-items: center; gap: 6px; }
@@ -4844,7 +5175,9 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     const statesOf = (side) => Object.entries(valveMap).filter(([, v]) => hfcValveSide(v) === side).map(([k]) => k).join(', ');
     this._valveText = { dhw: statesOf('dhw'), heating: statesOf('heating') };
     this._valveShown = !!valveId;
-    const { schema, computeLabel, L } = HeatpumpFlowCard._formSchema(this._config, tiles, { valve: !!valveId });
+    // Preset detection for the dropdown (#145): once per registry, not on every change in the form.
+    if (this._matchesFor !== this._hass.entities) { this._matches = HeatpumpFlowCard._presetMatches(this._hass); this._matchesFor = this._hass.entities; }
+    const { schema, computeLabel, L } = HeatpumpFlowCard._formSchema(this._config, tiles, { valve: !!valveId, matches: this._matches });
     const own = this._config.entities || {};
     const shown = { ...this._fromPreset };
     Object.entries(own).forEach(([k, v]) => { if (v === null || v === 'none') delete shown[k]; else if (v) shown[k] = v; });
@@ -4875,9 +5208,12 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     this._form.computeLabel = computeLabel;
     this._form.computeHelper = (s) => {
       if (s.name === 'preset') {
-        if (!r.preset) return '';
+        // Further detected presets: another integration for the same heat pump may suit better (#145).
+        const others = (this._matches || []).filter((m) => m.name !== this._config.preset).map((m) => HFC_PRESETS[m.name].name);
+        const also = others.length ? ` ${L.also_detected} ${others.join(', ')}.` : '';
+        if (!r.preset) return also.trim();
         const status = r.ready ? `${L.detected}${r.prefix ? ` · ${r.prefix}` : ''} · ${found} ${L.entities_found}. ${L.preset_help}` : L.not_detected;
-        return r.preset.tested ? status : `${status} ${L.untested_help}`;
+        return `${r.preset.tested ? status : `${status} ${L.untested_help}`}${also}`;
       }
       if (s.name === 'tiles_custom') return tiles.editable ? L.tiles_custom_help : L.tiles_yaml;
       if (s.name === 'price_entity') return L.price_help;
@@ -4996,16 +5332,63 @@ class HeatpumpFlowCardEditor extends HTMLElement {
 // first definition, so this card is always available under names of its own as well: custom:heatpump-hydraulic-card.
 HeatpumpFlowCard.hfcOwner = 'sturmi77';
 HeatpumpFlowCardEditor.hfcOwner = 'sturmi77';
+// The version marker tells this script whether another copy of the card took the element names first (#171).
+HeatpumpFlowCard.hfcVersion = HFC_VERSION;
+HeatpumpFlowCardEditor.hfcVersion = HFC_VERSION;
 class HeatpumpHydraulicCard extends HeatpumpFlowCard {
   static getConfigElement() { return document.createElement('heatpump-hydraulic-card-editor'); }
 }
 class HeatpumpHydraulicCardEditor extends HeatpumpFlowCardEditor {}
 const hfcDefine = (name, cls) => { if (!customElements.get(name)) customElements.define(name, cls); };
-const hfcMine = (name) => { const c = customElements.get(name); return !c || c.hfcOwner === 'sturmi77'; };
+// A class of this card from another copy of the script: marked since 0.9.3, recognised by its name before.
+const hfcOwnCopy = (cls) => !!cls && (cls.hfcOwner === 'sturmi77' || ['HeatpumpFlowCard', 'HeatpumpHydraulicCard'].includes(cls.name));
+const hfcMine = (name) => { const c = customElements.get(name); return !c || hfcOwnCopy(c); };
+const hfcNewer = (a, b) => {
+  const p = (v) => String(v).split('.').map((n) => parseInt(n, 10) || 0);
+  const x = p(a); const y = p(b);
+  for (let n = 0; n < 3; n++) if ((x[n] || 0) !== (y[n] || 0)) return (x[n] || 0) > (y[n] || 0);
+  return false;
+};
+// An older copy of this card that owns an element name: releases before 0.15 carry no version marker. A newer copy, the same
+// version loaded twice and a foreign card with the same name are no conflict here.
+const hfcOlderCopy = (cls, own = HFC_VERSION) => (hfcOwnCopy(cls) && (!cls.hfcVersion || hfcNewer(own, cls.hfcVersion))
+  ? { version: cls.hfcVersion || 'older than 0.15' } : null);
+// Every script of this card the page loaded, without query strings; the first one wins the element names.
+const hfcCardScripts = () => {
+  const re = /heatpump-(flow|hydraulic)-card[^/?#]*\.js/;
+  let urls = [...document.querySelectorAll('script[src]')].map((s) => s.src);
+  try { urls = urls.concat(performance.getEntriesByType('resource').map((r) => r.name)); } catch (e) { /* no timing API */ }
+  return [...new Set(urls.filter((u) => re.test(u)).map((u) => u.replace(/[?#].*$/, '')))];
+};
+// The warning for an older copy: in the console, and once per browser session as a Home Assistant notification, because the
+// dashboard keeps running the old code and nothing else would show it (#166).
+const hfcOldCopyText = (conflict, scripts = hfcCardScripts()) => {
+  const others = scripts.filter((u) => u !== HFC_SCRIPT_URL.replace(/[?#].*$/, ''));
+  return `An older copy of the Heat Pump Hydraulic Card (${conflict.version}) was loaded before version ${HFC_VERSION}, so dashboards still run the old one.`
+    + `${others.length ? ` Card scripts on this page: ${others.join(', ')}.` : ''}`
+    + ' In Settings → Dashboards → ⋮ → Resources, delete the resource of the old copy (on installations from before the rename: every entry with'
+    + ' "heatpump-flow-card"), delete the folder /config/www/community/heatpump-flow-card/ if it exists, and reload the browser.'
+    + ' Details: https://github.com/Sturmi77/heatpump-hydraulic-card#upgrading-an-installation-from-before-the-rename';
+};
+const hfcNotifyOldCopy = (text, getHass = () => document.querySelector('home-assistant')?.hass, tries = 20) => {
+  try { if (sessionStorage.getItem('hfc-old-copy')) return; } catch (e) { /* storage blocked: notify anyway */ }
+  const hass = getHass();
+  if (typeof hass?.callService !== 'function') { if (tries > 0) setTimeout(() => hfcNotifyOldCopy(text, getHass, tries - 1), 3000); return; }
+  try { sessionStorage.setItem('hfc-old-copy', '1'); } catch (e) { /* storage blocked */ }
+  Promise.resolve(hass.callService('persistent_notification', 'create', {
+    notification_id: 'heatpump_hydraulic_card_old_copy', title: 'Heat Pump Hydraulic Card: an older copy is loaded', message: text,
+  })).catch(() => {});
+};
+const hfcConflict = hfcOlderCopy(customElements.get('heatpump-flow-card')) || hfcOlderCopy(customElements.get('heatpump-hydraulic-card'));
 hfcDefine('heatpump-hydraulic-card-editor', HeatpumpHydraulicCardEditor);
 hfcDefine('heatpump-hydraulic-card', HeatpumpHydraulicCard);
 hfcDefine('heatpump-flow-card-editor', HeatpumpFlowCardEditor);
 hfcDefine('heatpump-flow-card', HeatpumpFlowCard);
+if (hfcConflict) {
+  const text = hfcOldCopyText(hfcConflict);
+  console.warn(`heatpump-flow-card: ${text}`);
+  hfcNotifyOldCopy(text);
+}
 // The card picker lists the card once: under the generic name when this card owns it, otherwise under the unique name.
 const hfcGeneric = hfcMine('heatpump-flow-card') && hfcMine('heatpump-flow-card-editor');
 if (!hfcGeneric) {

@@ -47,7 +47,8 @@
     card.hass = hass; card.hass = { ...hass };
     return card;
   };
-  const ok = (card) => !card._failed && !!card.shadowRoot.getElementById('svg');
+  // Rendered without an error: the drawing, or the start state of a card without preset and entities (#142).
+  const ok = (card) => !card._failed && (!!card.shadowRoot.getElementById('svg') || !!card.shadowRoot.getElementById('start-hint'));
 
   // 1. every installation and scenario renders, presets are detected
   for (const [i, s] of setups.entries()) {
@@ -98,6 +99,66 @@
 
   // 5. detection: the right preset for each installation, nothing for gas boilers or foreign entities
   check(HFC_PRESETS.heishamon.tested === true, 'HeishaMon preset is marked real-installation tested');
+
+  // 5-00. Two integrations for one heat pump (#143): the preset with more live core entities wins, a tie keeps the order
+  {
+    const vaillant = setups.find((s) => s.config.preset === 'vaillant'); const ebusd = setups.find((s) => s.config.preset === 'ebusd');
+    const both = hassOf(toStates({ ...vaillant.states('heat'), ...ebusd.states('heat') }), { ...(vaillant.registry || {}), ...(ebusd.registry || {}) });
+    const matches = C._presetMatches(both);
+    const score = (name) => matches.find((m) => m.name === name)?.score;
+    check(matches.map((m) => m.name).join() === 'ebusd,vaillant' && score('ebusd') > score('vaillant'),
+      `myPyllant and ebusd: both match, ebusd finds more core entities (${matches.map((m) => `${m.name} ${m.score}`).join(', ')})`);
+    check(C.getStubConfig(both).preset === 'ebusd', 'the stub takes the richer match, not the first preset in the list');
+    const tie = hassOf(toStates({ 'binary_sensor.vitocal_compressor': 'on', 'sensor.vitocal_refrigeration_circuit_mode': 'heating' }), {
+      'binary_sensor.vitocal_compressor': { platform: 'vicare', translation_key: 'compressor' },
+      'sensor.vitocal_refrigeration_circuit_mode': { platform: 'open3e', translation_key: 'refrigeration_circuit_mode' },
+    });
+    const tieMatches = C._presetMatches(tie);
+    check(tieMatches.length === 2 && tieMatches[0].score === tieMatches[1].score && C.getStubConfig(tie).preset === 'vicare',
+      `ViCare and Open3E with one core entity each: the order of the presets decides (${tieMatches.map((m) => `${m.name} ${m.score}`).join(', ')})`);
+    const unavailable = hassOf(toStates({ ...vaillant.states('heat'), ...Object.fromEntries(Object.keys(ebusd.states('heat')).map((id) => [id, 'unavailable'])) }), { ...(vaillant.registry || {}), ...(ebusd.registry || {}) });
+    check(C.getStubConfig(unavailable).preset === 'vaillant', 'an integration whose entities are all unavailable does not win');
+
+    // #145: the editor marks detected presets and lists them first; zero, one and two matches
+    const options = (opts) => C._formSchema({}, undefined, opts).schema.find((f) => f.name === 'preset').selector.select.options.slice(1);
+    const plainOrder = Object.keys(HFC_PRESETS).join();
+    let opt = options({});
+    check(opt.map((o) => o.value).join() === plainOrder && !opt.some((o) => /Detected|Erkannt/.test(o.label)), 'no match: the preset list keeps its order and marks nothing');
+    const ebusdOnly = hassOf(toStates(ebusd.states('heat')), ebusd.registry || {});
+    opt = options({ matches: C._presetMatches(ebusdOnly) });
+    check(opt[0].value === 'ebusd' && /(Detected|Erkannt) \(\d+ /.test(opt[0].label) && opt.filter((o) => /Detected|Erkannt/.test(o.label)).length === 1
+      && opt.slice(1).map((o) => o.value).join() === Object.keys(HFC_PRESETS).filter((k) => k !== 'ebusd').join(), `one match: ebusd first and marked, the others in their order (${opt[0].label})`);
+    opt = options({ matches });
+    check(opt.slice(0, 2).map((o) => o.value).join() === 'ebusd,vaillant' && opt.slice(0, 2).every((o) => /Detected|Erkannt/.test(o.label)), 'two matches: both first, best first, both marked');
+    const real = C._presetMatches; let runs = 0; C._presetMatches = (h) => { runs++; return real.call(C, h); };
+    const ed = document.createElement('heatpump-flow-card-editor'); ed.setConfig({ preset: 'vaillant' }); ed.hass = both;
+    ed.setConfig({ preset: 'vaillant', title: 'a' }); ed.setConfig({ preset: 'vaillant', title: 'ab' });
+    const helper = ed._form?.computeHelper?.({ name: 'preset' }) || '';
+    C._presetMatches = real;
+    check(runs === 1, `the editor detects the presets once per registry, not on every change (${runs} runs)`);
+    check(/also detected here:|ebenfalls erkannt:/i.test(helper) && helper.includes(HFC_PRESETS.ebusd.name) && !helper.includes(`${HFC_PRESETS.vaillant.name}.`), `the helper names the other detected preset (${helper.slice(-80)})`);
+    ed.remove();
+  }
+
+  // 5-0. No supported integration (#142): the stub has no preset and the card shows its start state, not an error
+  {
+    const plain = hassOf(toStates({ 'sensor.living_room_temperature': ['21.0', '°C'], 'light.kitchen': 'on' }), {});
+    const stubbed = C.getStubConfig(plain);
+    check(stubbed.preset === undefined && !Object.keys(stubbed).length, `without a supported integration the stub has no preset (${JSON.stringify(stubbed)})`);
+    let card = mount(stubbed, plain); await wait(20);
+    const hint = card.shadowRoot.getElementById('start-hint');
+    check(!!hint && !card.shadowRoot.getElementById('svg') && !card._failed && /preset/i.test(hint.textContent) && hint.querySelector('a[href*="#quick-start"]'),
+      'the card without preset and entities shows the start hint with a link, no drawing and no error');
+    card.hass = { ...plain }; await wait(10);
+    check(!!card.shadowRoot.getElementById('start-hint') && !card._failed, 'state updates keep the start state without errors');
+    card.remove();
+    card = mount({ entities: { room: 'sensor.living_room_temperature' } }, plain); await wait(20);
+    check(!card.shadowRoot.getElementById('start-hint') && !!card.shadowRoot.getElementById('svg'), 'one mapped entity ends the start state');
+    card.remove();
+    card = mount({ preset: 'lambda' }, plain); await wait(20);
+    check(!card.shadowRoot.getElementById('start-hint') && /preset/i.test(card.shadowRoot.querySelector('.hint')?.textContent || ''), 'an explicit preset that finds nothing keeps its own hint');
+    card.remove();
+  }
   const stub = (states, registry) => C.getStubConfig(hassOf(toStates(states), registry));
   const expect = { 0: 'lambda', 1: 'lambda', 2: 'vicare', 3: 'vaillant', 4: 'emsesp', 5: 'heishamon', 6: 'emsesp', 8: 'wolf', 9: 'kronoterm', 10: 'ebusd', 11: 'samsung', 12: 'luxtronik', 15: 'stiebel_isg' };
   for (const [i, p] of Object.entries(expect)) {
@@ -1582,7 +1643,37 @@
     check(o.lam === 0 && o.ok, 'ground sources keep their loop symbol');
     const keysOf = (n) => (n.schema ? n.schema.flatMap(keysOf) : [n.name]);
     const names = (cfg) => C._formSchema(cfg).schema.flatMap(keysOf);
-    check(names({}).includes('unit_style') && !names({ preset: 'lambda' }).includes('unit_size') && names({ preset: 'vaillant' }).includes('unit_size') && names({ unit_style: 'vaillant' }).includes('unit_size') && !names({ preset: 'vaillant', unit_style: 'panasonic' }).includes('unit_size'), 'editor offers unit_style, and unit_size only for Vaillant');
+    check(names({}).includes('unit_style') && !names({ preset: 'lambda' }).includes('unit_size') && names({ preset: 'vaillant' }).includes('unit_size') && names({ unit_style: 'vaillant' }).includes('unit_size') && !names({ preset: 'vaillant', unit_style: 'bosch' }).includes('unit_size'), 'editor offers unit_style, and unit_size for Vaillant');
+
+    // Panasonic with two fans for the large units (#176): from the HeishaMon model, from unit_size, and in the editor
+    const pana = setups.find((s) => s.config.preset === 'heishamon');
+    const withModel = (model) => ({ ...pana, states: (scen) => ({ ...pana.states(scen), 'sensor.panasonic_heat_pump_main_heat_pump_model': model }) });
+    o = await draw(withModel('WH-MXC09J3E8 9 3ph T-CAP'), 'heat');
+    check(o.pana === 1 && o.fans === 2 && o.fan2on === true && o.ok, `a T-CAP model draws the tall unit with two fans that both spin (${JSON.stringify(o)})`);
+    o = await draw(withModel('WH-MXC09J3E8 9 3ph T-CAP'), 'defrost');
+    check(o.snows === 2, 'two snowflakes on the two-fan Panasonic unit');
+    o = await draw(withModel('WH-MDC05J3E5 5 1ph HP'), 'heat');
+    check(o.pana === 1 && o.fans === 1, 'a 5 kW J-generation monobloc keeps one fan');
+    o = await draw(withModel('WH-MXC09J3E8 9 3ph T-CAP'), 'heat', { unit_size: 'medium' });
+    check(o.fans === 1, 'unit_size medium wins over the model');
+    o = await draw(setups[7], 'heat', { unit_style: 'panasonic', unit_size: 'large' });
+    check(o.pana === 1 && o.fans === 2, 'unit_style panasonic with unit_size large draws two fans without a preset');
+    const size = (model) => HFC_PRESETS.heishamon.unit_size({ model: 'sensor.m' }, { states: { 'sensor.m': { state: model } } });
+    check(size('WH-SDC09H3E8 9 3ph HP') === 'large' && size('WH-ADC0916H9E8 12 3ph T-CAP - All-In-One') === 'large' && size('WH-MDC09J3E5 9 1ph HP') === 'medium'
+      && size('Unknown model for HeishaMon') === undefined, 'the model text gives the size: H generation from 9 kW, T-CAP and from 12 kW two fans; unknown leaves it to the default');
+    const sizeOptions = (cfg) => C._formSchema(cfg).schema.flatMap((n) => (n.schema ? n.schema.flatMap((x) => (x.schema ? x.schema : [x])) : [n])).find((f) => f.name === 'unit_size')?.selector.select.options.map((x) => x.value).join();
+    check(sizeOptions({ preset: 'heishamon' }) === 'medium,large' && sizeOptions({ unit_style: 'panasonic' }) === 'medium,large' && sizeOptions({ preset: 'vaillant' }) === 'small,medium,large',
+      'the editor offers one or two fans for Panasonic and the three classes for Vaillant');
+  }
+
+  // Editor labels say what a field expects (#180): the three flow rates name their unit and their circuit, temperatures °C
+  for (const lang of ['en', 'de']) {
+    const L = HFC_EDITOR[lang];
+    const flows = ['volume', 'source_volume', 'hc_volume'].map((k) => L[k]);
+    check(flows.every((t) => /l\/h/.test(t)) && new Set(flows).size === 3 && /prim/i.test(L.volume) && /(brine|sole)/i.test(L.source_volume),
+      `${lang}: the flow rate fields name l/h and their circuit (${flows.join(' | ')})`);
+    const temps = ['flow', 'return', 'source_in', 'outdoor', 'dhw_top', 'buffer_top', 'hc_flow', 'hc_setpoint', 'room', 'room_target'];
+    check(temps.every((k) => /°C/.test(L[k])), `${lang}: temperature fields say °C (${temps.filter((k) => !/°C/.test(L[k])).join(', ') || 'all'})`);
   }
 
   // 15. keyboard: tab stops, roles, labels, arrow keys, activation keys, focus frame
@@ -1723,7 +1814,55 @@
     check(!!w && w.customElements.get('heatpump-hydraulic-card')?.hfcOwner === 'sturmi77', 'in the collision page this card is still available under its own name');
     check(!!w && (w.__warns || []).some((m) => /custom:heatpump-hydraulic-card/.test(m)), 'the console says which name to use');
     check(!!w && w.customCards.length === 1 && w.customCards[0].type === 'heatpump-hydraulic-card' && w.customCards[0].name === 'Heatpump Hydraulic Card', 'the card picker then lists the unique name');
+    check(!!w && !(w.__warns || []).some((m) => /older copy/.test(m)), 'a foreign card with the same name is no older copy');
     fr.remove();
+
+    // #171: an older copy of this card took the names first (a resource from before the rename); and the same version twice
+    check(!!hfcOlderCopy(class HeatpumpFlowCard {}) && !!hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: '0.1.0' }))
+      && !hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: HFC_VERSION }))
+      && !hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: '99.0.0' })) && !hfcOlderCopy(class Other {}) && !hfcOlderCopy(undefined),
+    'an own copy without version marker or with a lower version is older; the same, a newer or a foreign class is not');
+    try { sessionStorage.removeItem('hfc-old-copy'); } catch (e) { /* storage blocked */ }
+    const copyFrame = async (marker) => {
+      const f = document.createElement('iframe');
+      f.srcdoc = `<!doctype html><meta charset="utf-8"><script>
+        window.__warns = []; window.__calls = []; const warn = console.warn;
+        console.warn = (...a) => { window.__warns.push(a.join(' ')); warn.apply(console, a); };
+        const ha = document.createElement('home-assistant');
+        ha.hass = { callService: (...a) => { window.__calls.push(a); return Promise.resolve(); } };
+        document.documentElement.appendChild(ha);
+        // In a block: Home Assistant loads each copy as a module; two classic scripts would share the global class name.
+        {
+          class HeatpumpFlowCard extends HTMLElement {} HeatpumpFlowCard.hfcOwner = 'sturmi77'; ${marker ? `HeatpumpFlowCard.hfcVersion = '${marker}';` : ''}
+          customElements.define('heatpump-flow-card', HeatpumpFlowCard); customElements.define('heatpump-hydraulic-card', class HeatpumpHydraulicCard extends HeatpumpFlowCard {});
+        }
+        <\/script><script src="../dist/heatpump-hydraulic-card.js"><\/script>`;
+      f.style.cssText = 'width:10px;height:10px;position:absolute;left:-99px';
+      document.body.appendChild(f);
+      await new Promise((resolve) => { f.onload = resolve; setTimeout(resolve, 3000); });
+      await wait(20);
+      const out = { warns: [...(f.contentWindow?.__warns || [])], calls: [...(f.contentWindow?.__calls || [])] };
+      f.remove(); return out;
+    };
+    let cf = await copyFrame('');
+    check(cf.warns.some((m) => /older copy/.test(m) && m.includes(HFC_VERSION)) && !cf.warns.some((m) => /another card/.test(m)),
+      `an older copy without version marker is reported in the console, not as a foreign card (${cf.warns.length} warnings)`);
+    check(cf.calls.length === 1 && cf.calls[0][0] === 'persistent_notification' && cf.calls[0][1] === 'create' && /Resources/.test(cf.calls[0][2].message),
+      `one Home Assistant notification for the older copy (${cf.calls.length})`);
+    cf = await copyFrame('');
+    check(cf.calls.length === 0, 'the notification comes once per browser session');
+    try { sessionStorage.removeItem('hfc-old-copy'); } catch (e) { /* storage blocked */ }
+    cf = await copyFrame(HFC_VERSION);
+    check(!cf.warns.some((m) => /older copy/.test(m)) && cf.calls.length === 0, 'the same version loaded twice is no conflict');
+    try { sessionStorage.removeItem('hfc-old-copy'); } catch (e) { /* storage blocked */ }
+
+    // The diagnostic report names a second card script on the page
+    const fake = document.createElement('script'); fake.type = 'text/plain'; fake.src = '/hacsfiles/heatpump-flow-card/heatpump-hydraulic-card.js';
+    document.head.appendChild(fake);
+    const rep = C._diagnosticReport({ preset: 'lambda' }, hassOf(toStates(setups[1].states('heat')), setups[1].registry || {}));
+    fake.remove();
+    check(/Card scripts on this page: .*heatpump-flow-card\/heatpump-hydraulic-card\.js/.test(rep), 'the diagnostic report lists a second script of the card');
+    check(!/Card scripts on this page/.test(C._diagnosticReport({ preset: 'lambda' }, hassOf(toStates(setups[1].states('heat')), setups[1].registry || {}))), 'with one script the line is left out');
   }
 
   // 18. timeline of the operating mode and the gradient of the heating surface
@@ -2019,7 +2158,7 @@
     check(['hc2_room', 'hc2_room_target', 'hc6_room', 'hc6_room_target'].every((k) => names({ hc_count: 6 }).includes(k)) && !names({ hc_count: 2 }).some((k) => /^hc[3-6]_room/.test(k)) && !names({}).includes('hc2_room'),
       'editor offers the room keys in the groups of circuits 2 to 6');
     const lab = C._formSchema({}).computeLabel;
-    check(lab({ name: 'hc2_room' }) === lab({ name: 'room' }) && lab({ name: 'hc6_room_target' }) === lab({ name: 'room_target' }) && /^(Room temperature|Raumtemperatur)$/.test(lab({ name: 'hc3_room' })),
+    check(lab({ name: 'hc2_room' }) === lab({ name: 'room' }) && lab({ name: 'hc6_room_target' }) === lab({ name: 'room_target' }) && /^(Room temperature|Raumtemperatur) \(°C\)$/.test(lab({ name: 'hc3_room' })),
       `circuit rooms reuse the room labels (${lab({ name: 'hc2_room' })} / ${lab({ name: 'hc2_room_target' })})`);
     const report = C._diagnosticReport(cfg, hassOf(toStates(states)));
     check(/- hc2_room: sensor\.attic = 19\.4 °C/.test(report) && /- hc2_room_target: sensor\.attic_target = 20\.0 °C/.test(report) && /- hc4_room: not mapped/.test(report),

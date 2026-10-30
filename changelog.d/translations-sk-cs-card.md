@@ -1,0 +1,1 @@
+- Slovak and Czech now also cover the texts on the card (titles, modes, tiles, details drawer, timeline) and the newer editor labels, by Havinko1991 (#177, #182).
