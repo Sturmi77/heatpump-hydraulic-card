@@ -152,7 +152,7 @@ Copy `dist/heatpump-hydraulic-card.js` to `/config/www/` and add `/local/heatpum
 ### Other cards with the same name
 Several cards on GitHub are called "Heatpump Flow Card" and register the same element name, `heatpump-flow-card`. A browser keeps only the first definition, so with two of them installed the one that loads first answers to `type: custom:heatpump-flow-card`, and the other cannot be reached by that name.
 
-This card therefore also registers under its own names, **Heatpump Hydraulic Card**:
+This card therefore also registers under its own names, **Heat Pump Hydraulic Card** (`heatpump-hydraulic-card`):
 
 ```yaml
 type: custom:heatpump-hydraulic-card   # instead of custom:heatpump-flow-card
