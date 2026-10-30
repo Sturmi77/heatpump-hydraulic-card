@@ -259,19 +259,12 @@ const HFC_PRESETS = {
   vicare: {
     name: 'Viessmann (ViCare)',
     unit_style: 'viessmann',
-    auto_circuits: true,
     // Gas boilers also report outside_temperature, so only compressor entities count as a heat pump.
     detect: (ctx) => (ctx.key('vicare', 'binary_sensor', 'compressor') || ctx.key('vicare', 'sensor', 'compressor_phase')
       || ctx.key('vicare', 'sensor', 'compressor_starts') ? '' : undefined),
     entities: (p, i, ctx) => {
       const s = (...tks) => tks.map((tk) => ctx.key('vicare', 'sensor', tk)).filter(Boolean);
       const b = (tk) => ctx.key('vicare', 'binary_sensor', tk);
-      const circuit = (domain, tk) => ctx.keys('vicare', domain, tk)[i.hc - 1];
-      const circuitFlows = ctx.keys('vicare', 'sensor', 'supply_temperature')
-        .filter((id) => {
-          const uniqueId = ctx.registry[id]?.unique_id;
-          return uniqueId ? !uniqueId.endsWith('-supply_temperature') : id !== ctx.key('vicare', 'sensor', 'supply_temperature');
-        });
       return {
         mode: s('compressor_phase'),
         compressor: b('compressor'),
@@ -287,12 +280,7 @@ const HFC_PRESETS = {
         circulation: b('domestic_hot_water_circulation_pump'),
         buffer_top: s('buffer_top_temperature', 'buffer_main_temperature'),
         buffer_bottom: s('buffer_bottom_temperature'),
-        hc_flow: circuitFlows[i.hc - 1],
-        hc_setpoint: circuit('climate', 'heating'),
-        hc_mode: circuit('climate', 'heating'),
-        hc_pump: circuit('binary_sensor', 'circulation_pump'),
-        room: circuit('climate', 'heating'),
-        room_target: circuit('climate', 'heating'),
+        hc_pump: b('circulation_pump'),
         cop_heating_today: s('cop_heating'),
         cop_dhw_today: s('cop_dhw'),
         energy_today: s('power_consumption_today'),

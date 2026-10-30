@@ -171,54 +171,6 @@
     check(card._unitKey() === 'viessmann', `Open3E selects the Viessmann unit drawing (${card._unitKey()})`);
     card.remove();
   }
-  {
-    const states = {
-      'sensor.vitocal_compressor_phase': 'heating',
-      'sensor.vitocal_secondary_supply': '40',
-      'sensor.vitocal_supply_temperature': '38',
-      'sensor.vitocal_supply_temperature_2': '38',
-      'sensor.vitocal_supply_temperature_3': '32',
-      'binary_sensor.vitocal_compressor': 'on',
-      'binary_sensor.vitocal_circulation_pump': 'on',
-      'binary_sensor.vitocal_circulation_pump_2': 'on',
-      'climate.vitocal_heating': { state: 'heat', attributes: { current_temperature: 21, temperature: 22 } },
-      'climate.vitocal_heating_2': { state: 'heat', attributes: { current_temperature: 19, temperature: 20 } },
-    };
-    const registry = {};
-    const keys = {
-      'sensor.vitocal_compressor_phase': 'compressor_phase',
-      'sensor.vitocal_secondary_supply': 'secondary_circuit_supply_temperature',
-      'sensor.vitocal_supply_temperature': 'supply_temperature',
-      'sensor.vitocal_supply_temperature_2': 'supply_temperature',
-      'sensor.vitocal_supply_temperature_3': 'supply_temperature',
-      'binary_sensor.vitocal_compressor': 'compressor',
-      'binary_sensor.vitocal_circulation_pump': 'circulation_pump',
-      'binary_sensor.vitocal_circulation_pump_2': 'circulation_pump',
-      'climate.vitocal_heating': 'heating',
-      'climate.vitocal_heating_2': 'heating',
-    };
-    Object.entries(keys).forEach(([id, translation_key]) => {
-      const component = id.includes('supply_temperature_2') ? '-circuit-1'
-        : id.includes('supply_temperature_3') ? '-circuit-2'
-          : /circulation_pump_2|heating_2/.test(id) ? '-circuit-2'
-            : /circulation_pump|heating/.test(id) ? '-circuit-1' : '';
-      registry[id] = { platform: 'vicare', translation_key, unique_id: `vicare-${translation_key}${component}` };
-    });
-    const hass = hassOf(toStates(states), registry);
-    const resolved = C._resolve({ preset: 'vicare', hc_count: 2 }, hass);
-    const stub = C.getStubConfig(hass);
-    check(resolved.entities.hc_flow === 'sensor.vitocal_supply_temperature_2'
-      && resolved.entities.hc2_flow === 'sensor.vitocal_supply_temperature_3'
-      && resolved.entities.hc_pump === 'binary_sensor.vitocal_circulation_pump'
-      && resolved.entities.hc2_pump === 'binary_sensor.vitocal_circulation_pump_2'
-      && resolved.entities.hc_mode === 'climate.vitocal_heating'
-      && resolved.entities.hc2_mode === 'climate.vitocal_heating_2', 'ViCare maps both circuit flows, pumps and thermostats');
-    check(stub.preset === 'vicare' && stub.hc_count === 2, `ViCare detects two circuits (got ${stub.hc_count})`);
-    const card = mount({ preset: 'vicare', hc_count: 2, hc_type: 'radiator', hc2_type: 'underfloor' }, hass);
-    check(card._hcCount === 2 && card._config.hc_type === 'radiator' && card._config.hc2_type === 'underfloor', 'ViCare circuits keep independent emitter types');
-    card.remove();
-  }
-
   check(!detects('ebusd', { 'sensor.ebusd_hmu_rundatastatuscode': 'standby' }, { 'sensor.ebusd_hmu_rundatastatuscode': { platform: 'something_else' } }), 'ebusd needs the MQTT platform');
 
   // Wolf (wolflink): heat pumps only, prefix = device slug; gas boilers and other platforms with the same names are not detected.

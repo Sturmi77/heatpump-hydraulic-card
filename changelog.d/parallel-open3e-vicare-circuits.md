@@ -1,1 +1,0 @@
-- ViCare and Open3E presets detect and map multiple heating circuits independently; configure each circuit's emitter with `hc_type` through `hc6_type`.

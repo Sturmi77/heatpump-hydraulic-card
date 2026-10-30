@@ -1,0 +1,1 @@
+- The Open3E preset detects and maps multiple heating circuits independently; configure each circuit's emitter with `hc_type` through `hc6_type`.
