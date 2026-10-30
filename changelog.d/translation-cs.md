@@ -1,1 +1,0 @@
-- Czech translation of the visual editor, by Havinko1991 (#182). The texts on the card follow when they are translated; until then they show in English.

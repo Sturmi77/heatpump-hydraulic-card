@@ -6,7 +6,7 @@
  *
  * https://github.com/Sturmi77/heatpump-hydraulic-card · MIT License
  */
-const HFC_VERSION = '0.14.0';
+const HFC_VERSION = '0.15.0';
 // Address this file was loaded from: shows at once when a dashboard resource still points to an old file.
 const HFC_SCRIPT_URL = (() => {
   try {
@@ -332,6 +332,8 @@ const HFC_PRESETS = {
   // translation keys; entity ids include the device name and serial number.
   open3e: {
     name: 'Viessmann (Open3E)',
+    // Confirmed on a real installation with two heating circuits (#168).
+    tested: true,
     unit_style: 'viessmann',
     index: { hc: 1 },
     auto_circuits: true,
