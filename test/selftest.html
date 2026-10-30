@@ -2161,7 +2161,7 @@
     check(lab({ name: 'hc2_room' }) === lab({ name: 'room' }) && lab({ name: 'hc6_room_target' }) === lab({ name: 'room_target' }) && /^(Room temperature|Raumtemperatur) \(°C\)$/.test(lab({ name: 'hc3_room' })),
       `circuit rooms reuse the room labels (${lab({ name: 'hc2_room' })} / ${lab({ name: 'hc2_room_target' })})`);
     const report = C._diagnosticReport(cfg, hassOf(toStates(states)));
-    check(/- hc2_room: sensor\.attic = 19\.4 °C/.test(report) && /- hc2_room_target: sensor\.attic_target = 20\.0 °C/.test(report) && /- hc4_room: not mapped/.test(report),
+    check(/- hc2_room: sensor\.attic = 19\.4 °C/.test(report) && /- hc2_room_target: sensor\.attic_target = 20\.0 °C/.test(report) && /- Not mapped: [^\n]*\bhc3_room\b/.test(report) && !/- Not mapped: [^\n]*\bhc4_room\b/.test(report),
       'diagnostic report lists the room keys of the circuits');
     const lam = C._resolve({ preset: 'lambda', hc_count: 6 }, hassOf(toStates(setups[0].states('heat')), setups[0].registry || {}));
     check(!Object.keys(lam.entities).some((k) => /^hc[2-6]_room/.test(k)), 'presets leave the rooms of circuits 2 to 6 to the configuration');
@@ -3240,7 +3240,11 @@
     const report = C._diagnosticReport(s.config, h);
     check(/Privacy: entity ids can contain personal names/.test(report) && /Card version: \d+\.\d+\.\d+/.test(report) && /Home Assistant: 2026\.10\.1/.test(report), 'diagnostic report identifies itself and starts with the privacy warning');
     check(/Loaded from: \S+/.test(report), 'diagnostic report names the file the card was loaded from');
-    check(/- flow: sensor\.eu08l_hp1_flow_line_temperature = 32\.4/.test(report) && /- hc3_flow: not mapped/.test(report), 'diagnostic report contains mapped states and missing keys');
+    const notMapped = (report.match(/- Not mapped: ([^\n]*) \(an empty key is fine/) || [])[1] || '';
+    check(/- flow: sensor\.eu08l_hp1_flow_line_temperature = 32\.4[^\n]*\[preset\]/.test(report) && /\bcompressor\b/.test(notMapped)
+      && !/(^|, )flow(,|$)/.test(notMapped) && !/\bhc6_flow\b/.test(notMapped) && !/: not mapped$/m.test(report.split('Checks:')[0]), `diagnostic report: mapped states with their source, missing keys in one line (${notMapped.slice(0, 80)})`);
+    check(/Detection:\n- lambda looked for: entity id \^sensor[^\n]*hp1_operating_state\$ \(lambda_heat_pumps\): found\n- Heat pump integrations here: [^\n]+\n- Presets that match here: lambda \(\d of 6 core entities\)/.test(report),
+      'diagnostic report: what the lambda detection looked for, the integrations and the matching presets');
     check(/Preset: lambda/.test(report) && /Preset detected: yes/.test(report) && /Quick controls:/.test(report) && !/friendly_name/.test(report), 'diagnostic report contains detection and controls but no attribute dump');
     const card = mount(s.config, h); await wait(20);
     let copied = '';
@@ -3542,6 +3546,29 @@
     ed._changed({ ...ed._form.data, entities: { ...ed._form.data.entities, dhw_middle: 'sensor.m' } });
     check(ed._config.entities.dhw_middle === 'sensor.m' && moreOf(ed._form.schema.find((g) => g.title === HFC_EDITOR.en.sec_storage)).expanded, 'a field in "More fields" is saved and keeps its block open');
     ed.remove();
+  }
+
+  // #147: the diagnostic report says what the detection looked for and where each mapping comes from
+  {
+    const vaillant = setups.find((s) => s.config.preset === 'vaillant'); const ebusd = setups.find((s) => s.config.preset === 'ebusd');
+    const lux = setups.find((s) => s.config.preset === 'luxtronik');
+    const both = hassOf(toStates({ ...vaillant.states('heat'), ...ebusd.states('heat') }), { ...(vaillant.registry || {}), ...(ebusd.registry || {}) });
+    const modeId = Object.keys(both.states).find((id) => /energy_manager_state/.test(id));
+    const rep = C._diagnosticReport({ ...ebusd.config, entities: { mode: modeId, buffer_top: null, hc_return: 'sensor.ebusd_hmu_rundatareturntemp' } }, both);
+    check(new RegExp(`- mode: ${modeId.replace('.', '\\.')} = [^\\n]*\\[own · mypyllant\\]`).test(rep), '#109/#189: an own entity of another integration names it');
+    check(/- hc_return: sensor\.ebusd_hmu_rundatareturntemp = [^\n]*\[own\]/.test(rep) && /- flow: sensor\.ebusd_hmu_rundataflowtemp = [^\n]*\[preset\]/.test(rep),
+      'own entities of the preset integration and preset entities are marked');
+    check(/- Cleared on purpose: buffer_top\n/.test(rep) && !/- Not mapped: [^\n]*\bbuffer_top\b/.test(rep), 'a cleared key is listed as cleared, not as unmapped');
+    check(/- Heat pump integrations here: [^\n]*mqtt \(\d+ entities; presets [^)]*ebusd[^)]*\)[^\n]*mypyllant \(\d+ entit/.test(rep)
+      && /- Presets that match here: ebusd \(\d of 6 core entities\), vaillant/.test(rep), 'two integrations of one heat pump: both listed, best match first');
+    const undetected = C._diagnosticReport({ preset: 'vicare' }, hassOf(toStates(lux.states('heat')), lux.registry || {}));
+    check(/Preset detected: no/.test(undetected) && /- vicare looked for: binary_sensor with translation key compressor \(vicare\): not found; sensor with translation key compressor_phase \(vicare\): not found/.test(undetected)
+      && /- Heat pump integrations here: luxtronik2 \(\d+ entities; preset luxtronik\)/.test(undetected) && /- Presets that match here: luxtronik /.test(undetected),
+      'an undetected preset: what it looked for, and the integration that is there instead');
+    const none = C._diagnosticReport({ entities: { flow: 'sensor.f' } }, hassOf(toStates({ 'sensor.f': ['30', '°C'] })));
+    check(!/looked for/.test(none) && /- Heat pump integrations here: none found/.test(none) && /- Presets that match here: none/.test(none) && /- flow: sensor\.f = 30 °C \[own\]/.test(none),
+      'without a preset: no detection line, every mapping is own');
+    check(Object.keys(HFC_PRESETS).every((name) => C._detectProbe(HFC_PRESETS[name], hassOf({})).looked.length > 0), 'every preset detection records what it looks for');
   }
 
   log.push(`${checks} checks, ${fails.length} failed`);

@@ -2414,6 +2414,20 @@ class HeatpumpFlowCard extends HTMLElement {
     return fill(L[`check_${f.code}`] || f.code);
   }
 
+  // What the detection of a preset looks for (#147): its calls to ctx.key and ctx.match, recorded while it runs, with the
+  // integration (platform) and whether each one found something. Detection stops at the first hit, so later lookups are not listed.
+  static _detectProbe(preset, hass, device, idx = { hp: 1, dhw: 1, buffer: 1, hc: 1, ...(preset?.index || {}) }) {
+    const ctx = HeatpumpFlowCard._ctx(hass, device, idx);
+    const looked = [];
+    const note = (platform, what, hit) => { if (!looked.some((l) => l.what === what && l.platform === platform)) looked.push({ platform, what, hit: hit !== undefined }); return hit; };
+    const { key, match } = ctx;
+    ctx.key = (platform, domain, tk) => note(platform, `${domain} with translation key ${tk}`, key(platform, domain, tk));
+    ctx.match = (re, platform) => note(platform, `entity id ${re.source}`, match(re, platform));
+    let found = false;
+    try { found = !!preset?.detect && preset.detect(ctx) !== undefined; } catch (err) { /* a failing detection finds nothing */ }
+    return { looked, found };
+  }
+
   // Plain-text support report. It is created locally and contains only the mappings used by this card, never registry
   // dumps, credentials or network data. Entity ids may still contain personal names, so the report starts with a warning.
   static _diagnosticReport(config, hass) {
@@ -2429,6 +2443,37 @@ class HeatpumpFlowCard extends HTMLElement {
       return `- ${key}: ${id} = ${clean(st.state) || '(empty)'}${unit ? ` ${unit}` : ''}${attr ? ` (${attr} ${clean(st.attributes?.[attr]) || '(empty)'})` : ''}`;
     };
     const keys = [...HFC_DIAGNOSTIC_KEYS, ...Object.keys(r.entities).filter((key) => !HFC_DIAGNOSTIC_KEYS.includes(key) && !HFC_MAP_KEYS.includes(key))];
+    // Detection (#147): what the configured preset looked for, the heat pump integrations in this Home Assistant (platform names
+    // and entity counts only) and the presets that match here. The platforms are the ones the detections of all presets ask for.
+    const reg = HeatpumpFlowCard._registry(hass) || {};
+    const probes = Object.fromEntries(Object.entries(HFC_PRESETS).map(([name, preset]) => [name, HeatpumpFlowCard._detectProbe(preset, hass)]));
+    const own = HeatpumpFlowCard._detectProbe(r.preset, hass, config.device, r.idx);
+    const platformPresets = {};
+    Object.entries(probes).forEach(([name, probe]) => probe.looked.forEach((l) => { if (l.platform) (platformPresets[l.platform] = platformPresets[l.platform] || new Set()).add(name); }));
+    const counts = {};
+    Object.values(reg).forEach((e) => { if (e?.platform && platformPresets[e.platform]) counts[e.platform] = (counts[e.platform] || 0) + 1; });
+    const matches = HeatpumpFlowCard._presetMatches(hass);
+    const detection = [
+      ...(r.preset ? [`- ${clean(config.preset)} looked for: ${own.looked.length
+        ? own.looked.map((l) => `${l.what}${l.platform ? ` (${l.platform})` : ''}: ${l.hit ? 'found' : 'not found'}`).join('; ') : 'its own entity ids'}`] : []),
+      `- Heat pump integrations here: ${Object.keys(counts).length ? Object.entries(counts).sort(([a], [b]) => (a < b ? -1 : 1))
+        .map(([pl, n]) => `${pl} (${n} ${n === 1 ? 'entity' : 'entities'}; preset${platformPresets[pl].size > 1 ? 's' : ''} ${[...platformPresets[pl]].join(', ')})`).join(', ') : 'none found'}`,
+      `- Presets that match here: ${matches.length ? matches.map((m) => `${m.name} (${m.score} of ${HFC_CORE_KEYS.length} core entities)`).join(', ') : 'none'}`,
+    ];
+    // Source of each mapping (#147): found by the preset, set in the configuration ("own", naming its integration when it is not
+    // one the preset reads), or cleared on purpose. Keys of circuits beyond hc_count are left out of the unmapped list.
+    const ownEntities = config.entities && typeof config.entities === 'object' ? config.entities : {};
+    const presetPlatforms = new Set(own.looked.map((l) => l.platform).filter(Boolean));
+    const source = (key, id) => {
+      const set = ownEntities[key];
+      if (set === undefined || set === null || set === 'none') return 'preset';
+      const pl = reg[id]?.platform;
+      return pl && r.preset && presetPlatforms.size && !presetPlatforms.has(pl) ? `own · ${pl}` : 'own';
+    };
+    const hcCount = hfcHcCount(config);
+    const inUse = (key) => { const m = /^hc([2-6])_/.exec(key); return !m || +m[1] <= hcCount; };
+    const cleared = keys.filter((key) => ownEntities[key] === null || ownEntities[key] === 'none');
+    const unmapped = keys.filter((key) => !r.entities[key] && !cleared.includes(key) && inUse(key));
     // Value maps of the preset and of the configuration, each with its source (#125): raw states and card modes only. Short maps
     // list their entries, long ones (mostly from presets) their size. A map under `entities` never reaches the card.
     const isMap = (m) => !!m && typeof m === 'object' && !Array.isArray(m) && Object.keys(m).length > 0;
@@ -2457,8 +2502,14 @@ class HeatpumpFlowCard extends HTMLElement {
       `Storage: ${config.storage || 'separate'} · hot water: ${config.dhw_type || 'coil'} · series buffer: ${config.series_buffer ? (config.series_bypass === false ? 'yes, no bypass valve' : 'yes') : 'no'} · primary pump: ${(config.primary_pump ?? !!r.preset?.primary_pump) ? 'yes' : 'no'}`,
       `Layout: ${config.layout || 'default'}`,
       '',
-      'Entity mappings:',
-      ...keys.flatMap((key) => (r.sums[key] ? r.sums[key].map((id, n) => entityLine(`${key} (sum ${n + 1})`, id)) : [entityLine(key, r.entities[key])])),
+      'Detection:',
+      ...detection,
+      '',
+      'Entity mappings (source: [preset] found by the preset, [own] set in the card configuration):',
+      ...keys.filter((key) => r.entities[key]).flatMap((key) => (r.sums[key] ? r.sums[key].map((id, n) => `${entityLine(`${key} (sum ${n + 1})`, id)} [${source(key, id)}]`)
+        : [`${entityLine(key, r.entities[key])} [${source(key, r.entities[key])}]`])),
+      ...(cleared.length ? [`- Cleared on purpose: ${cleared.join(', ')}`] : []),
+      `- Not mapped: ${unmapped.length ? unmapped.join(', ') : 'none'} (an empty key is fine when the installation does not have it)`,
       '',
       // Plausibility checks (#192), in English like the rest of the report.
       'Checks:',
