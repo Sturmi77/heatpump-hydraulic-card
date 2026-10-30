@@ -334,6 +334,7 @@ const HFC_PRESETS = {
     name: 'Viessmann (Open3E)',
     unit_style: 'viessmann',
     index: { hc: 1 },
+    auto_circuits: true,
     detect: (ctx) => (ctx.key('open3e', 'sensor', 'refrigeration_circuit_mode')
       || ctx.key('open3e', 'binary_sensor', 'heat_pump_compressor_active') ? '' : undefined),
     entities: (p, i, ctx) => {
