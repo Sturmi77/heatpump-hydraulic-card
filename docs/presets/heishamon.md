@@ -2,6 +2,49 @@
 
 Source: [HeishaMon](https://github.com/heishamon/HeishaMon) firmware and the [heishamon-homeassistant](https://github.com/kamaradclimber/heishamon-homeassistant) integration. Entity ids follow the MQTT topics (`sensor.<prefix>_main_main_outlet_temp`, …); the prefix is detected automatically.
 
+## Setup
+
+```yaml
+type: custom:heatpump-flow-card
+preset: heishamon
+```
+For Panasonic Aquarea heat pumps with a [HeishaMon](https://github.com/heishamon/HeishaMon) board and the [heishamon-homeassistant](https://github.com/kamaradclimber/heishamon-homeassistant) integration. Entity ids follow the MQTT topics (`sensor.panasonic_heat_pump_main_main_outlet_temp`, …); a different MQTT prefix is detected automatically.
+
+[Real-installation feedback](https://github.com/heishamon/HeishaMon/discussions/1025#discussioncomment-19174931) confirms that the default MQTT mapping is detected correctly. That installation uses a combined/layered store, which is outside the card's supported topology; its remaining entities were easy to assign manually. This confirms the preset on one real installation, not every Aquarea generation, so additional model reports remain useful.
+
+What you get:
+- outlet and inlet temperature
+- pump flow (L/min, converted)
+- compressor frequency as "running"
+- 3-way valve (Room/Tank)
+- defrost
+- the fan speed (`fan1_motor_speed`, rpm), so the fan keeps turning while it runs on after the compressor stops
+- the primary pump of the outdoor unit or hydro module (`primary_pump`), drawn on the flow pipe; it also runs for hot water and turns slowly while the heat pump only circulates ("sniffing")
+- total power consumption and production (heating, hot water and cooling, `sensor.<prefix>_consumption` / `_production` of the integration), giving a live COP; without them the heating power sensors
+- outdoor temperature
+- DHW temperature and target
+- zone 1 water and room temperature; zone 2 becomes heating circuit 2 with `hc_count: 2`. The room temperature is `…_main_z1_temp` when the zone sensor setting is "Internal Thermostat" or "Thermistor"; otherwise `z1_temp` is the zone water temperature and the card uses the remote control sensor `…_main_room_thermostat_temp`
+- heating curve shift (`hc_curve_offset`) in the heating mode "compensation curve": the circuit label shows the target with its parts, for example "Target 36 °C (curve 34 °C + 2 K shift)", from the heat request temperature (`number.<prefix>_main_z1_heat_request_temp`, `z2_` for circuit 2). The heating mode is read when the card is built, so reload the dashboard after changing it; in direct mode the entity is the flow target itself and is not used
+- internal backup heater
+- details: operating hours and counter, heater hours, compressor frequency, discharge temperature, high and low pressure, expansion valve
+
+Notes from real installations:
+- The integration reads the Power and the Energy topic of each value, depending on the firmware, so the entity ids contain either `…_heat_power_consumption` or `…_heat_energy_consumption`. The preset accepts both. The schematic prefers the total sensors `sensor.<prefix>_consumption` and `sensor.<prefix>_production`, then `sensor.aquarea_energy_consumption` and `sensor.aquarea_energy_production` (all including hot water); the period tiles use the heating, hot water and cooling sensors.
+- `sensor.<prefix>_main_z1_temp` is the zone *water* temperature when the zone sensor setting is "Water Temperature", and reads −128 °C without a room sensor. The preset then prefers `…_main_room_thermostat_temp`; if that value is not a room temperature either, remove it with `entities: {room: null}`.
+- Some models report a low pressure of 0.0 permanently; hide it with `entities: {low_pressure: null}`.
+- The heating setpoint is the zone target temperature. The outlet target (`main_target_temp`) follows the hot-water target while the 3-way valve is on the tank and is only used when no zone target exists.
+
+S0 kWh meters on the HeishaMon board measure the real electrical power, which is more exact than the value the heat pump reports. The integration creates `sensor.<prefix>_s0_watt_<port>`; which port measures what depends on the wiring, so the preset does not use them. Set them as `power`, as one entity or as a list for several meters (for example heat pump and internal heater):
+
+```yaml
+entities:
+  power:
+    - sensor.panasonic_heat_pump_s0_watt_1
+    - sensor.panasonic_heat_pump_s0_watt_2
+```
+
+HeishaMon has no "current activity" value: the card shows heating while the compressor runs, hot water when the valve is on "Tank", and defrost from the defrost state. If you use HeishaMon with your own MQTT YAML instead of the integration, map the entities manually (see below).
+
 ## Mapped
 
 - Error chip from TOP44 "Last Error" (`sensor.<prefix>_main_error`). "No error" is no error; an H/F code (H76, F12 …) stays until the error is reset.

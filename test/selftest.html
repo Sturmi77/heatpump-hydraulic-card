@@ -879,7 +879,7 @@
     check(out.controls[0].entity === 'switch.a' && out.controls[0].name === 'A' && out.controls[0].icon === 'mdi:alpha-a'
       && out.controls[1] === 'switch.c', `editor preserves metadata of controls that remain (${JSON.stringify(out.controls)})`);
     check(JSON.stringify(out.error_ok) === '["No Error","OK"]', `editor writes no-error text states (${JSON.stringify(out.error_ok)})`);
-    const names = C._formSchema({}).schema.flatMap((x) => (x.schema ? x.schema.flatMap((y) => (y.schema ? y.schema.map((z) => z.name) : [y.name])) : [x.name]));
+    const names = C._formSchema({}).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
     check(names.includes('errors') && names.includes('error_ok_text'), 'editor offers error entities and text no-error states');
     ed.remove();
   }
@@ -1800,6 +1800,8 @@
     check(ok(a) && !!a.shadowRoot.querySelector('.lam-body'), 'the alias renders the same card');
     a.remove();
     check(window.customCards.filter((c) => /^heatpump-(flow|hydraulic)-card$/.test(c.type)).length === 1 && window.customCards.some((c) => c.type === 'heatpump-flow-card'), 'the card picker lists the card once, under the generic name');
+    const pick = window.customCards.find((c) => c.type === 'heatpump-flow-card');
+    check(pick.name === 'Heat Pump Hydraulic Card' && /Viessmann/.test(pick.description) && pick.description.length < 260, `#144: the card picker shows "Heat Pump Hydraulic Card" (${pick.name})`);
     // another card got the generic names first (iframe with a stand-in)
     const fr = document.createElement('iframe');
     // srcdoc inherits the parent origin. That keeps the collision test readable in Firefox, which otherwise gives each
@@ -1817,7 +1819,7 @@
     check(!!w && w.customElements.get('heatpump-flow-card') && w.customElements.get('heatpump-flow-card').hfcOwner === undefined, 'in the collision page the generic name belongs to the other card');
     check(!!w && w.customElements.get('heatpump-hydraulic-card')?.hfcOwner === 'sturmi77', 'in the collision page this card is still available under its own name');
     check(!!w && (w.__warns || []).some((m) => /custom:heatpump-hydraulic-card/.test(m)), 'the console says which name to use');
-    check(!!w && w.customCards.length === 1 && w.customCards[0].type === 'heatpump-hydraulic-card' && w.customCards[0].name === 'Heatpump Hydraulic Card', 'the card picker then lists the unique name');
+    check(!!w && w.customCards.length === 1 && w.customCards[0].type === 'heatpump-hydraulic-card' && w.customCards[0].name === 'Heat Pump Hydraulic Card', 'the card picker then lists the unique name');
     check(!!w && !(w.__warns || []).some((m) => /older copy/.test(m)), 'a foreign card with the same name is no older copy');
     fr.remove();
 
@@ -2003,7 +2005,7 @@
     const c2 = await mk();
     check(/- cutout_high_pressure: sensor\.heatpump_cutouts_high_pressure = 3/.test(C._diagnosticReport(s.config, c2._hass)), 'diagnostic report lists the cut-out counters');
     c2.remove();
-    const names = C._formSchema({}).schema.flatMap((x) => (x.schema ? x.schema.flatMap((y) => (y.schema ? y.schema.map((z) => z.name) : [y.name])) : [x.name]));
+    const names = C._formSchema({}).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
     check(['cutout_high_pressure', 'cutout_low_pressure', 'cutout_temperature'].every((k) => names.includes(k)), 'editor offers the three counters');
     const lab = C._formSchema({}).computeLabel;
     check(['cutout_high_pressure', 'cutout_low_pressure', 'cutout_temperature'].every((k) => /\(count of events, not a |\(Anzahl der Ereignisse, kein/.test(lab({ name: k }))), `editor labels name the counters as events (${lab({ name: 'cutout_high_pressure' })})`);
@@ -2036,7 +2038,7 @@
     try { document.createElement('heatpump-flow-card').setConfig({ hc6_type: 'bogus' }); } catch (e) { err = e.message; }
     check(/hc6_type must be one of/.test(err), 'an unknown emitter of circuit 6 is rejected');
     // editor: fields and groups follow hc_count
-    const names = (config) => C._formSchema(config).schema.flatMap((x) => (x.schema ? x.schema.flatMap((y) => (y.schema ? y.schema.map((z) => z.name) : [y.name])) : [x.name]));
+    const names = (config) => C._formSchema(config).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
     const groupNames = (config) => C._formSchema(config).schema.flatMap((x) => (x.schema ? x.schema.map((y) => y.name) : [])).join();
     check(['hc6_type', 'hc6_name', 'hc6_flow'].every((k) => names({ hc_count: 6 }).includes(k)), 'editor offers circuit 6 with six circuits');
     check(!names({ hc_count: 3 }).some((k) => /^hc[456]_/.test(k)), 'editor hides circuits 4 to 6 with three circuits');
@@ -2158,14 +2160,14 @@
       'without room keys the status line keeps the mode alone');
     c.remove();
     // editor, labels, diagnostic report, presets
-    const names = (config) => C._formSchema(config).schema.flatMap((x) => (x.schema ? x.schema.flatMap((y) => (y.schema ? y.schema.map((z) => z.name) : [y.name])) : [x.name]));
+    const names = (config) => C._formSchema(config).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
     check(['hc2_room', 'hc2_room_target', 'hc6_room', 'hc6_room_target'].every((k) => names({ hc_count: 6 }).includes(k)) && !names({ hc_count: 2 }).some((k) => /^hc[3-6]_room/.test(k)) && !names({}).includes('hc2_room'),
       'editor offers the room keys in the groups of circuits 2 to 6');
     const lab = C._formSchema({}).computeLabel;
     check(lab({ name: 'hc2_room' }) === lab({ name: 'room' }) && lab({ name: 'hc6_room_target' }) === lab({ name: 'room_target' }) && /^(Room temperature|Raumtemperatur) \(°C\)$/.test(lab({ name: 'hc3_room' })),
       `circuit rooms reuse the room labels (${lab({ name: 'hc2_room' })} / ${lab({ name: 'hc2_room_target' })})`);
     const report = C._diagnosticReport(cfg, hassOf(toStates(states)));
-    check(/- hc2_room: sensor\.attic = 19\.4 °C/.test(report) && /- hc2_room_target: sensor\.attic_target = 20\.0 °C/.test(report) && /- hc4_room: not mapped/.test(report),
+    check(/- hc2_room: sensor\.attic = 19\.4 °C/.test(report) && /- hc2_room_target: sensor\.attic_target = 20\.0 °C/.test(report) && /- Not mapped: [^\n]*\bhc3_room\b/.test(report) && !/- Not mapped: [^\n]*\bhc4_room\b/.test(report),
       'diagnostic report lists the room keys of the circuits');
     const lam = C._resolve({ preset: 'lambda', hc_count: 6 }, hassOf(toStates(setups[0].states('heat')), setups[0].registry || {}));
     check(!Object.keys(lam.entities).some((k) => /^hc[2-6]_room/.test(k)), 'presets leave the rooms of circuits 2 to 6 to the configuration');
@@ -2522,7 +2524,7 @@
     const none = mount({ preset: 'heishamon', entities: { hc_curve_offset: null } }, hassOf(st())); await wait(20);
     check(!q(none, 't-hc-now') && /^36,8 °C · Soll 36,0$|^36\.8 °C · Target 36\.0$/.test(q(none, 't-hc').textContent), `without the shift the label stays as before (${q(none, 't-hc').textContent})`);
     none.remove();
-    const names = (config) => C._formSchema(config).schema.flatMap((x) => (x.schema ? x.schema.flatMap((y) => (y.schema ? y.schema.map((z) => z.name) : [y.name])) : [x.name]));
+    const names = (config) => C._formSchema(config).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
     const lab = C._formSchema({}).computeLabel;
     check(names({ hc_count: 3 }).includes('hc_curve_offset') && names({ hc_count: 3 }).includes('hc3_curve_offset') && lab({ name: 'hc3_curve_offset' }) === lab({ name: 'hc_curve_offset' }),
       `editor offers the curve shift of each circuit (${lab({ name: 'hc_curve_offset' })})`);
@@ -3244,7 +3246,11 @@
     const report = C._diagnosticReport(s.config, h);
     check(/Privacy: entity ids can contain personal names/.test(report) && /Card version: \d+\.\d+\.\d+/.test(report) && /Home Assistant: 2026\.10\.1/.test(report), 'diagnostic report identifies itself and starts with the privacy warning');
     check(/Loaded from: \S+/.test(report), 'diagnostic report names the file the card was loaded from');
-    check(/- flow: sensor\.eu08l_hp1_flow_line_temperature = 32\.4/.test(report) && /- hc3_flow: not mapped/.test(report), 'diagnostic report contains mapped states and missing keys');
+    const notMapped = (report.match(/- Not mapped: ([^\n]*) \(an empty key is fine/) || [])[1] || '';
+    check(/- flow: sensor\.eu08l_hp1_flow_line_temperature = 32\.4[^\n]*\[preset\]/.test(report) && /\bcompressor\b/.test(notMapped)
+      && !/(^|, )flow(,|$)/.test(notMapped) && !/\bhc6_flow\b/.test(notMapped) && !/: not mapped$/m.test(report.split('Checks:')[0]), `diagnostic report: mapped states with their source, missing keys in one line (${notMapped.slice(0, 80)})`);
+    check(/Detection:\n- lambda looked for: entity id \^sensor[^\n]*hp1_operating_state\$ \(lambda_heat_pumps\): found\n- Heat pump integrations here: [^\n]+\n- Presets that match here: lambda \(\d of 6 core entities\)/.test(report),
+      'diagnostic report: what the lambda detection looked for, the integrations and the matching presets');
     check(/Preset: lambda/.test(report) && /Preset detected: yes/.test(report) && /Quick controls:/.test(report) && !/friendly_name/.test(report), 'diagnostic report contains detection and controls but no attribute dump');
     const card = mount(s.config, h); await wait(20);
     let copied = '';
@@ -3516,6 +3522,85 @@
     }).map((k) => `${lang}.${k}`));
     check(!unitMismatch.length, `field labels name the unit of their kind (${unitMismatch.join(', ')})`);
     check(Object.values(HFC_ENTITY_GROUPS).flat().every((k) => hfcKindOf(k) || k === 'eev'), 'every entity key has a kind');
+  }
+
+  // #193: core fields first, further fields in "More fields", no source fields on an air heat pump
+  {
+    const groupOf = (cfg, sec) => C._formSchema(cfg).schema.find((g) => g.type === 'expandable' && g.name === 'entities' && g.title === HFC_EDITOR.en[sec]);
+    const direct = (g) => g.schema.filter((f) => f.type !== 'expandable').map((f) => f.name);
+    const moreOf = (g) => g.schema.find((f) => f.type === 'expandable');
+    const all = (cfg) => C._formSchema(cfg).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
+    const hp = groupOf({}, 'sec_hp');
+    check(direct(hp).join() === 'mode,compressor,power,heat,flow,return,volume,outdoor,valve' && moreOf(hp)?.flatten === true && moreOf(hp).title === HFC_EDITOR.en.more_fields
+      && !moreOf(hp).expanded && moreOf(hp).schema.map((f) => f.name).includes('status'), `heat pump group: core fields first, the others in "More fields" (${direct(hp)})`);
+    const visibleCount = ['sec_hp', 'sec_storage', 'sec_hc'].reduce((n, sec) => n + direct(groupOf({}, sec)).length, 0);
+    check(visibleCount <= 15, `at most 15 entity fields before "More fields" (${visibleCount})`);
+    check(!['source_volume', 'source_out', 'brine_pressure'].some((k) => all({}).includes(k)) && ['source_volume', 'source_out', 'brine_pressure'].every((k) => all({ source_type: 'brine' }).includes(k))
+      && all({ source_type: 'water' }).includes('source_volume'), 'source fields only for brine and water');
+    check(all({ entities: { source_volume: 'sensor.x' } }).includes('source_volume') && !all({ entities: { source_volume: null } }).includes('source_volume'),
+      'an air heat pump with an own source field keeps it, so it can be cleared');
+    check(moreOf(groupOf({ entities: { dhw_middle: 'sensor.m' } }, 'sec_storage')).expanded === true && !moreOf(groupOf({ entities: { dhw_top: 'sensor.t' } }, 'sec_storage')).expanded,
+      '"More fields" opens when the configuration sets one of its fields');
+    const hc2 = groupOf({ hc_count: 2 }, 'sec_hc2');
+    check(direct(hc2).join() === 'hc2_flow,hc2_return,hc2_pump,hc2_room', `circuit 2 uses the core fields of circuit 1 (${direct(hc2)})`);
+    check(!moreOf(groupOf({}, 'sec_refrigerant')) && direct(groupOf({}, 'sec_refrigerant')).includes('evap_temp'), 'groups without core fields stay one list');
+    check(HFC_DIAGNOSTIC_KEYS.filter((k) => !/^hc[2-6]_/.test(k) && !['source_volume', 'source_out', 'brine_pressure'].includes(k)).every((k) => all({}).includes(k)),
+      'every other entity key is still in the form');
+    // The editor writes values from fields inside "More fields" to entities like any other field
+    const ed = document.createElement('heatpump-flow-card-editor');
+    ed.hass = hassOf(toStates({ 'sensor.m': ['40', '°C'] })); ed.setConfig({ entities: { flow: 'sensor.m' } });
+    ed._changed({ ...ed._form.data, entities: { ...ed._form.data.entities, dhw_middle: 'sensor.m' } });
+    check(ed._config.entities.dhw_middle === 'sensor.m' && moreOf(ed._form.schema.find((g) => g.title === HFC_EDITOR.en.sec_storage)).expanded, 'a field in "More fields" is saved and keeps its block open');
+    ed.remove();
+  }
+
+  // #147: the diagnostic report says what the detection looked for and where each mapping comes from
+  {
+    const vaillant = setups.find((s) => s.config.preset === 'vaillant'); const ebusd = setups.find((s) => s.config.preset === 'ebusd');
+    const lux = setups.find((s) => s.config.preset === 'luxtronik');
+    const both = hassOf(toStates({ ...vaillant.states('heat'), ...ebusd.states('heat') }), { ...(vaillant.registry || {}), ...(ebusd.registry || {}) });
+    const modeId = Object.keys(both.states).find((id) => /energy_manager_state/.test(id));
+    const rep = C._diagnosticReport({ ...ebusd.config, entities: { mode: modeId, buffer_top: null, hc_return: 'sensor.ebusd_hmu_rundatareturntemp' } }, both);
+    check(new RegExp(`- mode: ${modeId.replace('.', '\\.')} = [^\\n]*\\[own · mypyllant\\]`).test(rep), '#109/#189: an own entity of another integration names it');
+    check(/- hc_return: sensor\.ebusd_hmu_rundatareturntemp = [^\n]*\[own\]/.test(rep) && /- flow: sensor\.ebusd_hmu_rundataflowtemp = [^\n]*\[preset\]/.test(rep),
+      'own entities of the preset integration and preset entities are marked');
+    check(/- Cleared on purpose: buffer_top\n/.test(rep) && !/- Not mapped: [^\n]*\bbuffer_top\b/.test(rep), 'a cleared key is listed as cleared, not as unmapped');
+    check(/- Heat pump integrations here: [^\n]*mqtt \(\d+ entities; presets [^)]*ebusd[^)]*\)[^\n]*mypyllant \(\d+ entit/.test(rep)
+      && /- Presets that match here: ebusd \(\d of 6 core entities\), vaillant/.test(rep), 'two integrations of one heat pump: both listed, best match first');
+    const undetected = C._diagnosticReport({ preset: 'vicare' }, hassOf(toStates(lux.states('heat')), lux.registry || {}));
+    check(/Preset detected: no/.test(undetected) && /- vicare looked for: binary_sensor with translation key compressor \(vicare\): not found; sensor with translation key compressor_phase \(vicare\): not found/.test(undetected)
+      && /- Heat pump integrations here: luxtronik2 \(\d+ entities; preset luxtronik\)/.test(undetected) && /- Presets that match here: luxtronik /.test(undetected),
+      'an undetected preset: what it looked for, and the integration that is there instead');
+    const none = C._diagnosticReport({ entities: { flow: 'sensor.f' } }, hassOf(toStates({ 'sensor.f': ['30', '°C'] })));
+    check(!/looked for/.test(none) && /- Heat pump integrations here: none found/.test(none) && /- Presets that match here: none/.test(none) && /- flow: sensor\.f = 30 °C \[own\]/.test(none),
+      'without a preset: no detection line, every mapping is own');
+    check(Object.keys(HFC_PRESETS).every((name) => C._detectProbe(HFC_PRESETS[name], hassOf({})).looked.length > 0), 'every preset detection records what it looks for');
+  }
+
+  // #146: entities the preset would map but that are disabled in Home Assistant
+  {
+    const lux = setups.find((s) => s.config.preset === 'luxtronik');
+    const base = toStates(lux.states('heat')); const reg = { ...(lux.registry || {}) };
+    const powerId = C._resolve(lux.config, hassOf(base, reg)).entities.power;
+    const { [powerId]: powerReg, ...regLeft } = reg; const { [powerId]: gone, ...statesLeft } = base;
+    const calls = [];
+    const entries = [{ entity_id: powerId, ...powerReg, disabled_by: 'integration', original_name: 'Current power consumption', config_entry_id: 'secret', options: { x: 1 } },
+      { entity_id: 'sensor.other_disabled', platform: 'other', translation_key: 'x', disabled_by: 'user' }];
+    const admin = { ...hassOf(statesLeft, regLeft), callWS: (m) => { calls.push(m.type); return m.type === 'config/entity_registry/list' ? Promise.resolve(entries) : Promise.reject(new Error('n/a')); } };
+    check(powerId && !C._resolve(lux.config, admin).entities.power, 'the disabled power entity is not mapped without the registry');
+    const found = C._disabledMappings(lux.config, admin, [{ entity_id: powerId, ...powerReg, name: 'Current power consumption' }]);
+    check(found.length === 1 && found[0].key === 'power' && found[0].id === powerId, `the preset names the disabled entity with its key (${JSON.stringify(found)})`);
+    const ed = document.createElement('heatpump-flow-card-editor'); ed.hass = admin; ed.setConfig(lux.config); await wait(20);
+    check(ed._warn.innerHTML.includes(powerId) && ed._warn.innerHTML.includes('Current power consumption') && /Electrical power of the heat pump: Current power consumption/.test(ed._warn.innerHTML),
+      'the editor lists the disabled entity with the field it would fill');
+    check(calls.every((t) => t === 'config/entity_registry/list') && !JSON.stringify(ed._disabled).includes('secret') && !ed._disabled.some((e) => 'options' in e),
+      'nothing is enabled, and no other registry data is kept');
+    ed.remove();
+    const user = hassOf(statesLeft, regLeft);
+    const ed2 = document.createElement('heatpump-flow-card-editor'); ed2.hass = user; ed2.setConfig(lux.config); await wait(20);
+    check(!ed2._warn.innerHTML.includes(powerId) && !(ed2._disabled || []).length, 'without registry access nothing is listed');
+    ed2.remove();
+    check(!C._disabledMappings({ ...lux.config, entities: { power: 'sensor.own_power' } }, admin, [{ entity_id: powerId, ...powerReg }]).length, 'an own entity for the key hides the hint');
   }
 
   log.push(`${checks} checks, ${fails.length} failed`);

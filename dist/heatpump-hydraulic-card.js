@@ -1330,7 +1330,7 @@ const HFC_EDITOR = {
     hc_return_label: 'Show circuit return temperature', storage: 'Storage', storage_separate: 'Separate hot-water tank and buffer', storage_combined: 'Combined storage (one tank, hot-water zone on top)', dhw_type: 'Hot-water preparation', dhw_type_coil: 'Tank with heat-exchanger coil', dhw_type_fresh_water: 'Fresh-water station (on the buffer or the combined storage)', dhw_type_tank_in_tank: 'Tank in tank (combined storage)', series_buffer: 'Series buffer in the return', series_bypass: 'Series buffer with bypass valve (off: the circuits run in defrost)', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
     sec_hc2: 'Heating circuit 2', sec_hc3: 'Heating circuit 3', sec_hc4: 'Heating circuit 4', sec_hc5: 'Heating circuit 5', sec_hc6: 'Heating circuit 6', sec_details: 'Details: operation', sec_refrigerant: 'Details: refrigerant circuit', sec_cutouts: 'Details: cut-out counters',
     controls: 'Quick controls (switch, button, select, number …)', details_open: 'Details open by default',
-    from_preset: 'Found by the preset',
+    from_preset: 'Found by the preset', more_fields: 'More fields',
     sum_help: 'Sum of these entities',
     sec_advanced: 'Advanced',
     tiles_custom: 'Own tile selection', tiles: 'Tiles (drag to sort)',
@@ -1348,6 +1348,7 @@ const HFC_EDITOR = {
     warn_heat: 'No heat output and no flow rate: no live COP.',
     warn_valve: 'The diverter valve reports a number and has no valve states: the card reads 1 as hot water. If 1 means heating on this valve, set its states under Advanced.',
     warn_map_entities: '{maps} is under entities, where the card ignores it. In YAML it belongs at the top level of the card configuration.',
+    warn_disabled: 'The preset would use these entities, but they are disabled in Home Assistant: {list}. Enable them under Settings → Devices & services → Entities.',
     checks_title: 'Check these fields',
     check_unit: '{field}: {entity} reports {unit}, expected {expected}.',
     check_domain: '{field}: {entity} is a {domain} entity, expected {expected}.',
@@ -1413,7 +1414,7 @@ const HFC_EDITOR = {
     hc_return_label: 'Heizkreis-Rücklauf anzeigen', storage: 'Speicher', storage_separate: 'Getrennter Warmwasserspeicher und Puffer', storage_combined: 'Kombispeicher (ein Speicher, Warmwasserzone oben)', dhw_type: 'Warmwasserbereitung', dhw_type_coil: 'Speicher mit Wärmetauscher-Wendel', dhw_type_fresh_water: 'Frischwasserstation (am Puffer oder Kombispeicher)', dhw_type_tank_in_tank: 'Tank im Tank (Kombispeicher)', series_buffer: 'Reihenpuffer im Rücklauf', series_bypass: 'Reihenpuffer mit Bypass-Ventil (aus: die Heizkreise laufen beim Abtauen)', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
     sec_hc2: 'Heizkreis 2', sec_hc3: 'Heizkreis 3', sec_hc4: 'Heizkreis 4', sec_hc5: 'Heizkreis 5', sec_hc6: 'Heizkreis 6', sec_details: 'Details: Betrieb', sec_refrigerant: 'Details: Kältekreis', sec_cutouts: 'Details: Abschaltzähler',
     controls: 'Schnellbedienung (Schalter, Taste, Auswahl, Zahl …)', details_open: 'Details standardmäßig offen',
-    from_preset: 'Von der Voreinstellung gefunden',
+    from_preset: 'Von der Voreinstellung gefunden', more_fields: 'Weitere Felder',
     sum_help: 'Summe dieser Entitäten',
     sec_advanced: 'Erweitert',
     tiles_custom: 'Eigene Kachelauswahl', tiles: 'Kacheln (zum Sortieren ziehen)',
@@ -1431,6 +1432,7 @@ const HFC_EDITOR = {
     warn_heat: 'Keine Wärmeleistung und kein Volumenstrom: kein Live-COP.',
     warn_valve: 'Das Umschaltventil meldet eine Zahl und hat keine Ventilstellungen: Die Karte liest 1 als Warmwasser. Bedeutet 1 bei diesem Ventil Heizen, die Stellungen unter „Erweitert“ eintragen.',
     warn_map_entities: '{maps} steht unter entities und wird dort von der Karte ignoriert. In YAML gehört es auf die oberste Ebene der Kartenkonfiguration.',
+    warn_disabled: 'Die Voreinstellung würde diese Entitäten nutzen, sie sind in Home Assistant aber deaktiviert: {list}. Aktivieren unter Einstellungen → Geräte & Dienste → Entitäten.',
     checks_title: 'Diese Felder prüfen',
     check_unit: '{field}: {entity} meldet {unit}, erwartet: {expected}.',
     check_domain: '{field}: {entity} ist eine {domain}-Entität, erwartet: {expected}.',
@@ -1676,6 +1678,11 @@ const HFC_ENTITY_GROUPS = {
   sec_stats: ['cop_heating_today', 'cop_dhw_today', 'energy_today', 'pv_share_today', 'starts_today'],
 };
 const HFC_DIAGNOSTIC_KEYS = [...new Set(Object.values(HFC_ENTITY_GROUPS).flat())];
+// Editor (#193): the fields a group shows before "More fields" (circuits 2 to 6 use those of circuit 1), and the fields of a brine
+// or well loop, which an air heat pump does not have.
+const HFC_CORE_FIELDS = ['mode', 'compressor', 'power', 'heat', 'flow', 'return', 'volume', 'outdoor', 'valve', 'dhw_top', 'dhw_target',
+  'hc_flow', 'hc_return', 'hc_pump', 'room'];
+const HFC_SOURCE_KEYS = ['source_volume', 'source_out', 'brine_pressure'];
 // Entity domains usable as quick controls and the service each one calls.
 const HFC_CONTROL_DOMAINS = ['switch', 'input_boolean', 'light', 'fan', 'automation', 'button', 'input_button', 'script', 'scene',
   'select', 'input_select', 'water_heater', 'climate', 'number', 'input_number'];
@@ -1909,8 +1916,6 @@ class HeatpumpFlowCard extends HTMLElement {
       device,
       key: (platform, domain, tk) => ids.find((e) => e.startsWith(`${domain}.`) && reg[e]?.platform === platform
         && reg[e]?.translation_key === tk && onDevice(e)),
-      keys: (platform, domain, tk) => ids.filter((e) => e.startsWith(`${domain}.`) && reg[e]?.platform === platform
-        && reg[e]?.translation_key === tk && onDevice(e)).sort(),
       // Without a registry entry (YAML entities) the platform cannot be checked; accept the pattern match.
       match: (re, platform) => ids.find((e) => re.test(e) && (!reg[e] || !platform || reg[e].platform === platform) && onDevice(e)),
       state: (id) => states[id]?.state,
@@ -2030,9 +2035,21 @@ class HeatpumpFlowCard extends HTMLElement {
           ],
         }] : []),
         ...(opts.fits ? [{ name: 'all_entities', selector: { boolean: {} } }] : []),
-        ...groups.map(([sec, keys]) => ({
-          type: 'expandable', name: 'entities', title: L[sec], schema: keys.map(entitySchema),
-        })),
+        // Core fields first, the further fields of a group in "More fields" (#193): open as soon as the configuration sets one of
+        // them. Source fields of an air heat pump are left out unless the configuration sets them (so they can be cleared).
+        ...groups.map(([sec, keys]) => {
+          const ownSet = (k) => { const v = config?.entities?.[k]; return v !== undefined && v !== null && v !== 'none' && v !== ''; };
+          const air = (config?.source_type || 'air') === 'air';
+          const shown = keys.filter((k) => !(air && HFC_SOURCE_KEYS.includes(k) && !ownSet(k)));
+          const core = shown.filter((k) => HFC_CORE_FIELDS.includes(k.replace(/^hc[2-6]_/, 'hc_').replace(/^hc_room/, 'room')));
+          const more = shown.filter((k) => !core.includes(k));
+          return {
+            type: 'expandable', name: 'entities', title: L[sec],
+            schema: core.length && more.length ? [...core.map(entitySchema), {
+              type: 'expandable', name: `${sec}_more`, flatten: true, title: L.more_fields, expanded: more.some(ownSet), schema: more.map(entitySchema),
+            }] : shown.map(entitySchema),
+          };
+        }),
         {
           type: 'expandable', name: 'advanced', flatten: true, title: L.sec_advanced, schema: [{
             type: 'grid', name: '', schema: [
@@ -2400,6 +2417,34 @@ class HeatpumpFlowCard extends HTMLElement {
     return fill(L[`check_${f.code}`] || f.code);
   }
 
+  // Entities the preset would map but that are disabled in Home Assistant (#146), from the full entity registry (`disabled`:
+  // [{entity_id, platform, translation_key, device_id, name}]). Disabled entities are missing from hass.states and hass.entities, so
+  // the preset is resolved once more with them added; keys whose entity is then a disabled one and not live today are returned.
+  static _disabledMappings(config, hass, disabled) {
+    if (!disabled?.length || !HFC_PRESETS[config?.preset] || !hass?.states) return [];
+    const extra = Object.fromEntries(disabled.map((e) => [e.entity_id, e]));
+    const states = { ...hass.states };
+    disabled.forEach((e) => { if (!states[e.entity_id]) states[e.entity_id] = { entity_id: e.entity_id, state: 'unavailable', attributes: {} }; });
+    const live = HeatpumpFlowCard._resolve(config, hass).entities;
+    const probe = HeatpumpFlowCard._resolve(config, { ...hass, states, entities: { ...HeatpumpFlowCard._registry(hass), ...extra } });
+    return Object.entries(probe.fromPreset).filter(([key, id]) => extra[id] && !hass.states[live[key]] && !(key in (config.entities || {})))
+      .map(([key, id]) => ({ key, id, name: extra[id].name }));
+  }
+
+  // What the detection of a preset looks for (#147): its calls to ctx.key and ctx.match, recorded while it runs, with the
+  // integration (platform) and whether each one found something. Detection stops at the first hit, so later lookups are not listed.
+  static _detectProbe(preset, hass, device, idx = { hp: 1, dhw: 1, buffer: 1, hc: 1, ...(preset?.index || {}) }) {
+    const ctx = HeatpumpFlowCard._ctx(hass, device, idx);
+    const looked = [];
+    const note = (platform, what, hit) => { if (!looked.some((l) => l.what === what && l.platform === platform)) looked.push({ platform, what, hit: hit !== undefined }); return hit; };
+    const { key, match } = ctx;
+    ctx.key = (platform, domain, tk) => note(platform, `${domain} with translation key ${tk}`, key(platform, domain, tk));
+    ctx.match = (re, platform) => note(platform, `entity id ${re.source}`, match(re, platform));
+    let found = false;
+    try { found = !!preset?.detect && preset.detect(ctx) !== undefined; } catch (err) { /* a failing detection finds nothing */ }
+    return { looked, found };
+  }
+
   // Plain-text support report. It is created locally and contains only the mappings used by this card, never registry
   // dumps, credentials or network data. Entity ids may still contain personal names, so the report starts with a warning.
   static _diagnosticReport(config, hass) {
@@ -2415,6 +2460,37 @@ class HeatpumpFlowCard extends HTMLElement {
       return `- ${key}: ${id} = ${clean(st.state) || '(empty)'}${unit ? ` ${unit}` : ''}${attr ? ` (${attr} ${clean(st.attributes?.[attr]) || '(empty)'})` : ''}`;
     };
     const keys = [...HFC_DIAGNOSTIC_KEYS, ...Object.keys(r.entities).filter((key) => !HFC_DIAGNOSTIC_KEYS.includes(key) && !HFC_MAP_KEYS.includes(key))];
+    // Detection (#147): what the configured preset looked for, the heat pump integrations in this Home Assistant (platform names
+    // and entity counts only) and the presets that match here. The platforms are the ones the detections of all presets ask for.
+    const reg = HeatpumpFlowCard._registry(hass) || {};
+    const probes = Object.fromEntries(Object.entries(HFC_PRESETS).map(([name, preset]) => [name, HeatpumpFlowCard._detectProbe(preset, hass)]));
+    const own = HeatpumpFlowCard._detectProbe(r.preset, hass, config.device, r.idx);
+    const platformPresets = {};
+    Object.entries(probes).forEach(([name, probe]) => probe.looked.forEach((l) => { if (l.platform) (platformPresets[l.platform] = platformPresets[l.platform] || new Set()).add(name); }));
+    const counts = {};
+    Object.values(reg).forEach((e) => { if (e?.platform && platformPresets[e.platform]) counts[e.platform] = (counts[e.platform] || 0) + 1; });
+    const matches = HeatpumpFlowCard._presetMatches(hass);
+    const detection = [
+      ...(r.preset ? [`- ${clean(config.preset)} looked for: ${own.looked.length
+        ? own.looked.map((l) => `${l.what}${l.platform ? ` (${l.platform})` : ''}: ${l.hit ? 'found' : 'not found'}`).join('; ') : 'its own entity ids'}`] : []),
+      `- Heat pump integrations here: ${Object.keys(counts).length ? Object.entries(counts).sort(([a], [b]) => (a < b ? -1 : 1))
+        .map(([pl, n]) => `${pl} (${n} ${n === 1 ? 'entity' : 'entities'}; preset${platformPresets[pl].size > 1 ? 's' : ''} ${[...platformPresets[pl]].join(', ')})`).join(', ') : 'none found'}`,
+      `- Presets that match here: ${matches.length ? matches.map((m) => `${m.name} (${m.score} of ${HFC_CORE_KEYS.length} core entities)`).join(', ') : 'none'}`,
+    ];
+    // Source of each mapping (#147): found by the preset, set in the configuration ("own", naming its integration when it is not
+    // one the preset reads), or cleared on purpose. Keys of circuits beyond hc_count are left out of the unmapped list.
+    const ownEntities = config.entities && typeof config.entities === 'object' ? config.entities : {};
+    const presetPlatforms = new Set(own.looked.map((l) => l.platform).filter(Boolean));
+    const source = (key, id) => {
+      const set = ownEntities[key];
+      if (set === undefined || set === null || set === 'none') return 'preset';
+      const pl = reg[id]?.platform;
+      return pl && r.preset && presetPlatforms.size && !presetPlatforms.has(pl) ? `own · ${pl}` : 'own';
+    };
+    const hcCount = hfcHcCount(config);
+    const inUse = (key) => { const m = /^hc([2-6])_/.exec(key); return !m || +m[1] <= hcCount; };
+    const cleared = keys.filter((key) => ownEntities[key] === null || ownEntities[key] === 'none');
+    const unmapped = keys.filter((key) => !r.entities[key] && !cleared.includes(key) && inUse(key));
     // Value maps of the preset and of the configuration, each with its source (#125): raw states and card modes only. Short maps
     // list their entries, long ones (mostly from presets) their size. A map under `entities` never reaches the card.
     const isMap = (m) => !!m && typeof m === 'object' && !Array.isArray(m) && Object.keys(m).length > 0;
@@ -2443,8 +2519,14 @@ class HeatpumpFlowCard extends HTMLElement {
       `Storage: ${config.storage || 'separate'} · hot water: ${config.dhw_type || 'coil'} · series buffer: ${config.series_buffer ? (config.series_bypass === false ? 'yes, no bypass valve' : 'yes') : 'no'} · primary pump: ${(config.primary_pump ?? !!r.preset?.primary_pump) ? 'yes' : 'no'}`,
       `Layout: ${config.layout || 'default'}`,
       '',
-      'Entity mappings:',
-      ...keys.flatMap((key) => (r.sums[key] ? r.sums[key].map((id, n) => entityLine(`${key} (sum ${n + 1})`, id)) : [entityLine(key, r.entities[key])])),
+      'Detection:',
+      ...detection,
+      '',
+      'Entity mappings (source: [preset] found by the preset, [own] set in the card configuration):',
+      ...keys.filter((key) => r.entities[key]).flatMap((key) => (r.sums[key] ? r.sums[key].map((id, n) => `${entityLine(`${key} (sum ${n + 1})`, id)} [${source(key, id)}]`)
+        : [`${entityLine(key, r.entities[key])} [${source(key, r.entities[key])}]`])),
+      ...(cleared.length ? [`- Cleared on purpose: ${cleared.join(', ')}`] : []),
+      `- Not mapped: ${unmapped.length ? unmapped.join(', ') : 'none'} (an empty key is fine when the installation does not have it)`,
       '',
       // Plausibility checks (#192), in English like the rest of the report.
       'Checks:',
@@ -2624,7 +2706,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._failed = true;
     this._rendered = false;
     const msg = this._esc(err && err.message ? err.message : String(err));
-    this.shadowRoot.innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card><div class="hint">Heatpump Flow Card: ${msg}<br>Details in the browser console. Please report it: github.com/Sturmi77/heatpump-hydraulic-card/issues</div></ha-card>`;
+    this.shadowRoot.innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card><div class="hint">Heat Pump Hydraulic Card: ${msg}<br>Details in the browser console. Please report it: github.com/Sturmi77/heatpump-hydraulic-card/issues</div></ha-card>`;
   }
 
   /* ---------- helpers ---------- */
@@ -5287,7 +5369,22 @@ HeatpumpFlowCard.styles = `
 class HeatpumpFlowCardEditor extends HTMLElement {
   setConfig(config) { this._config = config; this._resolved = null; this._loadEnergyInfo(); this._loadRegistry(); this._render(); }
 
-  _loadRegistry() { HeatpumpFlowCard._loadPresetRegistry(this, () => this._render()); }
+  _loadRegistry() { HeatpumpFlowCard._loadPresetRegistry(this, () => this._render()); this._loadDisabled(); }
+
+  // Disabled entities (#146): the full entity registry, read once per registry version and only with a preset. Administrators only;
+  // for other users the request fails and nothing is shown. Kept: id, integration, translation key, device and name, nothing else.
+  // Presets that load the full registry themselves (PointT) keep their one shared request and are left out.
+  _loadDisabled() {
+    const hass = this._hass; const preset = HFC_PRESETS[this._config?.preset];
+    if (!preset || preset.entity_registry || typeof hass?.callWS !== 'function' || this._disabledFor === hass.entities) return;
+    this._disabledFor = hass.entities;
+    Promise.resolve(hass.callWS({ type: 'config/entity_registry/list' })).then((entries) => {
+      if (!Array.isArray(entries) || this._disabledFor !== hass.entities) return;
+      this._disabled = entries.filter((e) => e?.disabled_by && typeof e.entity_id === 'string')
+        .map(({ entity_id, platform, translation_key, device_id, name, original_name }) => ({ entity_id, platform, translation_key, device_id, name: name || original_name || '' }));
+      this._render();
+    }).catch(() => { this._disabled = []; });
+  }
 
   set hass(hass) {
     const first = !this._hass;
@@ -5369,6 +5466,12 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     // A value map under `entities` (the mistake in #109) is ignored by the card; say so, the editor cannot show or move it.
     const misplacedMaps = HFC_MAP_KEYS.filter((name) => own && typeof own === 'object' && name in own);
     if (misplacedMaps.length) warn.push(L.warn_map_entities.replace('{maps}', misplacedMaps.join(', ')));
+    // Entities of the preset that exist but are disabled (#146), with the field they would fill.
+    const disabled = HeatpumpFlowCard._disabledMappings(this._config, this._hass, this._disabled);
+    if (disabled.length) {
+      const field = (key) => String(computeLabel({ name: key })).replace(/\s*\(.*\)\s*$/, '');
+      warn.push(L.warn_disabled.replace('{list}', disabled.map((d) => `${field(d.key)}: ${d.name ? `${d.name} (${d.id})` : d.id}`).join('; ')));
+    }
     if (this._config.power_sources !== 'manual' && this._energyMissing?.length) {
       const names = this._energyMissing.map((type) => ({ solar: L.pv, battery: L.battery, grid: L.grid }[type])).join(', ');
       warn.push(L.warn_energy_sources.replace('{sources}', names));
@@ -5576,7 +5679,8 @@ if (hfcConflict) {
   console.warn(`heatpump-flow-card: ${text}`);
   hfcNotifyOldCopy(text);
 }
-// The card picker lists the card once: under the generic name when this card owns it, otherwise under the unique name.
+// The card picker lists the card once: with the generic element name when this card owns it, otherwise with the unique one; the
+// shown name is always "Heat Pump Hydraulic Card", as in HACS and the README (#144).
 const hfcGeneric = hfcMine('heatpump-flow-card') && hfcMine('heatpump-flow-card-editor');
 if (!hfcGeneric) {
   console.warn('heatpump-flow-card: the element name "heatpump-flow-card" is already used by another card, so "type: custom:heatpump-flow-card" opens that card. '
@@ -5587,8 +5691,8 @@ window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === hfcType)) {
   window.customCards.push({
     type: hfcType,
-    name: hfcGeneric ? 'Heatpump Flow Card' : 'Heatpump Hydraulic Card',
-    description: 'Animated hydraulic schematic for heat pumps (power sources, valve, tanks, heating circuit). Presets: Lambda, Viessmann (ViCare / Open3E), Vaillant, EMS-ESP (Bosch/Buderus/Junkers/Nefit), Panasonic Aquarea (HeishaMon).',
+    name: 'Heat Pump Hydraulic Card',
+    description: 'Animated hydraulic schematic of a heat pump with tanks, heating circuits and power sources. Presets for Lambda, Viessmann, Vaillant, Bosch/Buderus, Panasonic, Wolf, Kronoterm, Luxtronik, Stiebel Eltron, Samsung and more.',
     preview: true,
     documentationURL: 'https://github.com/Sturmi77/heatpump-hydraulic-card',
   });

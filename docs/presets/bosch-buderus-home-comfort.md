@@ -9,6 +9,23 @@ preset: bosch_buderus_heating
 
 The preset selects the Bosch outdoor-unit drawing. Choose `source_type: brine` for a ground-source installation, and adjust the drawing and emitter type to match the installation. The preset does not identify the exact outdoor-unit model.
 
+## Setup
+
+```yaml
+type: custom:heatpump-flow-card
+preset: bosch_buderus_heating
+source_type: brine   # air (default) or brine
+```
+For Bosch and Buderus heat pumps in the Home Comfort app with the [Bosch/Buderus Home Comfort](https://github.com/SoftwareSchmied/ha-bosch-buderus-heating) integration (HACS, domain `bosch_buderus_heating`, PointT cloud API). It is a separate preset from the EMS-ESP one above. The preset finds the entities through the stable resource identities of the integration in the local entity registry (the card reads the registry once, and only for this preset), so entity names, entity ids and the Home Assistant language do not matter. The preset selects the Bosch outdoor-unit drawing; set `source_type: brine` for a ground-source installation. With several gateways select the gateway's device with `device`.
+
+What you get:
+- the operating mode from the compressor status, flow, return and outdoor temperature, heating pressure and compressor modulation
+- DHW temperature and target; flow, room temperature and target of the selected heating circuit (`index: {hc: 2, dhw: 2}` selects another one, `hc_count` shows further circuits)
+- compressor starts and runtime, electricity, heat and environmental energy totals as tiles (calendar periods from the long-term statistics), the holiday indicator and the fault chip
+- quick controls: operating mode of the heating and the DHW circuit and the one-time DHW charge; further controls are opt-in
+
+Not mapped on purpose: an instantaneous power, so live COP, heat output and the PV / battery / grid split need your own power and flow sensors; pump signals; the textual status of the auxiliary heater (shown in the details).
+
 ## Evidence and test status
 
 I maintain the Home Comfort integration. I checked a manual configuration of card version 0.11.0 against live data on my Buderus installation with an MX400 gateway and Home Comfort 0.8.2-beta.7. That check covered the saved mappings and their display. It did not exercise the controls or every operating mode through the card.

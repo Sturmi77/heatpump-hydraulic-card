@@ -4,6 +4,29 @@ Source: the [Stiebel Eltron ISG integration](https://github.com/pail23/stiebel_e
 
 The integration sets the translation key of every entity to its key (`flow_temperature_wp1`, `compressor_on` …), so the preset finds entities through the entity registry (platform `stiebel_eltron_isg`). Entity ids and the Home Assistant language do not matter: a French Home Assistant calls the heat pump flow `sensor.stiebel_eltron_wpmsystem_temperature_de_depart_pac1`, and the preset finds it all the same.
 
+## Setup
+
+```yaml
+type: custom:heatpump-flow-card
+preset: stiebel_isg
+source_type: brine   # air (default) or brine; brine is picked up automatically when the heat source reports
+```
+For Stiebel Eltron heat pumps (and Tecalor) with an Internet Service Gateway and the [Stiebel Eltron ISG](https://github.com/pail23/stiebel_eltron_isg_component) integration (HACS, platform `stiebel_eltron_isg`, Modbus TCP): the controllers WPM 3, WPM 3i, WPMsystem and the LWZ family. Entities are found through the entity registry (platform + translation key), so entity ids and the HA language do not matter; a French Home Assistant names them `…_temperature_de_depart_pac1` and works as it is.
+
+The integration creates the sensors of the whole controller family, also for hardware that is not installed, and these read `unavailable`. The preset therefore maps buffer, solar collector, heat source, refrigerant circuit and heating circuits 2 and 3 only where they report a value.
+
+The integration does not name the heat pump model, so air units get the Stiebel Eltron WPL-A drawing and brine units the ground loop. An LWZ integral unit has no outdoor unit like this; set `unit_style: generic` there.
+
+What you get:
+- compressor, defrost and the hot water flag of the operating status; the card derives heating, hot water, defrost and standby from them (the integration has no status sensor, its select is the heating program). Cooling is not shown
+- flow and return of heat pump 1, its flow rate, outdoor temperature, the buffer, hot water with target, the heat source and its pressure for brine heat pumps, the solar collector where installed
+- electrical power (kW) on the WPMsystem; without it the card estimates the heat output from flow rate and spread, so there is no live COP on the other controllers unless you map your own power meter
+- heating circuits 1 to 3 (`hc_count`) with flow, target and pump, the room temperature and target; the heating pressure
+- operating mode select and the hot water comfort target as quick controls; eco as the program chip; the fault flag as the error chip
+- tiles from the heat and electricity counters per use (heating, hot water; the combined day-and-total sensors, because the plain totals count whole kWh only), compressor starts and booster hours where the controller reports them
+
+Not mapped: cooling mode, the heating curve numbers, the hours of the compressor as one counter (the integration splits them into heating and hot water, both are in the details). Add them with `entities` if you want them.
+
 ## How the card gets its state
 
 The integration has no status sensor: the select `operation_mode` is the heating program the user chose (emergency, ready, program, comfort, eco, water heating), not what the heat pump does. The preset therefore maps no `mode` entity and the card derives the mode from three flags of the operating status: the compressor, the defrost flag and the hot water flag. A running compressor means heating, with the hot water flag hot water, with the defrost flag defrost. **Cooling is not shown.**
