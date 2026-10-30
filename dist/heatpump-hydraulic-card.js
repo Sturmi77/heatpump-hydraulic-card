@@ -1348,6 +1348,20 @@ const HFC_EDITOR = {
     warn_heat: 'No heat output and no flow rate: no live COP.',
     warn_valve: 'The diverter valve reports a number and has no valve states: the card reads 1 as hot water. If 1 means heating on this valve, set its states under Advanced.',
     warn_map_entities: '{maps} is under entities, where the card ignores it. In YAML it belongs at the top level of the card configuration.',
+    checks_title: 'Check these fields',
+    check_unit: '{field}: {entity} reports {unit}, expected {expected}.',
+    check_domain: '{field}: {entity} is a {domain} entity, expected {expected}.',
+    check_state: '{field}: {entity} reports "{state}", expected {expected}.',
+    check_counter: '{field}: {entity} is a counter (it only grows), expected {expected}.',
+    check_same: '{field}: {entity} is also used for {other}; the two fields measure different things.',
+    check_air: '{field}: {entity} is set, but the heat source is air. The card draws no brine or well loop; clear the field or set the heat source.',
+    check_today: '{field}: {entity} reports {value}, more than one day can bring. Is it the total counter?',
+    kind_temperature: 'a temperature (°C)', kind_offset: 'a temperature difference (K)', kind_power: 'a power (W or kW)', kind_energy: 'an energy (kWh)',
+    kind_pressure: 'a pressure (bar)', kind_flowrate: 'a flow rate (l/h, l/min or m³/h)', kind_hours: 'a duration (h)', kind_percent: 'a percentage (%)',
+    kind_counter: 'a count without unit', kind_ratio: 'a number without unit', kind_speed: 'on/off, or a frequency or speed',
+    kind_onoff: 'on/off', kind_onoff_power: 'on/off, a stage or a power (W)', kind_valve: 'on/off, or a state like Tank/Room', kind_text: 'a state text',
+    all_entities: 'Show all entities in the pickers',
+    all_entities_help: 'Off: measurement fields offer entities whose unit or device class fits (°C, W, kWh, bar, l/h). On: every entity, for sensors without a unit.',
     preset_help: 'Found entities are filled in below. Pick another entity to override one, clear a field to hide it.',
     from_energy: 'Empty: taken from the Energy dashboard',
     errors: 'Error entities', error_ok_text: 'Text states that mean no error',
@@ -1417,6 +1431,20 @@ const HFC_EDITOR = {
     warn_heat: 'Keine Wärmeleistung und kein Volumenstrom: kein Live-COP.',
     warn_valve: 'Das Umschaltventil meldet eine Zahl und hat keine Ventilstellungen: Die Karte liest 1 als Warmwasser. Bedeutet 1 bei diesem Ventil Heizen, die Stellungen unter „Erweitert“ eintragen.',
     warn_map_entities: '{maps} steht unter entities und wird dort von der Karte ignoriert. In YAML gehört es auf die oberste Ebene der Kartenkonfiguration.',
+    checks_title: 'Diese Felder prüfen',
+    check_unit: '{field}: {entity} meldet {unit}, erwartet: {expected}.',
+    check_domain: '{field}: {entity} ist eine {domain}-Entität, erwartet: {expected}.',
+    check_state: '{field}: {entity} meldet „{state}“, erwartet: {expected}.',
+    check_counter: '{field}: {entity} ist ein Zähler (er wächst nur), erwartet: {expected}.',
+    check_same: '{field}: {entity} steht auch bei {other}; die beiden Felder messen Verschiedenes.',
+    check_air: '{field}: {entity} ist eingetragen, die Wärmequelle ist aber Luft. Die Karte zeichnet keinen Sole- oder Brunnenkreis; Feld leeren oder Wärmequelle einstellen.',
+    check_today: '{field}: {entity} meldet {value}, mehr als ein Tag bringen kann. Ist es der Gesamtzähler?',
+    kind_temperature: 'eine Temperatur (°C)', kind_offset: 'eine Temperaturdifferenz (K)', kind_power: 'eine Leistung (W oder kW)', kind_energy: 'eine Energie (kWh)',
+    kind_pressure: 'ein Druck (bar)', kind_flowrate: 'ein Volumenstrom (l/h, l/min oder m³/h)', kind_hours: 'eine Dauer (h)', kind_percent: 'ein Prozentwert (%)',
+    kind_counter: 'eine Anzahl ohne Einheit', kind_ratio: 'eine Zahl ohne Einheit', kind_speed: 'ein/aus, oder eine Frequenz oder Drehzahl',
+    kind_onoff: 'ein/aus', kind_onoff_power: 'ein/aus, eine Stufe oder eine Leistung (W)', kind_valve: 'ein/aus, oder ein Zustand wie Speicher/Raum', kind_text: 'ein Zustandstext',
+    all_entities: 'Alle Entitäten in der Auswahl zeigen',
+    all_entities_help: 'Aus: Messfelder bieten Entitäten an, deren Einheit oder Geräteklasse passt (°C, W, kWh, bar, l/h). Ein: alle Entitäten, für Sensoren ohne Einheit.',
     preset_help: 'Gefundene Entitäten sind unten eingetragen. Andere Entität wählen zum Überschreiben, Feld leeren zum Ausblenden.',
     from_energy: 'Leer: aus dem Energie-Dashboard',
     errors: 'Fehler-Entitäten', error_ok_text: 'Textzustände ohne Fehler',
@@ -1654,7 +1682,50 @@ const HFC_CONTROL_DOMAINS = ['switch', 'input_boolean', 'light', 'fan', 'automat
 // Heater rods of the tanks: the plain key keeps its place between the middle and the bottom sensor, a key with a position stands at
 // that height (a large tank can have a rod at the top, in the middle and at the bottom).
 const HFC_TANK_HEATERS = ['dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom'];
-const HFC_BINARY_KEYS = ['compressor', 'valve', 'hc_pump', 'hc2_pump', 'hc3_pump', 'hc4_pump', 'hc5_pump', 'hc6_pump', 'circulation', 'defrost', 'heater', ...HFC_TANK_HEATERS, 'bypass_valve', 'solar_pump'];
+// What an entity key expects (#192). The plausibility checks, the entity picker of the editor (#194) and the unit in the field labels
+// follow this table. units: accepted units (lower case); device_class and domains: positive evidence for the picker; domains also
+// limit what the checks accept; numeric: the state is a number; extra: further units an on/off key accepts (power, speed).
+const HFC_KINDS = {
+  temperature: { units: ['°c', '°f', 'k'], device_class: 'temperature', domains: ['sensor', 'number', 'input_number', 'climate', 'water_heater'], numeric: true, label: '°C' },
+  offset: { units: ['k', '°c', '°f'], domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'K' },
+  power: { units: ['w', 'kw', 'mw'], device_class: 'power', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'W' },
+  energy: { units: ['wh', 'kwh', 'mwh'], device_class: 'energy', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'kWh' },
+  pressure: { units: ['bar', 'mbar', 'pa', 'hpa', 'kpa', 'mpa', 'psi'], device_class: 'pressure', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'bar' },
+  flowrate: { units: ['l/h', 'l/min', 'l/s', 'm³/h', 'm3/h'], device_class: 'volume_flow_rate', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'l/h' },
+  hours: { units: ['h', 'min', 's', 'd'], device_class: 'duration', domains: ['sensor', 'number', 'input_number'], numeric: true },
+  percent: { units: ['%'], domains: ['sensor', 'number', 'input_number'], numeric: true, label: '%' },
+  counter: { domains: ['sensor', 'number', 'input_number', 'counter'], numeric: true },
+  ratio: { domains: ['sensor', 'number', 'input_number'], numeric: true },
+  speed: { extra: ['hz', 'rpm', '1/min', 'min⁻¹', 'rps', '%'], domains: ['binary_sensor', 'switch', 'input_boolean', 'sensor'], onoff: true },
+  onoff: { extra: ['%'], domains: ['binary_sensor', 'switch', 'input_boolean', 'sensor'], onoff: true },
+  onoff_power: { extra: ['w', 'kw', '%'], domains: ['binary_sensor', 'switch', 'input_boolean', 'sensor'], onoff: true },
+  valve: { domains: ['binary_sensor', 'switch', 'input_boolean', 'sensor', 'select', 'input_select'], onoff: true },
+  text: { domains: ['sensor', 'select', 'input_select', 'binary_sensor', 'switch', 'climate', 'water_heater', 'input_text', 'text'] },
+};
+// Keys of circuits 2 to 6 use the kind of circuit 1 (hc2_flow → hc_flow, hc2_room → room); keys not listed are not checked.
+const HFC_KEY_KINDS = Object.fromEntries(Object.entries({
+  temperature: ['flow', 'return', 'source_in', 'source_out', 'outdoor', 'dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'buffer_top', 'buffer_middle',
+    'buffer_bottom', 'solar_collector', 'hc_flow', 'hc_return', 'hc_setpoint', 'room', 'room_target', 'evap_temp', 'cond_temp', 'suction_temp', 'hot_gas', 'liquid_temp'],
+  offset: ['hc_curve_offset', 'superheat', 'subcooling'],
+  power: ['power', 'heat', 'pv', 'battery', 'grid'],
+  energy: ['energy_total', 'env_energy', 'heat_total', 'energy_today'],
+  pressure: ['brine_pressure', 'hc_pressure', 'low_pressure', 'high_pressure'],
+  flowrate: ['volume', 'source_volume', 'hc_volume'],
+  hours: ['hours', 'aux_hours'],
+  percent: ['pv_share_today'],
+  counter: ['starts_total', 'starts_today', 'cutout_high_pressure', 'cutout_low_pressure', 'cutout_temperature'],
+  ratio: ['cop_heating_today', 'cop_dhw_today'],
+  speed: ['compressor', 'fan_speed', 'compressor_speed'],
+  onoff: ['defrost', 'circulation', 'hc_pump', 'solar_pump', 'bypass_valve'],
+  onoff_power: ['heater', ...HFC_TANK_HEATERS, 'pv_boost'],
+  valve: ['valve'],
+  text: ['mode', 'status', 'dhw_mode', 'buffer_mode', 'hc_mode', 'program'],
+}).flatMap(([kind, keys]) => keys.map((key) => [key, kind])));
+const hfcKindOf = (key) => HFC_KEY_KINDS[key] || HFC_KEY_KINDS[String(key).replace(/^hc[2-6]_/, 'hc_')] || HFC_KEY_KINDS[String(key).replace(/^hc[2-6]_/, '')];
+// Units of the measuring kinds: one of them on a text, on/off or counter key is a mistake.
+const HFC_PHYSICAL_UNITS = new Set(['temperature', 'power', 'energy', 'pressure', 'flowrate', 'hours'].flatMap((kind) => HFC_KINDS[kind].units));
+// On/off keys keep the domain filter of their entity picker (a sensor can report on/off as text).
+const HFC_BINARY_KEYS = Object.values(HFC_ENTITY_GROUPS).flat().filter((key) => HFC_KINDS[hfcKindOf(key)]?.onoff);
 // Climate and water heater entities keep their temperatures in attributes: the reading in `current_temperature`, the target in
 // `temperature`. Keys ending in _target or _setpoint read the target, so one thermostat can serve as dhw_top and dhw_target.
 const hfcTempAttr = (id, key) => (['climate', 'water_heater'].includes(String(id || '').split('.')[0])
@@ -1904,12 +1975,21 @@ class HeatpumpFlowCard extends HTMLElement {
     const keep = (name) => { const m = /^hc([2-6])_/.exec(name); return !m || +m[1] <= hcCount; };
     const groups = Object.entries(HFC_ENTITY_GROUPS).filter(([sec]) => keep(sec.replace('sec_', '') + '_'));
     const hcTypeSel = (name) => ({ name, selector: { select: { mode: 'dropdown', options: HFC_EMITTERS.map((value) => ({ value, label: L[`hc_${value}`] })) } } });
-    // A YAML list (sum of several entities) keeps a picker for several entities.
-    const entitySchema = (key) => ({
-      name: key,
-      selector: { entity: HFC_BINARY_KEYS.includes(key) ? { domain: ['binary_sensor', 'switch', 'input_boolean', 'sensor'] }
-        : Array.isArray(config?.entities?.[key]) ? { multiple: true } : {} },
-    });
+    // A YAML list (sum of several entities) keeps a picker for several entities. On/off keys offer the domains of their kind. With
+    // opts.fits (the editor, #194) a measuring key offers the entities whose unit, device class or domain fits its kind, plus what
+    // is already mapped; opts.all ("Show all entities") lifts that filter.
+    const entitySchema = (key) => {
+      const kind = HFC_KINDS[hfcKindOf(key)];
+      const multiple = Array.isArray(config?.entities?.[key]);
+      // No fitting entity at all (an integration without units): no filter rather than an empty list.
+      const fits = !opts.all && opts.fits?.[hfcKindOf(key)]?.length && opts.fits[hfcKindOf(key)];
+      const current = [opts.shown?.[key]].flat().filter((id) => typeof id === 'string' && id);
+      return {
+        name: key,
+        selector: { entity: { ...(multiple ? { multiple: true } : {}),
+          ...(kind?.onoff ? { domain: kind.domains } : fits ? { include_entities: [...new Set([...fits, ...current])] } : {}) } },
+      };
+    };
     return {
       schema: [
         {
@@ -1949,6 +2029,7 @@ class HeatpumpFlowCard extends HTMLElement {
             { name: 'price_entity', selector: { entity: { domain: ['sensor', 'input_number', 'number'] } } },
           ],
         }] : []),
+        ...(opts.fits ? [{ name: 'all_entities', selector: { boolean: {} } }] : []),
         ...groups.map(([sec, keys]) => ({
           type: 'expandable', name: 'entities', title: L[sec], schema: keys.map(entitySchema),
         })),
@@ -2242,6 +2323,83 @@ class HeatpumpFlowCard extends HTMLElement {
       presetControls, controls, details };
   }
 
+  // How an entity fits a kind of HFC_KINDS: 'ok' with positive evidence (unit, device class, thermostat), 'bad' with a reason
+  // ({code, unit | domain | state}), 'unknown' when nothing tells (a number without unit). Unavailable states are never 'bad'.
+  static _fit(kindName, id, st) {
+    const kind = HFC_KINDS[kindName];
+    if (!kind || !st) return { verdict: 'unknown' };
+    const domain = String(id).split('.')[0];
+    const unit = String(st.attributes?.unit_of_measurement || '').trim().toLowerCase();
+    const cls = st.attributes?.device_class;
+    if (!kind.domains.includes(domain)) return { verdict: 'bad', code: 'domain', domain };
+    if (kind.units) {
+      if (unit && !kind.units.includes(unit)) return { verdict: 'bad', code: 'unit', unit: st.attributes.unit_of_measurement };
+      if (kind.numeric && !['climate', 'water_heater'].includes(domain) && !['unknown', 'unavailable', '', 'none'].includes(String(st.state ?? '').toLowerCase())
+        && !Number.isFinite(parseFloat(st.state))) return { verdict: 'bad', code: 'state', state: st.state };
+      return (unit || (kind.device_class && cls === kind.device_class) || (kindName === 'temperature' && ['climate', 'water_heater'].includes(domain)))
+        ? { verdict: 'ok' } : { verdict: 'unknown' };
+    }
+    if (unit && HFC_PHYSICAL_UNITS.has(unit) && !(kind.extra || []).includes(unit)) return { verdict: 'bad', code: 'unit', unit: st.attributes.unit_of_measurement };
+    // A key for a running state holds no counter: starts and hours only grow (#186, heater = heater starts).
+    if (kind.onoff && ['total', 'total_increasing'].includes(st.attributes?.state_class)) return { verdict: 'bad', code: 'counter' };
+    return { verdict: kind.onoff && ['binary_sensor', 'switch', 'input_boolean'].includes(domain) ? 'ok' : 'unknown' };
+  }
+
+  // Plausibility checks of the mapped entities (#192): entities that do not fit their field, one entity in fields that measure
+  // different things, source fields of an air heat pump, daily values far above what a day can bring. Warnings only, for the editor
+  // and the diagnostic report; the card itself shows nothing. Returns [{key, code, id, ...details}].
+  static _checks(config, hass, r = HeatpumpFlowCard._resolve(config || {}, hass)) {
+    config = config || {};
+    const out = [];
+    const ids = (key) => (r.sums?.[key] || [r.entities[key]]).filter((id) => typeof id === 'string' && id);
+    Object.keys(r.entities).forEach((key) => {
+      const kind = hfcKindOf(key);
+      if (!kind) return;
+      ids(key).forEach((id) => {
+        const fit = HeatpumpFlowCard._fit(kind, id, hass.states[id]);
+        if (fit.verdict === 'bad') out.push({ key, id, kind, ...fit });
+      });
+    });
+    // Keys that never share an entity: they measure different places or different quantities (#75, #180, #189).
+    const circuits = ['', ...Array.from({ length: HFC_MAX_HC - 1 }, (_, n) => String(n + 2))];
+    const pairs = [['flow', 'return'], ['power', 'heat'], ['compressor', 'heater'], ['starts_total', 'starts_today'], ['energy_total', 'energy_today'],
+      ['heat_total', 'energy_today'], ['heat_total', 'energy_total'], ['env_energy', 'heat_total'], ['env_energy', 'energy_total'],
+      ['volume', 'source_volume'], ['source_in', 'flow'], ['source_in', 'return'], ['source_out', 'flow'], ['source_out', 'return'],
+      ...['flow', 'return'].flatMap((a) => ['dhw_top', 'dhw_middle', 'dhw_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom'].map((b) => [a, b])),
+      ...circuits.flatMap((n) => [[`hc${n}_flow`, `hc${n}_return`], [`hc${n}_volume`, 'source_volume']])];
+    pairs.forEach(([a, b]) => {
+      const id = r.entities[a];
+      if (typeof id === 'string' && id && id === r.entities[b]) out.push({ key: b, id, code: 'same', other: a });
+    });
+    // Source fields of an air heat pump: the card draws no brine or well loop, an own entity there is a mix-up (#180).
+    if ((config.source_type || 'air') === 'air') {
+      ['source_volume', 'source_out', 'brine_pressure'].forEach((key) => {
+        const own = config.entities?.[key];
+        if (own && own !== 'none') out.push({ key, id: Array.isArray(own) ? own.join(', ') : own, code: 'air' });
+      });
+    }
+    // Daily values no home installation reaches: the total counter in a daily field (#189). state_class cannot tell, daily
+    // utility meters are total_increasing as well. A preset that names the value itself (ViCare shows its start counter as
+    // "Compressor starts" through stat_labels) means it.
+    const today = (key, limit, scale = () => 1) => ids(key).forEach((id) => {
+      if (r.preset?.stat_labels?.[key] && r.fromPreset?.[key] === id) return;
+      const st = hass.states[id]; const v = parseFloat(st?.state) * scale(String(st?.attributes?.unit_of_measurement || '').toLowerCase());
+      if (Number.isFinite(v) && v > limit) out.push({ key, id, code: 'today', value: st.state });
+    });
+    today('starts_today', 150);
+    today('energy_today', 150, (u) => ({ wh: 0.001, mwh: 1000 }[u] || 1));
+    return out;
+  }
+
+  // One finding as text. L: editor labels of one language; label: how the key is named (the field label or the key).
+  static _checkText(f, L, label = (k) => k) {
+    const fill = (text) => String(text || '').replace(/\{(\w+)\}/g, (_, k) => ({
+      field: label(f.key), other: label(f.other), entity: f.id, unit: f.unit, domain: f.domain, state: f.state, value: f.value,
+      expected: L[`kind_${f.kind}`] || f.kind,
+    }[k] ?? ''));
+    return fill(L[`check_${f.code}`] || f.code);
+  }
+
   // Plain-text support report. It is created locally and contains only the mappings used by this card, never registry
   // dumps, credentials or network data. Entity ids may still contain personal names, so the report starts with a warning.
   static _diagnosticReport(config, hass) {
@@ -2287,6 +2445,10 @@ class HeatpumpFlowCard extends HTMLElement {
       '',
       'Entity mappings:',
       ...keys.flatMap((key) => (r.sums[key] ? r.sums[key].map((id, n) => entityLine(`${key} (sum ${n + 1})`, id)) : [entityLine(key, r.entities[key])])),
+      '',
+      // Plausibility checks (#192), in English like the rest of the report.
+      'Checks:',
+      ...((checks) => (checks.length ? checks.map((f) => `- ${clean(HeatpumpFlowCard._checkText(f, HFC_EDITOR.en))}`) : ['- no findings']))(HeatpumpFlowCard._checks(config, hass, r)),
       '',
       'Maps:',
       ...(mapLines.length || misplaced.length ? [...mapLines, ...misplaced] : ['- none']),
@@ -5181,10 +5343,17 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     this._valveShown = !!valveId;
     // Preset detection for the dropdown (#145): once per registry, not on every change in the form.
     if (this._matchesFor !== this._hass.entities) { this._matches = HeatpumpFlowCard._presetMatches(this._hass); this._matchesFor = this._hass.entities; }
-    const { schema, computeLabel, L } = HeatpumpFlowCard._formSchema(this._config, tiles, { valve: !!valveId, matches: this._matches });
     const own = this._config.entities || {};
     const shown = { ...this._fromPreset };
     Object.entries(own).forEach(([k, v]) => { if (v === null || v === 'none') delete shown[k]; else if (v) shown[k] = v; });
+    // Entities that fit each measuring kind, for the pickers (#194): once per set of entities, not on every new state.
+    if (this._fitsFor !== (this._hass.entities || this._hass.states)) {
+      this._fitsFor = this._hass.entities || this._hass.states;
+      this._fits = Object.fromEntries(Object.entries(HFC_KINDS).filter(([, k]) => k.units).map(([name]) => [name,
+        Object.entries(this._hass.states).filter(([id, st]) => HeatpumpFlowCard._fit(name, id, st).verdict === 'ok').map(([id]) => id).sort()]));
+    }
+    const { schema, computeLabel, L } = HeatpumpFlowCard._formSchema(this._config, tiles,
+      { valve: !!valveId, matches: this._matches, fits: this._fits, all: !!this._allEntities, shown });
     const found = Object.keys(this._fromPreset).length;
     // Core entities the card needs; warn about what is missing (not while a preset is not detected, its field says so).
     const has = (k) => { const id = r.entities[k]; return !!(id && this._hass.states[id]); };
@@ -5205,7 +5374,17 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       warn.push(L.warn_energy_sources.replace('{sources}', names));
     }
     const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    const html = warn.length ? `<ha-alert alert-type="info" title="${esc(L.warn_title)}"><ul style="margin:0;padding-left:18px">${warn.map((w) => `<li>${esc(w)}</li>`).join('')}</ul></ha-alert>` : '';
+    // Plausibility checks (#192): one line per finding above the form, and the same text as the helper of the field. Fields are named
+    // by their label without the hint in brackets.
+    const fieldName = (key) => String(computeLabel({ name: key })).replace(/\s*\(.*\)\s*$/, '');
+    const checks = HeatpumpFlowCard._checks(this._config, this._hass, r);
+    this._checkHelp = {};
+    checks.forEach((f) => { const text = HeatpumpFlowCard._checkText(f, L, fieldName); this._checkHelp[f.key] = this._checkHelp[f.key] ? `${this._checkHelp[f.key]} ${text}` : text; });
+    const list = (items) => `<ul style="margin:0;padding-left:18px">${items.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>`;
+    // A valve that does not fit at all needs no hint about its value map.
+    const info = checks.some((f) => f.key === 'valve') ? warn.filter((w) => w !== L.warn_valve) : warn;
+    const html = (checks.length ? `<ha-alert alert-type="warning" title="${esc(L.checks_title)}">${list(checks.map((f) => HeatpumpFlowCard._checkText(f, L, fieldName)))}</ha-alert>` : '')
+      + (info.length ? `<ha-alert alert-type="info" title="${esc(L.warn_title)}">${list(info)}</ha-alert>` : '');
     if (this._warn._html !== html) { this._warn.innerHTML = html; this._warn._html = html; this._warn.style.marginBottom = html ? '12px' : '0'; }
     this._form.hass = this._hass;
     this._form.schema = schema;
@@ -5226,6 +5405,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       if (s.name === 'valve_dhw_text' || s.name === 'valve_heating_text') return L.valve_help.replace('{state}', valveState ?? '–');
       if (['energy_total', 'env_energy', 'heat_total'].includes(s.name)) return L.total_cop_help;
       if (s.name === 'language') return L.language_help;
+      if (s.name === 'all_entities') return L.all_entities_help;
+      if (this._checkHelp[s.name]) return this._checkHelp[s.name];
       if (own[s.name] === undefined && this._fromPreset[s.name]) return L.from_preset;
       if (Array.isArray(own[s.name])) return L.sum_help;
       if (['pv', 'battery', 'grid'].includes(s.name) && !own[s.name] && this._config.power_sources !== 'manual') return L.from_energy;
@@ -5239,7 +5420,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       animations: this._config.animations || 'auto', flow_speed: this._config.flow_speed ?? 1, source_spread: this._config.source_spread !== false,
       theme: this._config.theme || 'auto', fullscreen: this._config.fullscreen !== false, series_bypass: this._config.series_bypass !== false,
       storage: this._config.storage || 'separate', dhw_type: this._config.dhw_type || 'coil',
-      valve_dhw_text: this._valveText.dhw, valve_heating_text: this._valveText.heating };
+      valve_dhw_text: this._valveText.dhw, valve_heating_text: this._valveText.heating, all_entities: !!this._allEntities };
     if (this._config.controls === undefined && !r.presetControls.length) delete data.controls;
     if (custom && tiles.editable) data.tiles = tiles.value;
     this._priceShown = custom;
@@ -5253,6 +5434,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
 
   // Writes back only what differs from the preset: other entities as overrides, cleared preset entities as null.
   _changed(value) {
+    // "Show all entities" (#194) belongs to the editor, not to the card: switching it only redraws the form.
+    if (!!value.all_entities !== !!this._allEntities) { this._allEntities = !!value.all_entities; this._render(); return; }
     const own = this._config.entities || {};
     const shownBefore = { ...this._fromPreset, ...Object.fromEntries(Object.entries(own).filter(([, v]) => v)) };
     const next = value.entities || {};
@@ -5278,7 +5461,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       }).filter(Boolean);
       if (this._config.controls === undefined && JSON.stringify(config.controls) === JSON.stringify(this._presetControls)) delete config.controls;
     }
-    delete config.error_ok_text;
+    delete config.error_ok_text; delete config.all_entities;
     // Valve states (#126): untouched fields keep the YAML map as it is; edited ones write back only what differs from the preset.
     delete config.valve_dhw_text; delete config.valve_heating_text;
     // ha-form may drop a text field that was cleared, so a missing value counts as empty while the fields are shown.
