@@ -1,1 +1,0 @@
-- Editor checks and entity pickers accept other spellings of a unit: `ºC` (with the ordinal sign some integrations use), `℃`, `℉` and hours written as `hours` or `hrs` (found in the pre-release review of 0.15.0).
