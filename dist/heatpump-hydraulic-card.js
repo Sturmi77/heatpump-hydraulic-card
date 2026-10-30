@@ -1795,7 +1795,7 @@ class HeatpumpFlowCard extends HTMLElement {
       cache = { display: hass.entities };
       this._registries.set(key, cache);
       // Until the new list arrives, the PointT entries of the previous one stay in use on top of the new compact registry.
-      if (old?.pointtFull) cache.entries = { ...cache.display, ...old.pointtFull };
+      if (old?.pointtFull) { cache.entries = { ...cache.display, ...old.pointtFull }; cache.carriedSig = old.sig; }
       const pointt = Object.entries(hass.entities || {}).filter(([, e]) => e.platform === 'bosch_buderus_heating');
       // The demo and tests may already provide the full registry.
       const full = pointt.length && pointt.every(([, e]) => typeof e.unique_id === 'string');
@@ -1816,9 +1816,10 @@ class HeatpumpFlowCard extends HTMLElement {
     host._registryRequest = cache.promise;
     // HA sends a new compact registry after a change to any entity. The host rebuilds only when the PointT entries differ from
     // the ones it was built with: a rebuild makes the card flicker and drops styles set with card-mod (#164).
+    // Without carried-over entries (first list of a connection) the host drew without the registry and needs the update.
     cache.promise.then(() => {
       if (host._registryRequest !== cache.promise || host._hass?.entities !== cache.display) return;
-      if (cache.sig !== undefined && cache.sig === host._registrySig) return;
+      if (cache.sig !== undefined && cache.sig === host._registrySig && cache.carriedSig === host._registrySig) return;
       host._registrySig = cache.sig;
       update();
     });
