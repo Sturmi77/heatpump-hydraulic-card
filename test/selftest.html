@@ -3440,6 +3440,80 @@
     } finally { delete HFC_LANGUAGES.xx; delete HFC_I18N.xx; delete HFC_EDITOR.xx; }
   }
 
+  // #192: plausibility checks of the mapped entities; #194: entity pickers filtered by the kind of the field
+  {
+    const codes = (cfg, states) => C._checks(cfg, hassOf(toStates(states))).map((f) => `${f.key}:${f.code}`).sort().join(' ');
+    const base = { 'sensor.flow': ['35', '°C'], 'sensor.return': ['30', '°C'], 'sensor.power': ['1200', 'W'] };
+    const ents = { flow: 'sensor.flow', return: 'sensor.return', power: 'sensor.power' };
+    check(codes({ entities: ents }, base) === '', 'a correct mapping has no findings');
+    // The mix-ups of the reports #75, #180, #186, #189
+    check(codes({ entities: { ...ents, valve: 'sensor.ww_temp' } }, { ...base, 'sensor.ww_temp': ['unknown', '°C'] }) === 'valve:unit', '#186: a temperature as the valve');
+    check(codes({ entities: { ...ents, heater: 'sensor.rod_starts' } }, { ...base, 'sensor.rod_starts': { state: '244', attributes: { state_class: 'total_increasing' } } }) === 'heater:counter',
+      '#186: the heater starts counter as the heater');
+    check(codes({ entities: { ...ents, room: 'select.room_mode' } }, { ...base, 'select.room_mode': 'internal' }) === 'room:domain', '#75: a select as the room temperature');
+    check(codes({ entities: { ...ents, room: 'sensor.room_mode' } }, { ...base, 'sensor.room_mode': 'internal' }) === 'room:state', 'a text sensor as the room temperature');
+    check(codes({ entities: { ...ents, buffer_top: 'sensor.flow' } }, base) === 'buffer_top:same', '#75/#180: the heat pump flow as the buffer top');
+    check(codes({ entities: { ...ents, volume: 'sensor.hc_flow_rate', source_volume: 'sensor.hc_flow_rate' } }, { ...base, 'sensor.hc_flow_rate': ['1046', 'L/h'] })
+      === 'source_volume:air source_volume:same', '#180: one flow rate as heat pump and source loop, on an air heat pump');
+    check(codes({ source_type: 'brine', entities: { ...ents, volume: 'sensor.v1', source_volume: 'sensor.v2' } }, { ...base, 'sensor.v1': ['900', 'l/h'], 'sensor.v2': ['1500', 'l/h'] }) === '',
+      'a brine heat pump with its own source flow rate has no findings');
+    check(codes({ entities: { ...ents, starts_today: 'sensor.starts' } }, { ...base, 'sensor.starts': '6386' }) === 'starts_today:today', '#189: the total starts as starts today');
+    check(codes({ entities: { ...ents, energy_today: 'sensor.heat_today', heat_total: 'sensor.heat_today' } }, { ...base, 'sensor.heat_today': ['12.4', 'kWh'] }) === 'energy_today:same',
+      '#189: one daily heat counter as energy today and heat total');
+    check(codes({ entities: { ...ents, energy_today: 'sensor.e' } }, { ...base, 'sensor.e': ['200000', 'Wh'] }) === 'energy_today:today'
+      && codes({ entities: { ...ents, energy_today: 'sensor.e' } }, { ...base, 'sensor.e': ['5000', 'Wh'] }) === '', 'energy today converts Wh before comparing with one day');
+    check(codes({ entities: { ...ents, mode: 'sensor.mode_temp' } }, { ...base, 'sensor.mode_temp': ['21', '°C'] }) === 'mode:unit', 'a temperature as the operating mode');
+    // Mappings that look alike but are right
+    check(codes({ entities: { ...ents, valve: 'binary_sensor.v', heater: 'sensor.rod', compressor: 'sensor.hz', hc_volume: 'sensor.vol', volume: 'sensor.vol', room: 'climate.house',
+      room_target: 'climate.house', dhw_top: 'water_heater.dhw', dhw_target: 'water_heater.dhw', outdoor: 'sensor.out', source_in: 'sensor.out', hc_curve_offset: 'number.shift' } },
+    { ...base, 'binary_sensor.v': 'on', 'sensor.rod': ['3000', 'W'], 'sensor.hz': ['48', 'Hz'], 'sensor.vol': ['0.69', 'm³/h'], 'climate.house': 'heat', 'water_heater.dhw': 'eco',
+      'sensor.out': ['4', '°C'], 'number.shift': ['2', 'K'] }) === '', 'thermostats for reading and target, one flow rate without buffer, air inlet = outdoor: no findings');
+    check(codes({ entities: { ...ents, dhw_top: 'sensor.tank' } }, { ...base, 'sensor.tank': 'unavailable' }) === '', 'an unavailable sensor without unit is not a finding');
+    check(codes({ entities: { ...ents, heater: ['sensor.rod1', 'sensor.rod2'] } }, { ...base, 'sensor.rod1': ['0', 'W'], 'sensor.rod2': ['12', '°C'] }) === 'heater:unit',
+      'each member of a sum is checked');
+    // Every demo maps plausibly; ViCare names its start counter itself (stat_labels) and is no finding
+    const demoFindings = setups.flatMap((s, i) => scenarios.flatMap(([scen]) => C._checks(s.config, hassOf(toStates(s.states(scen)), s.registry || {})).map((f) => `${i}/${scen} ${f.key}:${f.code}`)));
+    check(!demoFindings.length, `no findings in the demos (${demoFindings.slice(0, 3).join(', ')})`);
+    // Report and editor
+    const vh = hassOf(toStates({ ...base, 'sensor.ww_temp': ['50', '°C'] }));
+    const cfgBad = { entities: { ...ents, valve: 'sensor.ww_temp' } };
+    check(/Checks:\n- valve: sensor\.ww_temp reports °C, expected on\/off, or a state like Tank\/Room\./.test(C._diagnosticReport(cfgBad, vh))
+      && /Checks:\n- no findings/.test(C._diagnosticReport({ entities: ents }, vh)), 'the diagnostic report lists the checks in English');
+    const ed = document.createElement('heatpump-flow-card-editor'); ed.setConfig(cfgBad); ed.hass = vh;
+    check(ed._warn.innerHTML.includes(HFC_EDITOR.en.checks_title) && ed._warn.innerHTML.includes('sensor.ww_temp reports °C')
+      && /^Diverter valve towards hot water: sensor\.ww_temp/.test(ed._form.computeHelper({ name: 'valve' })), 'the editor shows the finding above the form and at the field');
+    check(!ed._warn.innerHTML.includes(HFC_EDITOR.en.warn_valve.slice(0, 40)), 'a valve that does not fit gets no value-map hint on top');
+    ed.setConfig({ entities: ents });
+    check(!ed._warn.innerHTML.includes(HFC_EDITOR.en.checks_title), 'no check box without findings');
+    // #194: pickers
+    const ph = hassOf(toStates({ ...base, 'sensor.nounit': '20', 'select.mode': 'auto', 'climate.house': 'heat', 'sensor.dc': { state: '22', attributes: { device_class: 'temperature' } },
+      'sensor.flow_rate': ['900', 'l/h'], 'binary_sensor.pump': 'on' }));
+    ed.hass = ph; ed.setConfig({ entities: { ...ents, room: 'sensor.nounit' } });
+    const field = (name) => ed._form.schema.flatMap((s) => s.schema || [s]).flatMap((s) => s.schema || [s]).find((s) => s.name === name);
+    const inc = (name) => field(name)?.selector.entity.include_entities;
+    check(inc('flow')?.join() === 'climate.house,sensor.dc,sensor.flow,sensor.return', `a temperature field offers temperatures by unit, device class and thermostat (${inc('flow')})`);
+    check(inc('room')?.includes('sensor.nounit') && !inc('flow').includes('sensor.nounit'), 'an entity already mapped stays selectable');
+    check(inc('volume')?.join() === 'sensor.flow_rate' && inc('power')?.join() === 'sensor.power', 'flow rate and power fields offer their kind');
+    check(field('hc_pump').selector.entity.domain?.includes('binary_sensor') && !inc('hc_pump') && !inc('mode') && !field('mode').selector.entity.domain,
+      'on/off fields keep their domains, text fields are not filtered');
+    let sent = 0; ed.addEventListener('config-changed', () => sent++);
+    ed._changed({ ...ed._form.data, all_entities: true });
+    check(sent === 0 && !('all_entities' in ed._config) && !inc('flow') && field('all_entities'), '"Show all entities" lifts the filter without changing the card configuration');
+    ed._changed({ ...ed._form.data, title: 'x' });
+    check(sent === 1 && !('all_entities' in ed._config) && !inc('flow'), 'the switch is not written with other changes');
+    ed.remove();
+    check(!C.getConfigForm().schema.some((s) => s.name === 'all_entities'), 'the plain form has no picker switch');
+    // One table: the on/off keys of the pickers and the units in the labels follow the kinds
+    check(['compressor', 'valve', 'hc_pump', 'hc6_pump', 'circulation', 'defrost', 'heater', ...HFC_TANK_HEATERS, 'bypass_valve', 'solar_pump'].every((k) => HFC_BINARY_KEYS.includes(k)),
+      'the on/off keys follow from the kind table');
+    const unitMismatch = ['en', 'de'].flatMap((lang) => Object.values(HFC_ENTITY_GROUPS).flat().filter((k) => !/^hc[2-6]_/.test(k)).filter((k) => {
+      const unit = HFC_KINDS[hfcKindOf(k)]?.label; const label = HFC_EDITOR[lang][k];
+      return unit && label && !label.includes(unit);
+    }).map((k) => `${lang}.${k}`));
+    check(!unitMismatch.length, `field labels name the unit of their kind (${unitMismatch.join(', ')})`);
+    check(Object.values(HFC_ENTITY_GROUPS).flat().every((k) => hfcKindOf(k) || k === 'eev'), 'every entity key has a kind');
+  }
+
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');
   document.getElementById('result').textContent = fails.length ? 'FAIL' : 'PASS';
