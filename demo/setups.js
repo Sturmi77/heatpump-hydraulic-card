@@ -102,6 +102,9 @@ const vaillantStates = (s) => ({
   'sensor.zuhause_domestic_hot_water_0_setpoint': ['50', '°C'], 'sensor.zuhause_circuit_0_current_flow_temperature': ['32.8', '°C'],
   'sensor.zuhause_circuit_0_flow_temperature_setpoint': ['33.5', '°C'], 'sensor.zuhause_circuit_0_state': s === 'idle' ? 'STANDBY' : 'HEATING',
   'sensor.zuhause_device_1_arotherm_plus_current_power': [s === 'idle' ? '0.01' : '1.35', 'kW'],
+  'sensor.zuhause_device_1_arotherm_plus_operation_time': ['4165.5', 'h'], 'sensor.zuhause_device_1_arotherm_plus_on_off_cycles': '2329',
+  'sensor.zuhause_device_2_hydraulic_station_operation_time': ['1.5', 'h'], 'sensor.zuhause_device_2_hydraulic_station_on_off_cycles': '12',
+  'sensor.zuhause_system_water_pressure': ['1.7', 'bar'],
   'sensor.zuhause_zone_wohnen_current_temperature': ['21.6', '°C'], 'sensor.zuhause_zone_wohnen_desired_temperature': ['21.5', '°C'],
   'binary_sensor.zuhause_trouble_codes': s === 'idle' ? 'on' : 'off',
 });
@@ -148,6 +151,7 @@ const historySim = (setup, msg) => {
 };
 // HeishaMon (Panasonic Aquarea): no operating-mode entity, valve as Room/Tank, flow in L/min, power in W.
 const hmStates = (s) => ({
+  'sensor.panasonic_heat_pump_main_heat_pump_model': 'WH-MDC05J3E5 5 1ph HP',
   'sensor.panasonic_heat_pump_main_main_outlet_temp': [{ heat: '36.0', dhw: '50.5', defrost: '23', idle: '30' }[s], '°C'],
   'sensor.panasonic_heat_pump_main_main_inlet_temp': [{ heat: '31.0', dhw: '45.0', defrost: '26', idle: '29.5' }[s], '°C'],
   'sensor.panasonic_heat_pump_main_pump_flow': [s === 'idle' ? '0' : '18.5', 'L/min'],
