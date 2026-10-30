@@ -4,6 +4,43 @@ Source: the [Luxtronik integration](https://github.com/BenPru/luxtronik) (HACS, 
 
 The integration sets the translation key of every entity to its `SensorKey` value, so the preset finds entities through the entity registry (platform `luxtronik2`). Entity ids (`sensor.luxtronik2_flow_in_temperature` with the default prefix) and the Home Assistant language do not matter.
 
+## Setup
+
+```yaml
+type: custom:heatpump-flow-card
+preset: luxtronik
+source_type: brine   # air (default), brine or water
+```
+For heat pumps with a Luxtronik controller and the [Luxtronik](https://github.com/BenPru/luxtronik) integration (HACS, platform `luxtronik2`). The integration names these manufacturers as users of the controller:
+
+- Alpha Innotec
+- Novelan
+- Roth
+- Siemens
+- Elco
+- Buderus
+- Nibe
+- Wolf Heiztechnik
+
+The controller sits in air, brine and water heat pumps alike. For air units the card draws the Alpha Innotec Hybrox; the other brands share the controller but not the casing, so set `unit_style: generic` (or another style) if the drawing does not match your unit. Brine and water units get the ground or water loop with `source_type: brine` or `water`.
+ Entities are found through the entity registry (platform + translation key), so entity ids and the HA language don't matter. The controller does not tell the heat source, so set `source_type` for brine and water heat pumps.
+
+What you get:
+- the operating status (heating, hot water, defrost, cooling, grid lock, idle) as the mode, the compressor as running
+- flow (Vorlauf) and return (Rücklauf), heating flow rate, outdoor temperature, heat source in and out
+- electrical power and heat output, giving a live COP: enable "Current power consumption" and "Current heat output" in the integration, both are disabled by default. Not every controller reports them: on an Alpha Innotec WWC 100 H/X the heat output stays 0 and the power value does not exist ([#75](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/75)). In that case use your own electricity meter and drop the heat sensor, so that the card estimates the heat output from flow rate and spread (needs a flow rate from the controller):
+  ```yaml
+  entities:
+    power: sensor.my_heat_pump_power
+    heat: none
+  ```
+- hot water temperature and target, solar collector and pump where installed, the additional heat generator as the backup heater
+- mixing circuits 1 to 3 as heating circuits (`hc_count`), only where they report a flow and a target; room unit temperature and target; the heating mode (party, holidays) as the program chip
+- refrigerant circuit in the details: hot gas, suction gas, superheat, high and low pressure
+- tiles from the kWh counters per use (heating, hot water, cooling), the heat amount, compressor hours and impulses, each as a total with the periods from long-term statistics
+
+Not mapped: the last error (it stays after a reset), the circulation pump (the integration names it ambiguously), the buffer and multifunction storage (not exposed). Add them with `entities` if you want them.
+
 ## Mapped
 
 - `mode`: `status` (values `heating`, `hot_water`, `swimming_pool_solar`, `evu`, `defrost`, `heating_external_source`, `cooling`, `no_request`). Pool and external heat source count as heating, `evu` (grid lock) as blocked, `no_request` as idle.

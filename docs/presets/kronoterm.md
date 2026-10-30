@@ -2,6 +2,40 @@
 
 Source: the [Kronoterm integration](https://github.com/Favio25/Kronoterm-homeassistant) (HACS, domain `kronoterm`), connected through the Kronoterm Cloud API or locally through Modbus. The preset was built on version 1.7.2 and checked against 1.7.3 (`upstream/kronoterm.json`). The integration sets a translation key on every entity, so the preset finds entities through the entity registry (platform `kronoterm`); entity ids and the Home Assistant language do not matter. Where Cloud and Modbus name a value differently, both names are candidates. The Cloud API mapping is confirmed on a real installation (see Evidence); the Modbus names come from the integration's register map and are not yet confirmed on hardware.
 
+## Setup
+
+```yaml
+type: custom:heatpump-flow-card
+preset: kronoterm
+```
+For Kronoterm heat pumps (ADAPT, ETERA, VERSI, WPLV …) with the [Kronoterm](https://github.com/Favio25/Kronoterm-homeassistant) integration, connected through the Kronoterm Cloud API or locally through Modbus. Entities are found through the entity registry (platform `kronoterm` + translation key), so entity ids and the HA language don't matter. With several Kronoterm heat pumps, pick one with `device:`. The hot water heat pumps of the separate Kronoterm DHW cloud are not covered.
+
+What you get:
+- the working function (heating, hot water, cooling, pool, thermal disinfection, standby, remote deactivation) as the mode, defrost from the defrost status
+- the HP load as compressor running and modulation
+- flow (HP outlet) and return (HP inlet), outdoor temperature
+- electrical power and heat output, giving a live COP
+- hot water tank temperature and target: the tank sensor and current setpoint with Modbus, the DHW thermostat with the Cloud API
+- the hot water circulator as the diverter valve, the DHW circulation pump, the reserve source as the backup heater
+- the main circulation pump of the heat pump, drawn on the flow pipe next to the heat pump block (`primary_pump: false` removes it); the loop pumps stay in their circuits
+- loops 1 to 4 as heating circuits with their pumps and flow temperatures (`hc_count: 2` and more); room temperature and target from the thermostat of the first circuit
+- heating system pressure (the measured pressure needs Kronoterm 1.7.3 or newer with the Cloud API; 1.7.2 and older report the setting of the low-pressure alarm under the same name), the error/warning sensor, ECO mode as the eco chip
+- tiles: electricity today in total and per heating, hot water and heater (Cloud API), week, month and year from the electricity counter, COP total from the SCOP, compressor starts for heating and hot water
+- details: total electricity, HP load, evaporation and compressor (hot gas) temperature, heater hours
+
+Notes from the reference installation (Hydro S 2 + ADAPT 0312, Cloud API):
+- With the Cloud API the hot water temperature exists only on the climate entity "DHW Thermostat". The card reads its `current_temperature` and its target `temperature`.
+- The working function keeps reporting heating while the unit defrosts; the defrost status switches the card to defrost. Power and heat output read 0 W during a defrost, so no COP is shown then.
+- The heat counter `heating_energy_heating_dhw` is not mapped: it reads a tenth of the heat that the electricity counter and the SCOP imply (4,728 kWh against 13,762 kWh of electricity at an SCOP of 3.43). The total COP therefore comes from the SCOP sensor.
+- Loops with a room thermostat report the room temperature as their Cloud loop temperature, so that value is never used as the circuit flow. The loop's inlet temperature is the measured flow into the loop.
+- Compressor hours exist per heating and hot water only. Add them to the details if you want them (entity ids as on the reference installation):
+  ```yaml
+  details:
+    - sensor.kronoterm_heat_pump_operating_hours_compressor_heating
+    - sensor.kronoterm_heat_pump_operating_hours_compressor_dhw
+  ```
+- The reservoir has no tank sensor (the Cloud reports a calculated value, Modbus the HP return), so no buffer is drawn.
+
 ## Integration versions
 
 - **Heating pressure: use Kronoterm 1.7.3 or newer with the Cloud API.** Up to 1.7.2 the Cloud sensor `heating_system_pressure` read register 2325, "Nastavitev tlaka ogrevalnega sistema": the setting of the low-pressure alarm, not the pressure. On the reference installation it stayed at 0.8 bar for ten days. Since 1.7.3 the same sensor reads register 2326, "Tlak ogrevalnega sistema", the measured pressure. It keeps its entity id, because the integration builds unique ids from the name. The alarm setting becomes a separate diagnostic sensor, `system_pressure_setting`; its value is a good choice for `hc_pressure_crit`. The card finds the pressure by its translation key and needs no change. With Modbus the sensor of that name has always been register 2326 (1.7.2 created no sensors for writable registers such as 2325).

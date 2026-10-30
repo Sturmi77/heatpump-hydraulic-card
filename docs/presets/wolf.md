@@ -9,6 +9,38 @@ Both talk to the Wolf SmartSet cloud through the WOLF Link home gateway and both
 
 The mapping comes from the integration sources, the wolf-comm heat pump example and the live states of the reference installation (see Evidence). Detection and drawing are confirmed on the reference installation with `wolf_smartset` (card 0.13.1, 2026-10-28), so the preset is marked `tested`. The `wolflink` branch comes from the same installation's entity registry and states and has not been run live.
 
+## Setup
+
+```yaml
+type: custom:heatpump-flow-card
+preset: wolf
+```
+For Wolf air/water heat pumps such as the CHA monoblock with a WOLF Link home gateway and the core [Wolf SmartSet Service](https://www.home-assistant.io/integrations/wolflink/) integration. Entity ids are `sensor.<device>_<parameter name>`; the device slug is detected from `sensor.<device>_compressor_status`. Wolf gas and oil boilers use the same integration but have no compressor status, so they are not taken for a heat pump. With several Wolf devices, set `prefix:` (the device slug, e.g. `zuhause`) or pick one with `device:`. The parameter names follow the language of the Wolf portal; the preset expects English names. With another language the entity ids differ, so map them manually.
+
+The same preset also serves the custom [Wolf SmartSet (read/write)](https://github.com/tibuntu/homeassistant-wolf-smartset) integration (HACS, `wolf_smartset`, version 0.3.0 or newer). Its entities are found through the entity registry by translation key, so entity ids and the language do not matter, and `prefix:` is not needed. When both integrations are installed, `wolf_smartset` is used. Leave `device:` unset for it: its entities are spread over several Home Assistant devices (heater, operating module, mixer module, the system). Differences: one mixer circuit only, no party or holiday program and no fault code (set `errors` by hand), and the DHW target comes from the adjustable number.
+
+What you get:
+- operating mode (heating, hot water, run-on, defrost, standby; cooling and frost protection where the unit reports them) and compressor status
+- compressor frequency as "running", compressor capacity (%) for the animation speed
+- electrical power (heat pump and electric heater) and heat output in kW, giving a live COP
+- heat pump flow and return, flow rate (L/min, converted)
+- diverter valve heating / hot water and the electric booster heater
+- outdoor temperature, DHW temperature and effective DHW target
+- mixer circuit flow, pump and status; room temperature and day target; holiday mode as the program chip
+- system pressure, sub fault code as error
+- tiles: heat for heating, hot water and cooling (totals, so today, week, month and year come from the long-term statistics), heat yesterday / this month / this year, compressor and heater hours
+
+Not mapped on purpose:
+- **Buffer:** the header sensor (`header_temperature`, "Sammler") sits in the buffer on some installations and in a hydraulic separator without a buffer on others. If yours is in the buffer, add it:
+  ```yaml
+  entities:
+    buffer_top: sensor.<device>_header_temperature
+  ```
+- **Electricity counters and DPF/MPF/SPF:** Wolf reports 0 for them without an energy meter at the heat pump, which would give 0 kWh tiles and no COP. With a meter, add them as free entity tiles (see [Stat tiles](../../README.md#stat-tiles)).
+- **Repeated parameter names** (`…_2`, `…_3`, e.g. `day_temperature_2`, `prog_select_2`): their order is not fixed, so the preset never uses them.
+
+On/off parameters report `ein` / `aus`; the card understands `ein` as on for pumps, heaters and badges. The integration polls the Wolf cloud once a minute, and all its entities can be `unavailable` for a minute or two at a time; the card then shows dashes until the next update.
+
 ## wolflink (core)
 
 Entity ids are `sensor.<device slug>_<parameter name>` with the names in the language of the SmartSet account (English expected). The preset finds the device slug from `sensor.<slug>_compressor_status` and returns it as the prefix; the `device:` option limits the search to one device. List states are the slugs or texts the integration reports (`heizbetrieb`, `at_abschaltung`, `Abtaubetrieb`). Parameter names that repeat get `_2`, `_3` in no fixed order and are never used.
