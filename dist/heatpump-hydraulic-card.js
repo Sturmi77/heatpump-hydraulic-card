@@ -5378,8 +5378,10 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     this._checkHelp = {};
     checks.forEach((f) => { const text = HeatpumpFlowCard._checkText(f, L, fieldName); this._checkHelp[f.key] = this._checkHelp[f.key] ? `${this._checkHelp[f.key]} ${text}` : text; });
     const list = (items) => `<ul style="margin:0;padding-left:18px">${items.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>`;
+    // A valve that does not fit at all needs no hint about its value map.
+    const info = checks.some((f) => f.key === 'valve') ? warn.filter((w) => w !== L.warn_valve) : warn;
     const html = (checks.length ? `<ha-alert alert-type="warning" title="${esc(L.checks_title)}">${list(checks.map((f) => HeatpumpFlowCard._checkText(f, L, fieldName)))}</ha-alert>` : '')
-      + (warn.length ? `<ha-alert alert-type="info" title="${esc(L.warn_title)}">${list(warn)}</ha-alert>` : '');
+      + (info.length ? `<ha-alert alert-type="info" title="${esc(L.warn_title)}">${list(info)}</ha-alert>` : '');
     if (this._warn._html !== html) { this._warn.innerHTML = html; this._warn._html = html; this._warn.style.marginBottom = html ? '12px' : '0'; }
     this._form.hass = this._hass;
     this._form.schema = schema;

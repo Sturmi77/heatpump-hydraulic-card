@@ -3482,6 +3482,7 @@
     const ed = document.createElement('heatpump-flow-card-editor'); ed.setConfig(cfgBad); ed.hass = vh;
     check(ed._warn.innerHTML.includes(HFC_EDITOR.en.checks_title) && ed._warn.innerHTML.includes('sensor.ww_temp reports °C')
       && /^Diverter valve towards hot water: sensor\.ww_temp/.test(ed._form.computeHelper({ name: 'valve' })), 'the editor shows the finding above the form and at the field');
+    check(!ed._warn.innerHTML.includes(HFC_EDITOR.en.warn_valve.slice(0, 40)), 'a valve that does not fit gets no value-map hint on top');
     ed.setConfig({ entities: ents });
     check(!ed._warn.innerHTML.includes(HFC_EDITOR.en.checks_title), 'no check box without findings');
     // #194: pickers
