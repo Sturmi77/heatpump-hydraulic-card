@@ -2346,7 +2346,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const kind = HFC_KINDS[kindName];
     if (!kind || !st) return { verdict: 'unknown' };
     const domain = String(id).split('.')[0];
-    const unit = String(st.attributes?.unit_of_measurement || '').trim().toLowerCase();
+    // Spellings of the same unit: the ordinal sign for the degree (ºC), the one-character ℃ and ℉, hours written out.
+    const unit = String(st.attributes?.unit_of_measurement || '').trim().toLowerCase().replace(/º/g, '°').replace('℃', '°c').replace('℉', '°f')
+      .replace(/^(hours|hrs|hr)$/, 'h');
     const cls = st.attributes?.device_class;
     if (!kind.domains.includes(domain)) return { verdict: 'bad', code: 'domain', domain };
     if (kind.units) {

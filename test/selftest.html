@@ -3479,6 +3479,8 @@
     { ...base, 'binary_sensor.v': 'on', 'sensor.rod': ['3000', 'W'], 'sensor.hz': ['48', 'Hz'], 'sensor.vol': ['0.69', 'm³/h'], 'climate.house': 'heat', 'water_heater.dhw': 'eco',
       'sensor.out': ['4', '°C'], 'number.shift': ['2', 'K'] }) === '', 'thermostats for reading and target, one flow rate without buffer, air inlet = outdoor: no findings');
     check(codes({ entities: { ...ents, dhw_top: 'sensor.tank' } }, { ...base, 'sensor.tank': 'unavailable' }) === '', 'an unavailable sensor without unit is not a finding');
+    check(codes({ entities: { ...ents, dhw_top: 'sensor.t1', dhw_bottom: 'sensor.t2', hours: 'sensor.h' } }, { ...base, 'sensor.t1': ['48', 'ºC'], 'sensor.t2': ['40', '℃'], 'sensor.h': ['7900', 'hours'] }) === ''
+      && C._fit('temperature', 'sensor.t1', { state: '48', attributes: { unit_of_measurement: 'ºC' } }).verdict === 'ok', 'other spellings of °C and hours are no finding');
     check(codes({ entities: { ...ents, heater: ['sensor.rod1', 'sensor.rod2'] } }, { ...base, 'sensor.rod1': ['0', 'W'], 'sensor.rod2': ['12', '°C'] }) === 'heater:unit',
       'each member of a sum is checked');
     // Every demo maps plausibly; ViCare names its start counter itself (stat_labels) and is no finding
