@@ -875,7 +875,7 @@
     check(out.controls[0].entity === 'switch.a' && out.controls[0].name === 'A' && out.controls[0].icon === 'mdi:alpha-a'
       && out.controls[1] === 'switch.c', `editor preserves metadata of controls that remain (${JSON.stringify(out.controls)})`);
     check(JSON.stringify(out.error_ok) === '["No Error","OK"]', `editor writes no-error text states (${JSON.stringify(out.error_ok)})`);
-    const names = C._formSchema({}).schema.flatMap((x) => (x.schema ? x.schema.flatMap((y) => (y.schema ? y.schema.map((z) => z.name) : [y.name])) : [x.name]));
+    const names = C._formSchema({}).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
     check(names.includes('errors') && names.includes('error_ok_text'), 'editor offers error entities and text no-error states');
     ed.remove();
   }
@@ -1999,7 +1999,7 @@
     const c2 = await mk();
     check(/- cutout_high_pressure: sensor\.heatpump_cutouts_high_pressure = 3/.test(C._diagnosticReport(s.config, c2._hass)), 'diagnostic report lists the cut-out counters');
     c2.remove();
-    const names = C._formSchema({}).schema.flatMap((x) => (x.schema ? x.schema.flatMap((y) => (y.schema ? y.schema.map((z) => z.name) : [y.name])) : [x.name]));
+    const names = C._formSchema({}).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
     check(['cutout_high_pressure', 'cutout_low_pressure', 'cutout_temperature'].every((k) => names.includes(k)), 'editor offers the three counters');
     const lab = C._formSchema({}).computeLabel;
     check(['cutout_high_pressure', 'cutout_low_pressure', 'cutout_temperature'].every((k) => /\(count of events, not a |\(Anzahl der Ereignisse, kein/.test(lab({ name: k }))), `editor labels name the counters as events (${lab({ name: 'cutout_high_pressure' })})`);
@@ -2032,7 +2032,7 @@
     try { document.createElement('heatpump-flow-card').setConfig({ hc6_type: 'bogus' }); } catch (e) { err = e.message; }
     check(/hc6_type must be one of/.test(err), 'an unknown emitter of circuit 6 is rejected');
     // editor: fields and groups follow hc_count
-    const names = (config) => C._formSchema(config).schema.flatMap((x) => (x.schema ? x.schema.flatMap((y) => (y.schema ? y.schema.map((z) => z.name) : [y.name])) : [x.name]));
+    const names = (config) => C._formSchema(config).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
     const groupNames = (config) => C._formSchema(config).schema.flatMap((x) => (x.schema ? x.schema.map((y) => y.name) : [])).join();
     check(['hc6_type', 'hc6_name', 'hc6_flow'].every((k) => names({ hc_count: 6 }).includes(k)), 'editor offers circuit 6 with six circuits');
     check(!names({ hc_count: 3 }).some((k) => /^hc[456]_/.test(k)), 'editor hides circuits 4 to 6 with three circuits');
@@ -2154,7 +2154,7 @@
       'without room keys the status line keeps the mode alone');
     c.remove();
     // editor, labels, diagnostic report, presets
-    const names = (config) => C._formSchema(config).schema.flatMap((x) => (x.schema ? x.schema.flatMap((y) => (y.schema ? y.schema.map((z) => z.name) : [y.name])) : [x.name]));
+    const names = (config) => C._formSchema(config).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
     check(['hc2_room', 'hc2_room_target', 'hc6_room', 'hc6_room_target'].every((k) => names({ hc_count: 6 }).includes(k)) && !names({ hc_count: 2 }).some((k) => /^hc[3-6]_room/.test(k)) && !names({}).includes('hc2_room'),
       'editor offers the room keys in the groups of circuits 2 to 6');
     const lab = C._formSchema({}).computeLabel;
@@ -2518,7 +2518,7 @@
     const none = mount({ preset: 'heishamon', entities: { hc_curve_offset: null } }, hassOf(st())); await wait(20);
     check(!q(none, 't-hc-now') && /^36,8 °C · Soll 36,0$|^36\.8 °C · Target 36\.0$/.test(q(none, 't-hc').textContent), `without the shift the label stays as before (${q(none, 't-hc').textContent})`);
     none.remove();
-    const names = (config) => C._formSchema(config).schema.flatMap((x) => (x.schema ? x.schema.flatMap((y) => (y.schema ? y.schema.map((z) => z.name) : [y.name])) : [x.name]));
+    const names = (config) => C._formSchema(config).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
     const lab = C._formSchema({}).computeLabel;
     check(names({ hc_count: 3 }).includes('hc_curve_offset') && names({ hc_count: 3 }).includes('hc3_curve_offset') && lab({ name: 'hc3_curve_offset' }) === lab({ name: 'hc_curve_offset' }),
       `editor offers the curve shift of each circuit (${lab({ name: 'hc_curve_offset' })})`);
@@ -3516,6 +3516,36 @@
     }).map((k) => `${lang}.${k}`));
     check(!unitMismatch.length, `field labels name the unit of their kind (${unitMismatch.join(', ')})`);
     check(Object.values(HFC_ENTITY_GROUPS).flat().every((k) => hfcKindOf(k) || k === 'eev'), 'every entity key has a kind');
+  }
+
+  // #193: core fields first, further fields in "More fields", no source fields on an air heat pump
+  {
+    const groupOf = (cfg, sec) => C._formSchema(cfg).schema.find((g) => g.type === 'expandable' && g.name === 'entities' && g.title === HFC_EDITOR.en[sec]);
+    const direct = (g) => g.schema.filter((f) => f.type !== 'expandable').map((f) => f.name);
+    const moreOf = (g) => g.schema.find((f) => f.type === 'expandable');
+    const all = (cfg) => C._formSchema(cfg).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
+    const hp = groupOf({}, 'sec_hp');
+    check(direct(hp).join() === 'mode,compressor,power,heat,flow,return,volume,outdoor,valve' && moreOf(hp)?.flatten === true && moreOf(hp).title === HFC_EDITOR.en.more_fields
+      && !moreOf(hp).expanded && moreOf(hp).schema.map((f) => f.name).includes('status'), `heat pump group: core fields first, the others in "More fields" (${direct(hp)})`);
+    const visibleCount = ['sec_hp', 'sec_storage', 'sec_hc'].reduce((n, sec) => n + direct(groupOf({}, sec)).length, 0);
+    check(visibleCount <= 15, `at most 15 entity fields before "More fields" (${visibleCount})`);
+    check(!['source_volume', 'source_out', 'brine_pressure'].some((k) => all({}).includes(k)) && ['source_volume', 'source_out', 'brine_pressure'].every((k) => all({ source_type: 'brine' }).includes(k))
+      && all({ source_type: 'water' }).includes('source_volume'), 'source fields only for brine and water');
+    check(all({ entities: { source_volume: 'sensor.x' } }).includes('source_volume') && !all({ entities: { source_volume: null } }).includes('source_volume'),
+      'an air heat pump with an own source field keeps it, so it can be cleared');
+    check(moreOf(groupOf({ entities: { dhw_middle: 'sensor.m' } }, 'sec_storage')).expanded === true && !moreOf(groupOf({ entities: { dhw_top: 'sensor.t' } }, 'sec_storage')).expanded,
+      '"More fields" opens when the configuration sets one of its fields');
+    const hc2 = groupOf({ hc_count: 2 }, 'sec_hc2');
+    check(direct(hc2).join() === 'hc2_flow,hc2_return,hc2_pump,hc2_room', `circuit 2 uses the core fields of circuit 1 (${direct(hc2)})`);
+    check(!moreOf(groupOf({}, 'sec_refrigerant')) && direct(groupOf({}, 'sec_refrigerant')).includes('evap_temp'), 'groups without core fields stay one list');
+    check(HFC_DIAGNOSTIC_KEYS.filter((k) => !/^hc[2-6]_/.test(k) && !['source_volume', 'source_out', 'brine_pressure'].includes(k)).every((k) => all({}).includes(k)),
+      'every other entity key is still in the form');
+    // The editor writes values from fields inside "More fields" to entities like any other field
+    const ed = document.createElement('heatpump-flow-card-editor');
+    ed.hass = hassOf(toStates({ 'sensor.m': ['40', '°C'] })); ed.setConfig({ entities: { flow: 'sensor.m' } });
+    ed._changed({ ...ed._form.data, entities: { ...ed._form.data.entities, dhw_middle: 'sensor.m' } });
+    check(ed._config.entities.dhw_middle === 'sensor.m' && moreOf(ed._form.schema.find((g) => g.title === HFC_EDITOR.en.sec_storage)).expanded, 'a field in "More fields" is saved and keeps its block open');
+    ed.remove();
   }
 
   // #147: the diagnostic report says what the detection looked for and where each mapping comes from
