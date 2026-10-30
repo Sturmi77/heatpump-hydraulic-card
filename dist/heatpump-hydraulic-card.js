@@ -1329,7 +1329,7 @@ const HFC_EDITOR = {
     hc_return_label: 'Show circuit return temperature', storage: 'Storage', storage_separate: 'Separate hot-water tank and buffer', storage_combined: 'Combined storage (one tank, hot-water zone on top)', dhw_type: 'Hot-water preparation', dhw_type_coil: 'Tank with heat-exchanger coil', dhw_type_fresh_water: 'Fresh-water station (on the buffer or the combined storage)', dhw_type_tank_in_tank: 'Tank in tank (combined storage)', series_buffer: 'Series buffer in the return', series_bypass: 'Series buffer with bypass valve (off: the circuits run in defrost)', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
     sec_hc2: 'Heating circuit 2', sec_hc3: 'Heating circuit 3', sec_hc4: 'Heating circuit 4', sec_hc5: 'Heating circuit 5', sec_hc6: 'Heating circuit 6', sec_details: 'Details: operation', sec_refrigerant: 'Details: refrigerant circuit', sec_cutouts: 'Details: cut-out counters',
     controls: 'Quick controls (switch, button, select, number …)', details_open: 'Details open by default',
-    from_preset: 'Found by the preset',
+    from_preset: 'Found by the preset', more_fields: 'More fields',
     sum_help: 'Sum of these entities',
     sec_advanced: 'Advanced',
     tiles_custom: 'Own tile selection', tiles: 'Tiles (drag to sort)',
@@ -1413,7 +1413,7 @@ const HFC_EDITOR = {
     hc_return_label: 'Heizkreis-Rücklauf anzeigen', storage: 'Speicher', storage_separate: 'Getrennter Warmwasserspeicher und Puffer', storage_combined: 'Kombispeicher (ein Speicher, Warmwasserzone oben)', dhw_type: 'Warmwasserbereitung', dhw_type_coil: 'Speicher mit Wärmetauscher-Wendel', dhw_type_fresh_water: 'Frischwasserstation (am Puffer oder Kombispeicher)', dhw_type_tank_in_tank: 'Tank im Tank (Kombispeicher)', series_buffer: 'Reihenpuffer im Rücklauf', series_bypass: 'Reihenpuffer mit Bypass-Ventil (aus: die Heizkreise laufen beim Abtauen)', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
     sec_hc2: 'Heizkreis 2', sec_hc3: 'Heizkreis 3', sec_hc4: 'Heizkreis 4', sec_hc5: 'Heizkreis 5', sec_hc6: 'Heizkreis 6', sec_details: 'Details: Betrieb', sec_refrigerant: 'Details: Kältekreis', sec_cutouts: 'Details: Abschaltzähler',
     controls: 'Schnellbedienung (Schalter, Taste, Auswahl, Zahl …)', details_open: 'Details standardmäßig offen',
-    from_preset: 'Von der Voreinstellung gefunden',
+    from_preset: 'Von der Voreinstellung gefunden', more_fields: 'Weitere Felder',
     sum_help: 'Summe dieser Entitäten',
     sec_advanced: 'Erweitert',
     tiles_custom: 'Eigene Kachelauswahl', tiles: 'Kacheln (zum Sortieren ziehen)',
@@ -1677,6 +1677,11 @@ const HFC_ENTITY_GROUPS = {
   sec_stats: ['cop_heating_today', 'cop_dhw_today', 'energy_today', 'pv_share_today', 'starts_today'],
 };
 const HFC_DIAGNOSTIC_KEYS = [...new Set(Object.values(HFC_ENTITY_GROUPS).flat())];
+// Editor (#193): the fields a group shows before "More fields" (circuits 2 to 6 use those of circuit 1), and the fields of a brine
+// or well loop, which an air heat pump does not have.
+const HFC_CORE_FIELDS = ['mode', 'compressor', 'power', 'heat', 'flow', 'return', 'volume', 'outdoor', 'valve', 'dhw_top', 'dhw_target',
+  'hc_flow', 'hc_return', 'hc_pump', 'room'];
+const HFC_SOURCE_KEYS = ['source_volume', 'source_out', 'brine_pressure'];
 // Entity domains usable as quick controls and the service each one calls.
 const HFC_CONTROL_DOMAINS = ['switch', 'input_boolean', 'light', 'fan', 'automation', 'button', 'input_button', 'script', 'scene',
   'select', 'input_select', 'water_heater', 'climate', 'number', 'input_number'];
@@ -2029,9 +2034,21 @@ class HeatpumpFlowCard extends HTMLElement {
           ],
         }] : []),
         ...(opts.fits ? [{ name: 'all_entities', selector: { boolean: {} } }] : []),
-        ...groups.map(([sec, keys]) => ({
-          type: 'expandable', name: 'entities', title: L[sec], schema: keys.map(entitySchema),
-        })),
+        // Core fields first, the further fields of a group in "More fields" (#193): open as soon as the configuration sets one of
+        // them. Source fields of an air heat pump are left out unless the configuration sets them (so they can be cleared).
+        ...groups.map(([sec, keys]) => {
+          const ownSet = (k) => { const v = config?.entities?.[k]; return v !== undefined && v !== null && v !== 'none' && v !== ''; };
+          const air = (config?.source_type || 'air') === 'air';
+          const shown = keys.filter((k) => !(air && HFC_SOURCE_KEYS.includes(k) && !ownSet(k)));
+          const core = shown.filter((k) => HFC_CORE_FIELDS.includes(k.replace(/^hc[2-6]_/, 'hc_').replace(/^hc_room/, 'room')));
+          const more = shown.filter((k) => !core.includes(k));
+          return {
+            type: 'expandable', name: 'entities', title: L[sec],
+            schema: core.length && more.length ? [...core.map(entitySchema), {
+              type: 'expandable', name: `${sec}_more`, flatten: true, title: L.more_fields, expanded: more.some(ownSet), schema: more.map(entitySchema),
+            }] : shown.map(entitySchema),
+          };
+        }),
         {
           type: 'expandable', name: 'advanced', flatten: true, title: L.sec_advanced, schema: [{
             type: 'grid', name: '', schema: [
