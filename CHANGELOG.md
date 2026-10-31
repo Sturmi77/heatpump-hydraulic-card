@@ -3,6 +3,7 @@
 ## Unreleased
 
 ## 0.16.0 – unreleased
+- With several heating circuits, the house contains a compact room overview: one accessible and tappable row per circuit with its name, actual and target temperature, plus a colour dot for below, within or above 0.5 K of the target. Circuit status lines now contain only the operating mode; a single circuit keeps the existing large room display (#140).
 - The ebusd preset groups mappings by their complete MQTT entity stem and selects one coherent, most-complete daemon instead of mixing fields from multiple legitimate ebusd instances. The diagnostic report lists competing groups, and `prefix` accepts a full stem for explicit selection (#197).
 - Luxtronik is marked confirmed on a real water-to-water installation with combined storage and a fresh-water station; air and brine installation reports remain welcome (#75, #208).
 - Vaillant/myPyllant is marked confirmed on a real aroTHERM plus installation; installation-specific power-source and external-meter entities remain manual overrides (#211).

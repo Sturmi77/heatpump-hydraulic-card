@@ -2129,134 +2129,65 @@
     check(/Heating circuits: 6/.test(C._diagnosticReport({ ...cfg }, hassOf(toStates(states)))), 'diagnostic report names six circuits');
   }
 
-  // 18j. room temperature and target of circuits 2 to 6: in the status line under the emitter, a part of its own beside the mode
+  // 18j. room overview: one tappable row per circuit in the house; circuit status lines keep the mode only (#140)
   {
     const states = {
-      'sensor.hp_flow': ['35', '°C'], 'sensor.hp_return': ['30', '°C'], 'sensor.hp_power': ['1200', 'W'], 'sensor.room': ['21.0', '°C'],
+      'sensor.hp_flow': ['35', '°C'], 'sensor.hp_return': ['30', '°C'], 'sensor.hp_power': ['1200', 'W'],
+      'sensor.room': ['21.0', '°C'], 'sensor.room_target': ['21.2', '°C'],
       'sensor.c2_flow': ['33', '°C'], 'binary_sensor.c2_pump': 'on', 'sensor.c3_flow': ['31', '°C'], 'binary_sensor.c3_pump': 'off',
       'sensor.attic': { state: '19.4', attributes: { unit_of_measurement: '°C', friendly_name: 'Attic temperature' } },
-      'sensor.attic_target': ['20.0', '°C'], 'sensor.c3_target': ['18.5', '°C'], 'sensor.c2_mode': 'Frost protection',
+      'sensor.attic_target': ['20.0', '°C'], 'sensor.c3_room': ['21.2', '°C'], 'sensor.c3_target': ['20.0', '°C'],
     };
-    const cfg = { hc_count: 3, hc2_type: 'radiator', hc3_type: 'column', hc2_name: 'Attic',
-      entities: { power: 'sensor.hp_power', flow: 'sensor.hp_flow', return: 'sensor.hp_return', room: 'sensor.room',
+    const cfg = { hc_count: 3, hc_name: 'Ground floor', hc2_type: 'radiator', hc3_type: 'column', hc2_name: 'Attic', hc3_name: 'Office',
+      entities: { power: 'sensor.hp_power', flow: 'sensor.hp_flow', return: 'sensor.hp_return', room: 'sensor.room', room_target: 'sensor.room_target',
         hc2_flow: 'sensor.c2_flow', hc2_pump: 'binary_sensor.c2_pump', hc3_flow: 'sensor.c3_flow', hc3_pump: 'binary_sensor.c3_pump',
-        hc2_room: 'sensor.attic', hc2_room_target: 'sensor.attic_target', hc3_room_target: 'sensor.c3_target' } };
+        hc2_room: 'sensor.attic', hc2_room_target: 'sensor.attic_target', hc3_room: 'sensor.c3_room', hc3_room_target: 'sensor.c3_target' } };
     const q = (c, id) => c.shadowRoot.getElementById(id);
     const txt = (c, id) => q(c, id)?.textContent ?? '(missing)';
-    const at = (c, id, name) => q(c, id)?.getAttribute(name);
-    const box = (el, pad = 0) => { const b = el.getBBox(); return { l: b.x - pad, r: b.x + b.width + pad, t: b.y - pad, b: b.y + b.height + pad }; };
-    const meets = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
-    // Mode and room text of circuit n: apart from each other, right of the risers of the further circuits (x 676, stroke 9), inside the
-    // schematic and, with drawings, clear of the pipes, the emitter and its heat waves (in the same coordinates as the texts).
-    const clear = (c, n, drawings = true) => {
-      const mode = q(c, `t-hc-mode${n}`); const room = q(c, `t-hc-room${n}`);
-      if (!mode || !room) return false;
-      const texts = [mode, room].filter((t) => t.textContent).map((t) => box(t));
-      const art = drawings ? [...room.closest('g[transform]').querySelectorAll('.pipe, .wave, .radiator, .rib, .column-rib, .column-cap, .column-foot, .screed')].map((el) => box(el, 4.5)) : [];
-      return texts.length > 0 && texts.every((t) => t.l >= 680.5 && t.r <= 1000 && !art.some((a) => meets(t, a))) && !(texts.length === 2 && meets(texts[0], texts[1]));
-    };
     const tap = (c, id) => q(c, id)?.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
-    // Whether the target still fits beside the mode depends on the fonts; it is checked with fixed text widths further down.
     let c = mount(cfg, hassOf(toStates(states))); await wait(25);
-    check(ok(c) && /^Room 19\.4 °C( · Target 20\.0)?$/.test(txt(c, 't-hc-room2')) && q(c, 't-hc-room2')?.querySelector('.room-temp')?.textContent === '19.4 °C', `circuit 2 shows its room temperature (${txt(c, 't-hc-room2')})`);
-    check(txt(c, 't-hc-mode2') === 'running ·' && at(c, 't-hc-mode2', 'text-anchor') === 'end' && at(c, 't-hc-room2', 'text-anchor') === 'start', `mode and room share the status line, anchored at the gap between them (${txt(c, 't-hc-mode2')})`);
-    check(clear(c, 2), 'mode and room of circuit 2 overlap neither each other, the radiator, its heat waves nor the risers of circuit 3');
-    check(txt(c, 't-hc-room3') === 'Room target 18.5 °C' && txt(c, 't-hc-mode3') === '' && at(c, 't-hc-room3', 'text-anchor') === 'middle' && at(c, 't-hc-room3', 'x') === '880',
-      `a target without a room sensor stands alone, centred under the emitter (${txt(c, 't-hc-room3')})`);
-    check(clear(c, 3), 'the target of circuit 3 stays clear of the column radiator');
-    // Since #135 circuit 1 also shows the room of the house in its status line, so every circuit shows its room in the same place.
-    check(/^Room 21\.0 °C/.test(txt(c, 't-hc-room')) && txt(c, 't-room') === '21.0 °C', `circuit 1 shows its room in its status line and keeps it in the house (${txt(c, 't-hc-room')})`);
-    check(clear(c, ''), 'mode and room of circuit 1 overlap neither each other, the emitter nor the risers of circuit 2');
-    const group = q(c, 't-hc-room2')?.parentNode;
-    check(group?.dataset.entity === 'sensor.attic' && group !== q(c, 't-hc-mode2').parentNode && q(c, 't-hc-room3')?.parentNode.dataset.entity === 'sensor.c3_target',
-      'the room is a tap target of its own: the room sensor, else the target');
+    check(ok(c) && ['house-row', 'house-row2', 'house-row3'].every((id) => q(c, id)), 'the multi-circuit house contains one row per circuit');
+    check(txt(c, 't-house-room') === '21.0 / 21.2 °C' && txt(c, 't-house-room2') === '19.4 / 20.0 °C' && txt(c, 't-house-room3') === '21.2 / 20.0 °C',
+      'house rows show the actual and target temperatures of every circuit');
+    check(q(c, 'house-comfort').classList.contains('on') && q(c, 'house-comfort2').classList.contains('below') && q(c, 'house-comfort3').classList.contains('above'),
+      'comfort dots distinguish within, below and above the 0.5 K target tolerance');
+    check(!q(c, 't-hc-room') && !q(c, 't-hc-room2') && txt(c, 't-hc-mode2') === 'running', 'circuit status lines keep only their operating mode');
+    check(q(c, 'house-row2').dataset.entity === 'sensor.attic' && q(c, 'house-row3').dataset.entity === 'sensor.c3_room', 'each room row opens its own actual sensor');
     c._a11y(true);
-    check(group?.getAttribute('role') === 'button' && group?.getAttribute('aria-label') === 'Attic temperature: 19.4 °C', `the room has a screen reader label (${group?.getAttribute('aria-label')})`);
-    let ev = [];
-    c.addEventListener('hass-more-info', (e) => ev.push(e.detail.entityId));
-    tap(c, 't-hc-room2');
-    check(ev.join() === 'sensor.attic', `a tap on the room opens the room sensor (${ev})`);
-    // the pump stops: the room with its target moves to the centre; it runs again: back beside the mode
-    states['binary_sensor.c2_pump'] = 'off'; c.hass = hassOf(toStates(states));
-    check(txt(c, 't-hc-mode2') === '' && txt(c, 't-hc-room2') === 'Room 19.4 °C · Target 20.0' && at(c, 't-hc-room2', 'text-anchor') === 'middle' && at(c, 't-hc-room2', 'x') === '880',
-      `without a mode text the room and its target are centred (${txt(c, 't-hc-room2')})`);
+    check(q(c, 'house-row2').getAttribute('role') === 'button' && /Attic: Room 19\.4 °C, Target 20\.0 °C; below target/.test(q(c, 'house-row2').getAttribute('aria-label') || ''),
+      'room row has a complete accessible label');
+    let ev = []; c.addEventListener('hass-more-info', (e) => ev.push(e.detail.entityId)); tap(c, 't-house-room2');
+    check(ev.join() === 'sensor.attic', 'a tap on the overview row opens the room sensor');
     states['sensor.attic'] = { ...states['sensor.attic'], state: 'unavailable' }; c.hass = hassOf(toStates(states));
-    check(txt(c, 't-hc-room2') === 'Room – °C · Target 20.0', `an unavailable room sensor shows a dash (${txt(c, 't-hc-room2')})`);
-    states['binary_sensor.c2_pump'] = 'on'; c.hass = hassOf(toStates(states));
-    check(txt(c, 't-hc-mode2') === 'running ·' && at(c, 't-hc-room2', 'text-anchor') === 'start' && clear(c, 2), 'the pump runs again: mode and room side by side');
-    c.remove();
-    // a long mode text: the pair moves left but stays right of the risers, also on a narrow card with larger type
-    states['sensor.attic'] = { ...states['sensor.attic'], state: '19.4' };
-    const long = { ...cfg, entities: { ...cfg.entities, hc2_mode: 'sensor.c2_mode' } };
-    c = mount(long, hassOf(toStates(states))); await wait(25);
-    check(txt(c, 't-hc-mode2') === 'Frost protection ·' && txt(c, 't-hc-room2').startsWith('Room 19.4 °C') && clear(c, 2), `a long mode keeps mode and room apart (${txt(c, 't-hc-mode2')} ${txt(c, 't-hc-room2')})`);
+    check(txt(c, 't-house-room2') === '– / 20.0 °C' && q(c, 'house-comfort2').classList.contains('unknown'), 'an unavailable actual value keeps the target and an unknown comfort dot');
     c.style.display = 'block'; c.style.width = '400px'; await wait(30); c.hass = hassOf(toStates(states));
-    check(getComputedStyle(q(c, 'svg')).getPropertyValue('--k2').trim() === '1.3' && txt(c, 't-hc-room2').startsWith('Room 19.4 °C') && clear(c, 2, false),
-      `narrow card: larger type, mode and room still fit (${txt(c, 't-hc-mode2')} ${txt(c, 't-hc-room2')})`);
+    const house = c.shadowRoot.querySelector('.house').getBBox();
+    check(getComputedStyle(q(c, 'svg')).getPropertyValue('--k2').trim() === '1.3'
+      && [...c.shadowRoot.querySelectorAll('.house-row text')].every((el) => { const b = el.getBBox(); return b.x >= house.x && b.x + b.width <= house.x + house.width; }),
+    'narrow cards keep every room-row label inside the house');
     c.remove();
-    // where both do not fit, the target gives way (text widths fixed at 8 per character, so the result does not depend on the fonts)
-    const xs = (k) => `${at(k, 't-hc-mode2', 'x')}/${at(k, 't-hc-room2', 'x')}`;
-    const measure = SVGTextContentElement.prototype.getComputedTextLength;
-    SVGTextContentElement.prototype.getComputedTextLength = function () { return this.textContent.length * 8; };
-    try {
-      c = mount(cfg, hassOf(toStates(states))); await wait(25);
-      check(txt(c, 't-hc-room2') === 'Room 19.4 °C · Target 20.0' && xs(c) === '783/788', `72 + 5 + 208 fit: centred, then moved left to end at 996 (${xs(c)})`);
-      c.remove();
-      c = mount(long, hassOf(toStates(states))); await wait(25);
-      check(txt(c, 't-hc-room2') === 'Room 19.4 °C' && xs(c) === '895/900', `144 + 5 + 208 do not fit: the target is left out (${txt(c, 't-hc-room2')}, ${xs(c)})`);
-      c.remove();
-    } finally { SVGTextContentElement.prototype.getComputedTextLength = measure; }
-    // a card updated while hidden has no text widths: it estimates them and lays the line out again once it is shown
-    c = mount(cfg, hassOf(toStates(states))); await wait(25);
-    const shown = xs(c); c.remove();
-    c = document.createElement('heatpump-flow-card'); c.setConfig(cfg); c.style.display = 'none'; document.body.appendChild(c);
-    c.hass = hassOf(toStates(states)); c.hass = hassOf(toStates(states));
-    const hidden = xs(c);
-    c.style.display = ''; await wait(25); c.hass = hassOf(toStates(states));
-    check(hidden !== shown && xs(c) === shown, `a hidden card measures again when shown (${hidden} → ${xs(c)}, expected ${shown})`);
+
+    c = mount({ ...cfg, actions: { hc2_room: { tap_action: { action: 'navigate', navigation_path: '/attic' } } } }, hassOf(toStates({ ...states, 'sensor.attic': ['19.4', '°C'] }))); await wait(25);
+    ev = []; c.addEventListener('hass-action', (e) => ev.push(e.detail.config.tap_action?.navigation_path)); tap(c, 't-house-room2');
+    check(ev.join() === '/attic', 'actions work from the house overview'); c.remove();
+
+    const sixEntities = { ...cfg.entities }; const sixStates = { ...states };
+    for (let n = 4; n <= 6; n++) { sixEntities['hc' + n + '_room_target'] = 'sensor.c' + n + '_target'; sixStates['sensor.c' + n + '_target'] = [String(18 + n), '°C']; }
+    c = mount({ ...cfg, hc_count: 6, entities: sixEntities }, hassOf(toStates(sixStates))); await wait(25);
+    check(['', '2', '3', '4', '5', '6'].every((s) => q(c, 'house-row' + s)) && q(c, 'house-row6').getBBox().y + q(c, 'house-row6').getBBox().height <= 262,
+      'six room rows fit inside the expanded house');
     c.remove();
-    // actions, German, custom texts
-    c = mount({ ...cfg, actions: { hc2_room: { tap_action: { action: 'navigate', navigation_path: '/attic' } } } }, hassOf(toStates(states))); await wait(25);
-    ev = []; c.addEventListener('hass-action', (e) => ev.push(e.detail.config.tap_action?.navigation_path));
-    tap(c, 't-hc-room2');
-    check(ev.join() === '/attic', `actions work for hc2_room (${ev})`);
-    c.remove();
-    // with both pumps off the rooms stand alone, so the whole texts are shown whatever the fonts
-    const still = { ...states, 'binary_sensor.c2_pump': 'off' };
-    c = mount({ ...cfg, language: 'de' }, hassOf(toStates(still))); await wait(25);
-    check(/^Raum 19[.,]4 °C · Soll 20[.,]0$/.test(txt(c, 't-hc-room2')) && /^Raum-Soll 18[.,]5 °C$/.test(txt(c, 't-hc-room3')),
-      `German room texts (${txt(c, 't-hc-room2')} / ${txt(c, 't-hc-room3')})`);
-    c.remove();
-    let custom;
-    try {
-      c = mount({ ...cfg, language: 'nl', texts: { nl: { room: 'Kamer', room_target: 'Kamerdoel', target: 'Doel' } } }, hassOf(toStates(still))); await wait(25);
-      custom = `${txt(c, 't-hc-room2')} / ${txt(c, 't-hc-room3')}`; c.remove();
-    } catch (e) { custom = e.message; }
-    check(custom === 'Kamer 19.4 °C · Doel 20.0 / Kamerdoel 18.5 °C', `custom texts name the room (${custom})`);
-    // without room keys the status line is unchanged
-    c = mount({ ...cfg, entities: { ...cfg.entities, hc2_room: null, hc2_room_target: null, hc3_room_target: null } }, hassOf(toStates(states))); await wait(25);
-    check(txt(c, 't-hc-room2') === '' && !q(c, 't-hc-room2')?.parentNode.dataset.entity && txt(c, 't-hc-mode2') === 'running' && at(c, 't-hc-mode2', 'text-anchor') === 'middle',
-      'without room keys the status line keeps the mode alone');
-    c.remove();
-    // editor, labels, diagnostic report, presets
+
+    c = mount({ ...cfg, hc_count: 1 }, hassOf(toStates(states))); await wait(25);
+    check(txt(c, 't-room') === '21.0 °C' && !q(c, 'house-row') && !q(c, 't-hc-room'), 'one circuit keeps the established large room display'); c.remove();
+
     const names = (config) => C._formSchema(config).schema.flatMap(function k(n) { return n.schema ? n.schema.flatMap(k) : [n.name]; });
-    check(['hc2_room', 'hc2_room_target', 'hc6_room', 'hc6_room_target'].every((k) => names({ hc_count: 6 }).includes(k)) && !names({ hc_count: 2 }).some((k) => /^hc[3-6]_room/.test(k)) && !names({}).includes('hc2_room'),
+    check(['hc2_room', 'hc2_room_target', 'hc6_room', 'hc6_room_target'].every((k) => names({ hc_count: 6 }).includes(k)) && !names({ hc_count: 2 }).some((k) => /^hc[3-6]_room/.test(k)),
       'editor offers the room keys in the groups of circuits 2 to 6');
-    const lab = C._formSchema({}).computeLabel;
-    check(lab({ name: 'hc2_room' }) === lab({ name: 'room' }) && lab({ name: 'hc6_room_target' }) === lab({ name: 'room_target' }) && /^(Room temperature|Raumtemperatur) \(°C\)$/.test(lab({ name: 'hc3_room' })),
-      `circuit rooms reuse the room labels (${lab({ name: 'hc2_room' })} / ${lab({ name: 'hc2_room_target' })})`);
     const report = C._diagnosticReport(cfg, hassOf(toStates(states)));
-    check(/- hc2_room: sensor\.attic = 19\.4 °C/.test(report) && /- hc2_room_target: sensor\.attic_target = 20\.0 °C/.test(report) && /- Not mapped: [^\n]*\bhc3_room\b/.test(report) && !/- Not mapped: [^\n]*\bhc4_room\b/.test(report),
-      'diagnostic report lists the room keys of the circuits');
+    check(/- hc2_room: sensor\.attic\b/.test(report) && /- hc3_room_target: sensor\.c3_target\b/.test(report), 'diagnostic report lists the room overview entities');
     const lam = C._resolve({ preset: 'lambda', hc_count: 6 }, hassOf(toStates(setups[0].states('heat')), setups[0].registry || {}));
     check(!Object.keys(lam.entities).some((k) => /^hc[2-6]_room/.test(k)), 'presets leave the rooms of circuits 2 to 6 to the configuration');
-    // the ground source demo: upstairs with a room sensor of its own and the thermostat target, beside "running" while heating
-    const g = setups[6]; c = mount(g.config, hassOf(toStates(g.states('heat')), g.registry || {}, g.energy, g)); await wait(25);
-    check(txt(c, 't-hc-mode2') === 'running ·' && txt(c, 't-hc-room2').startsWith('Room 20.6 °C') && txt(c, 't-room') === '21.2 °C' && clear(c, 2), `demo: upstairs room in its status line (${txt(c, 't-hc-room2')})`);
-    c.remove();
-    c = mount(g.config, hassOf(toStates(g.states('idle')), g.registry || {}, g.energy, g)); await wait(25);
-    check(txt(c, 't-hc-room2') === 'Room 20.6 °C · Target 21.0' && clear(c, 2), `demo in standby: room and target centred (${txt(c, 't-hc-room2')})`);
-    c.remove();
   }
 
   // 18d. HeishaMon with heishamon-homeassistant 2.11.4 (#56): Energy spellings, totals, zone target, holiday switch
@@ -2348,7 +2279,7 @@
     const txt = (c, id) => c.shadowRoot.getElementById(id)?.textContent || '';
     const card = mount({ preset: 'kronoterm', hc_count: 2 }, hassK('heat')); await wait(20);
     check(txt(card, 't-dhw-top') === '49.6 °C' && txt(card, 't-dhw-mode') === 'Target 50 °C', `tank temperature and target from the DHW thermostat (${txt(card, 't-dhw-top')} / ${txt(card, 't-dhw-mode')})`);
-    check(txt(card, 't-room') === '22.4 °C' && txt(card, 't-room-target') === 'Target 22.7 °C', `room and target (${txt(card, 't-room')} / ${txt(card, 't-room-target')})`);
+    check(txt(card, 't-house-room') === '22.4 / 22.7 °C', `room and target (${txt(card, 't-house-room')})`);
     check(/^33\.2 °C/.test(txt(card, 't-hc')) && /^30\.5 °C/.test(txt(card, 't-hc2')), `circuit flows (${txt(card, 't-hc')} / ${txt(card, 't-hc2')})`);
     check(txt(card, 't-hp-cop') === 'COP 3.7' && txt(card, 't-hp-power') === '1,464 W → 5.5 kW', `live COP from heat output and power (${txt(card, 't-hp-cop')} / ${txt(card, 't-hp-power')})`);
     check(!errOn(card) && !card.shadowRoot.getElementById('chip-program').classList.contains('on'), 'no error and no program chip in auto mode');
@@ -3133,7 +3064,7 @@
     const coil = /\.coil\.on \{[^}]*stroke-dasharray: ([\d.]+) ([\d.]+); animation: (hfc-[a-z]+)/.exec(css);
     const cs = shift(coil[3]); const cp = parseFloat(coil[1]) + parseFloat(coil[2]);
     check(Math.abs(cs / cp - Math.round(cs / cp)) < 1e-6, `.coil: the animation moves by whole dash periods (${cs} / ${cp})`);
-    // Several circuits: circuit 1 shows the room of the house in its status line, like circuits 2 to 6.
+    // Several circuits: every room moves into the overview in the house; status lines keep the mode.
     const st = (extra = {}) => toStates({
       'sensor.f': ['36', '°C'], 'sensor.r': ['31', '°C'], 'sensor.c': ['40', 'Hz'], 'binary_sensor.p1': 'on', 'binary_sensor.p2': 'on',
       'sensor.r1': ['21.4', '°C'], 'number.rt1': ['21', '°C'], 'sensor.r2': ['20.1', '°C'], 'sensor.p': ['1.8', 'bar'], 'sensor.bt': ['32', '°C'], ...extra,
@@ -3141,9 +3072,9 @@
     const ents = { flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c', hc_pump: 'binary_sensor.p1', hc2_pump: 'binary_sensor.p2', room: 'sensor.r1', room_target: 'number.rt1', hc2_room: 'sensor.r2' };
     const q = (c, id) => c.shadowRoot.getElementById(id);
     let card = mount({ entities: ents, hc_count: 2 }, hassOf(st())); await wait(20);
-    check(/21\.4/.test(q(card, 't-hc-room')?.textContent || '') && /21\.0|21/.test(q(card, 't-hc-room').textContent) && /20\.1/.test(q(card, 't-hc-room2')?.textContent || ''),
-      `two circuits: circuit 1 shows its room like circuit 2 (${q(card, 't-hc-room')?.textContent} / ${q(card, 't-hc-room2')?.textContent})`);
-    check(q(card, 't-hc-room').closest('.tap').dataset.entity === 'sensor.r1' && /21\.4/.test(q(card, 't-room').textContent), 'circuit 1 room opens the room sensor; the house keeps it');
+    check(/21\.4/.test(q(card, 't-house-room')?.textContent || '') && /21\.0|21/.test(q(card, 't-house-room').textContent) && /20\.1/.test(q(card, 't-house-room2')?.textContent || ''),
+      `two circuits: the house shows both room rows (${q(card, 't-house-room')?.textContent} / ${q(card, 't-house-room2')?.textContent})`);
+    check(q(card, 'house-row').dataset.entity === 'sensor.r1' && !q(card, 't-hc-room'), 'the first room row opens its sensor and is not repeated under the emitter');
     card.remove();
     card = mount({ entities: ents }, hassOf(st())); await wait(20);
     check(!q(card, 't-hc-room') && /21\.4/.test(q(card, 't-room').textContent), 'one circuit: the room stays in the house only');

@@ -1157,7 +1157,7 @@ const HFC_I18N = {
     not_found: 'No entities of this preset found. Check the integration and the prefix, or open the card editor.',
     start: 'No supported heat pump integration found. Open the card editor to pick a preset or to map your entities.', start_link: 'Supported integrations',
     title: 'Heat pump', heat_pump: 'Heat pump', dhw: 'Hot water', buffer: 'Buffer', series_tank: 'Series buffer', combined_tank: 'Combined storage', heating_zone: 'Heating', fresh_water_station: 'Fresh-water station', heating_circuit: 'Heating circuit',
-    house: 'Rooms', room: 'Room', room_target: 'Room target', running: 'running', compressor_off: 'Compressor off', source_in: 'Air inlet', outdoor: 'Outdoor',
+    house: 'Rooms', room: 'Room', room_target: 'Room target', comfort_below: 'below target', comfort_on: 'at target', comfort_above: 'above target', running: 'running', compressor_off: 'Compressor off', source_in: 'Air inlet', outdoor: 'Outdoor',
     energy_missing: 'Energy dashboard: no power sensor for {sources}; energy counters alone cannot show live flow.',
     brine_in: 'Brine in', brine_out: 'Brine out', well_in: 'Well in', well_out: 'Well out',
     details: 'Details', sec_operation: 'Operation', sec_hydraulic: 'Hydraulic pressures', sec_refrigerant: 'Refrigerant circuit', sec_cutouts: 'Cut-outs (number of events)', sec_more: 'More',
@@ -1198,7 +1198,7 @@ const HFC_I18N = {
     not_found: 'Keine Entitäten dieser Voreinstellung gefunden. Integration und Präfix prüfen oder den Karteneditor öffnen.',
     start: 'Keine unterstützte Wärmepumpen-Integration gefunden. Im Karteneditor eine Voreinstellung wählen oder die Entitäten selbst zuordnen.', start_link: 'Unterstützte Integrationen',
     title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', dhw: 'Warmwasser', buffer: 'Puffer', series_tank: 'Reihenpuffer', combined_tank: 'Kombispeicher', heating_zone: 'Heizung', fresh_water_station: 'Frischwasserstation', heating_circuit: 'Heizkreis',
-    house: 'Wohnräume', room: 'Raum', room_target: 'Raum-Soll', running: 'läuft', compressor_off: 'Verdichter aus', source_in: 'Luft-Eintritt', outdoor: 'Außen',
+    house: 'Wohnräume', room: 'Raum', room_target: 'Raum-Soll', comfort_below: 'unter Soll', comfort_on: 'im Soll', comfort_above: 'über Soll', running: 'läuft', compressor_off: 'Verdichter aus', source_in: 'Luft-Eintritt', outdoor: 'Außen',
     energy_missing: 'Energie-Dashboard: kein Leistungssensor für {sources}; Energiezähler allein zeigen keinen aktuellen Fluss.',
     brine_in: 'Sole ein', brine_out: 'Sole aus', well_in: 'Brunnen ein', well_out: 'Brunnen aus',
     details: 'Details', sec_operation: 'Betrieb', sec_hydraulic: 'Hydraulikdrücke', sec_refrigerant: 'Kältekreis', sec_cutouts: 'Abschaltungen (Anzahl der Ereignisse)', sec_more: 'Weitere',
@@ -1240,7 +1240,7 @@ const HFC_I18N = {
     not_found: 'Nenašli sa žiadne entity tejto predvoľby. Skontrolujte integráciu a predponu, alebo otvorte editor karty.',
     start: 'Nenašla sa žiadna podporovaná integrácia tepelného čerpadla. Otvorte editor karty a vyberte predvoľbu alebo priraďte svoje entity.', start_link: 'Podporované integrácie',
     title: 'Tepelné čerpadlo', heat_pump: 'Tepelné čerpadlo', dhw: 'Teplá voda', buffer: 'Akumulačný zásobník', series_tank: 'Sériový akumulačný zásobník', combined_tank: 'Kombinovaný zásobník', heating_zone: 'Vykurovanie', fresh_water_station: 'Čerstvá voda (stanica)', heating_circuit: 'Vykurovací okruh',
-    house: 'Miestnosti', room: 'Miestnosť', room_target: 'Cieľová teplota', running: 'beží', compressor_off: 'Kompresor vypnutý', source_in: 'Prívod vzduchu', outdoor: 'Vonku',
+    house: 'Miestnosti', room: 'Miestnosť', room_target: 'Cieľová teplota', comfort_below: 'pod cieľom', comfort_on: 'na cieli', comfort_above: 'nad cieľom', running: 'beží', compressor_off: 'Kompresor vypnutý', source_in: 'Prívod vzduchu', outdoor: 'Vonku',
     energy_missing: 'Energetický panel: chýba senzor výkonu pre {sources}; samotné merače energie nedokážu zobraziť aktuálny prietok.',
     brine_in: 'Vstup nemrznúcej zmesi', brine_out: 'Výstup nemrznúcej zmesi', well_in: 'Vstup zo studne', well_out: 'Výstup do studne',
     details: 'Podrobnosti', sec_operation: 'Prevádzka', sec_hydraulic: 'Hydraulické tlaky', sec_refrigerant: 'Chladiaci okruh', sec_cutouts: 'Vypnutia (počet udalostí)', sec_more: 'Viac',
@@ -1281,7 +1281,7 @@ const HFC_I18N = {
     not_found: 'Nenalezeny žádné entity této předvolby. Zkontrolujte integraci a předponu, nebo otevřete editor karty.',
     start: 'Nenalezena žádná podporovaná integrace tepelného čerpadla. Otevřete editor karty a vyberte předvolbu nebo přiřaďte své entity.', start_link: 'Podporované integrace',
     title: 'Tepelné čerpadlo', heat_pump: 'Tepelné čerpadlo', dhw: 'Teplá voda', buffer: 'Akumulační zásobník', series_tank: 'Sériový akumulační zásobník', combined_tank: 'Kombinovaný zásobník', heating_zone: 'Vytápění', fresh_water_station: 'Čerstvá voda (stanice)', heating_circuit: 'Topný okruh',
-    house: 'Místnosti', room: 'Místnost', room_target: 'Cílová teplota', running: 'běží', compressor_off: 'Kompresor vypnutý', source_in: 'Přívod vzduchu', outdoor: 'Venku',
+    house: 'Místnosti', room: 'Místnost', room_target: 'Cílová teplota', comfort_below: 'pod cílem', comfort_on: 'na cíli', comfort_above: 'nad cílem', running: 'běží', compressor_off: 'Kompresor vypnutý', source_in: 'Přívod vzduchu', outdoor: 'Venku',
     energy_missing: 'Energetický panel: chybí senzor výkonu pro {sources}; samotné měřiče energie nedokážou zobrazit aktuální průtok.',
     brine_in: 'Vstup nemrznoucí směsi', brine_out: 'Výstup nemrznoucí směsi', well_in: 'Vstup ze studny', well_out: 'Výstup do studny',
     details: 'Podrobnosti', sec_operation: 'Provoz', sec_hydraulic: 'Hydraulické tlaky', sec_refrigerant: 'Chladicí okruh', sec_cutouts: 'Vypnutí (počet událostí)', sec_more: 'Více',
@@ -1687,7 +1687,7 @@ const HFC_ENTITY_GROUPS = {
   sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost'],
   sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'dhw_loss_sensor', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
   sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_pressure', 'room', 'room_target', 'program'],
-  // The room of circuit 1 is the house (room, room_target); circuits 2 to 6 show theirs in their status line.
+  // The room of circuit 1 uses room/room_target; circuits 2 to 6 use their numbered keys in the shared house overview.
   sec_hc2: ['hc2_flow', 'hc2_return', 'hc2_setpoint', 'hc2_mode', 'hc2_pump', 'hc2_volume', 'hc2_curve_offset', 'hc2_room', 'hc2_room_target'],
   sec_hc3: ['hc3_flow', 'hc3_return', 'hc3_setpoint', 'hc3_mode', 'hc3_pump', 'hc3_volume', 'hc3_curve_offset', 'hc3_room', 'hc3_room_target'],
   sec_hc4: ['hc4_flow', 'hc4_return', 'hc4_setpoint', 'hc4_mode', 'hc4_pump', 'hc4_volume', 'hc4_curve_offset', 'hc4_room', 'hc4_room_target'],
@@ -2968,56 +2968,10 @@ class HeatpumpFlowCard extends HTMLElement {
   // Room keys of circuit n: circuit 1 uses the room and target of the house, circuits 2 to 6 their own.
   _roomKey(n, key = 'room') { return n === 1 ? key : `hc${n}_${key}`; }
 
-  // Status line of heating circuit n under its emitter: the mode (or "running") and, with several circuits, the room temperature and
-  // target of that circuit as a part of its own (tap target and screen reader label), e.g. "Heating · Room 21.4 °C · Target 22.0".
-  // Circuit 1 repeats the room of the house there, so every circuit shows its room in the same place (#135).
-  // The two texts are centred together and anchored at the gap between them, so they never overlap. They stay right of the risers
-  // of the further circuits (from x 692, or from x 760 with the return label of the circuit) and inside the schematic (up to x 996); where both do not fit, the room target is left out.
-  // k2 is the type scale of narrow schematics.
-  _hcStatus(n, status, k2) {
+  // Room values have their own overview in the house (#140); the line below an emitter is reserved for its operating mode.
+  _hcStatus(n, status) {
     const s = n === 1 ? '' : String(n);
-    const mode = this._$(`t-hc-mode${s}`); const room = this._$(`t-hc-room${s}`);
-    const i = this._i;
-    let value = ''; let rest = '';
-    if (room) {
-      const rt = this._n(this._roomKey(n, 'room_target'));
-      // Without a room sensor the target stands alone, as in the house.
-      if (this._has(this._roomKey(n))) { value = this._t(this._n(this._roomKey(n))); if (Number.isFinite(rt)) rest = ` · ${i.target} ${this._fmt(rt)}`; }
-      else if (Number.isFinite(rt)) rest = `${i.room_target} ${this._fmt(rt)} °C`;
-    }
-    const both = !!status && !!(value || rest);
-    this._txt(`t-hc-mode${s}`, both ? `${status} ·` : status);
-    if (!mode || !room) return;
-    // The return label of the circuit sits under its return pipe up to x ~750 on the same line.
-    const minX = this._config.hc_return_label && this._has(this._hk(n, 'return')) ? 760 : 692;
-    const key = `${status}|${value}|${rest}|${k2}|${minX}`;
-    if (room._k === key) return;
-    room.textContent = '';
-    if (value) {
-      const span = (cls, text) => { const t = document.createElementNS('http://www.w3.org/2000/svg', 'tspan'); t.setAttribute('class', cls); t.textContent = text; return t; };
-      room.append(span('pre', `${i.room} `), span('room-temp', value));
-    }
-    const target = rest ? document.createTextNode(rest) : null;
-    if (target) room.append(target);
-    let xm = 880; let xr = 880; let measured = true;
-    if (both) {
-      // The widths need the rendered text; a hidden card uses an estimate and measures again on the next update.
-      const width = (el) => {
-        let w = 0;
-        try { w = el.getComputedTextLength(); } catch (err) { w = 0; }
-        if (w > 0) return w;
-        measured = false;
-        return el.textContent.length * 7 * k2;
-      };
-      const wm = width(mode); const gap = 5 * k2;
-      let wr = width(room);
-      if (value && target && wm + gap + wr > 996 - minX) { target.remove(); wr = width(room); }
-      const left = Math.max(Math.min(880 - (wm + gap + wr) / 2, 996 - wm - gap - wr), minX);
-      xm = left + wm; xr = xm + gap;
-    }
-    mode.setAttribute('x', +xm.toFixed(1)); mode.setAttribute('text-anchor', both ? 'end' : 'middle');
-    room.setAttribute('x', +xr.toFixed(1)); room.setAttribute('text-anchor', both ? 'start' : 'middle');
-    room._k = measured ? key : '';
+    this._txt(`t-hc-mode${s}`, status);
   }
 
   // Label with a prefix (VL / RL) that narrow schematics leave out.
@@ -3059,7 +3013,7 @@ class HeatpumpFlowCard extends HTMLElement {
       // Circuit 1 exists wherever the heat loop is drawn, without a sensor of its own: it hangs on the buffer (whose temperature
       // it shows as its flow), or on the heat pump's flow and return in a direct system.
       hc: this._has('hc_flow') || this._has('hc_mode') || this._has('hc_pump') || buffer || this._has('flow') || this._has('return'),
-      house: this._has('room') || this._has('room_target'),
+      house: Array.from({ length: this._hcCount }, (_, n) => this._has(this._roomKey(n + 1)) || this._has(this._roomKey(n + 1, 'room_target'))).some(Boolean),
       circ: this._has('circulation'),
       primaryPump: this._primaryPump(),
       hcPump: this._has('hc_pump'),
@@ -3266,14 +3220,7 @@ class HeatpumpFlowCard extends HTMLElement {
 
           ${P.solar ? this._solarSvg() : ''}
 
-          ${P.house ? `
-            <g class="tap" ${de(e.room ? 'room' : 'room_target')}>
-              <path class="house" d="M720 130 L830 50 L940 130 V240 H720 Z"/>
-              <text class="tank-title" x="830" y="118" text-anchor="middle">${this._esc(i.house)}</text>
-              <text class="house-temp" id="t-room" x="830" y="172" text-anchor="middle"></text>
-              <text class="house-sub" id="t-room-target" x="830" y="202" text-anchor="middle"></text>
-              ${this._sourceType === 'air' ? '' : '<text class="small" id="t-outdoor" x="830" y="226" text-anchor="middle"></text>'}
-            </g>` : (this._has('outdoor') && this._sourceType !== 'air' ? `<g class="tap" ${de('outdoor')}><text class="small" id="t-outdoor" x="880" y="120" text-anchor="middle"></text></g>` : '')}
+          ${P.house ? this._houseSvg() : (this._has('outdoor') && this._sourceType !== 'air' ? `<g class="tap" ${de('outdoor')}><text class="small" id="t-outdoor" x="880" y="120" text-anchor="middle"></text></g>` : '')}
         </svg>
         </div>
         <div class="side">
@@ -3842,7 +3789,38 @@ class HeatpumpFlowCard extends HTMLElement {
       </g>`;
   }
 
-  // Heating circuit n (1-3). Circuits 2 and 3 sit below circuit 1, fed by risers from its flow and return.
+  // One circuit keeps the established large room display. With several circuits, the house becomes a compact overview: one
+  // independently tappable row per circuit, with its configured name, actual/target temperatures and comfort dot (#140).
+  _houseSvg() {
+    const i = this._i; const e = this._e;
+    const de = (key) => (e[key] ? `data-entity="${this._esc(e[key])}"` : '');
+    if (this._hcCount === 1) {
+      return `<g class="tap" ${de(e.room ? 'room' : 'room_target')}>
+        <path class="house" d="M720 130 L830 50 L940 130 V240 H720 Z"/>
+        <text class="tank-title" x="830" y="118" text-anchor="middle">${this._esc(i.house)}</text>
+        <text class="house-temp" id="t-room" x="830" y="172" text-anchor="middle"></text>
+        <text class="house-sub" id="t-room-target" x="830" y="202" text-anchor="middle"></text>
+        ${this._sourceType === 'air' ? '' : '<text class="small" id="t-outdoor" x="830" y="226" text-anchor="middle"></text>'}
+      </g>`;
+    }
+    const rows = Array.from({ length: this._hcCount }, (_, x) => {
+      const n = x + 1; const s = n === 1 ? '' : String(n); const key = this._roomKey(n);
+      const target = this._roomKey(n, 'room_target'); const entityKey = e[key] ? key : target;
+      const name = this._config[n === 1 ? 'hc_name' : `hc${n}_name`] || `${i.heating_circuit} ${n}`;
+      const y = 118 + x * 21.5;
+      return `<g class="tap house-row" id="house-row${s}" ${de(entityKey)} data-name="${this._esc(name)}">
+        <circle class="house-comfort unknown" id="house-comfort${s}" cx="734" cy="${y - 4}" r="5"/>
+        <text class="house-row-name" x="746" y="${y}">${this._esc(name)}</text>
+        <text class="house-row-value" id="t-house-room${s}" x="950" y="${y}" text-anchor="end"></text>
+      </g>`;
+    }).join('');
+    return `<path class="house" d="M720 110 L842.5 25 L965 110 V262 H720 Z"/>
+      <text class="tank-title" x="842.5" y="91" text-anchor="middle">${this._esc(i.house)}</text>
+      ${rows}
+      ${this._sourceType === 'air' ? '' : `<g class="tap" ${de('outdoor')}><text class="small" id="t-outdoor" x="842.5" y="252" text-anchor="middle"></text></g>`}`;
+  }
+
+  // Heating circuit n (1-6). Circuits 2 to 6 sit below circuit 1, fed by risers from its flow and return.
   _circuitSvg(n) {
     const i = this._i; const e = this._e;
     const s = n === 1 ? '' : String(n);
@@ -3880,7 +3858,6 @@ class HeatpumpFlowCard extends HTMLElement {
         ${em.title}
         <text class="small" id="t-hc-mode${s}" x="880" y="524" text-anchor="middle"></text>
       </g>
-      ${this._hcCount > 1 ? `<g class="tap" ${de(e[this._roomKey(n)] ? this._roomKey(n) : this._roomKey(n, 'room_target'))}><text class="small" id="t-hc-room${s}" x="880" y="524" text-anchor="middle"></text></g>` : ''}
     </g>`;
   }
 
@@ -4892,7 +4869,6 @@ class HeatpumpFlowCard extends HTMLElement {
 
     if (P.hc || this._hcCount > 1) {
       const pick = (...v) => v.find((x) => Number.isFinite(x)) ?? NaN;
-      const k2 = this._hcCount > 1 ? parseFloat(getComputedStyle(this._$('svg')).getPropertyValue('--k2')) || 1 : 1;
       // The shared trunk carries the water before it splits: the buffer or heat pump temperatures.
       stroke('hc-trunk-vl', this._vlColor(pick(this._n('buffer_top'), tFlow))); stroke('hc-trunk-rl', this._rlColor(pick(this._n('buffer_bottom'), tRet)));
       for (const { n, mode: cMode, on: hcOn, pump: hcPump } of F.circuits) {
@@ -4930,7 +4906,7 @@ class HeatpumpFlowCard extends HTMLElement {
         }
         // Own return sensor of the circuit only; the fallback to the buffer or heat pump return would repeat another label.
         if (this._config.hc_return_label) this._txtPre(`t-hc-rl${s}`, i.return_short, this._has(k('return')) && Number.isFinite(this._n(k('return'))) ? this._t(this._n(k('return'))) : '');
-        this._hcStatus(n, this._has(k('mode')) ? this._modeLabel(cMode, this._s(k('mode'))) : (hcPump ? i.running : ''), k2);
+        this._hcStatus(n, this._has(k('mode')) ? this._modeLabel(cMode, this._s(k('mode'))) : (hcPump ? i.running : ''));
         if (n === 1 && this._has('hc_pressure')) this._updatePressure('hc_pressure', 'hc', 'pressure-hc', 't-hc-pressure', i.hc_pressure);
       }
     }
@@ -5041,11 +5017,28 @@ class HeatpumpFlowCard extends HTMLElement {
 
     // house
     if (P.house) {
-      const rt = this._n('room_target'); const r = this._n('room');
-      const tgt = Number.isFinite(rt) ? `${i.target} ${this._fmt(rt)} °C` : '';
-      // Room sensor missing or unknown: promote the target to the big line.
-      this._txt('t-room', Number.isFinite(r) ? this._t(r) : tgt);
-      this._txt('t-room-target', Number.isFinite(r) ? tgt : '');
+      if (this._hcCount === 1) {
+        const rt = this._n('room_target'); const r = this._n('room');
+        const tgt = Number.isFinite(rt) ? `${i.target} ${this._fmt(rt)} °C` : '';
+        // Room sensor missing or unknown: promote the target to the big line.
+        this._txt('t-room', Number.isFinite(r) ? this._t(r) : tgt);
+        this._txt('t-room-target', Number.isFinite(r) ? tgt : '');
+      } else {
+        for (let n = 1; n <= this._hcCount; n++) {
+          const s = n === 1 ? '' : String(n); const key = this._roomKey(n); const targetKey = this._roomKey(n, 'room_target');
+          const r = this._n(key); const rt = this._n(targetKey); const value = (x) => (Number.isFinite(x) ? this._fmt(x) : '–');
+          const hasRoom = !!this._e[key]; const hasTarget = !!this._e[targetKey];
+          const text = hasRoom && hasTarget ? `${value(r)} / ${value(rt)} °C` : hasRoom ? `${value(r)} °C` : hasTarget ? `${i.target} ${value(rt)} °C` : '–';
+          this._txt(`t-house-room${s}`, text);
+          const state = Number.isFinite(r) && Number.isFinite(rt) ? (r < rt - 0.5 ? 'below' : r > rt + 0.5 ? 'above' : 'on') : 'unknown';
+          const dot = this._$(`house-comfort${s}`); const row = this._$(`house-row${s}`);
+          if (dot) dot.setAttribute('class', `house-comfort ${state}`);
+          if (row) {
+            const comfort = state === 'unknown' ? '' : i[`comfort_${state}`];
+            row.dataset.a11y = `${row.dataset.name}: ${hasRoom ? `${i.room} ${value(r)} °C` : ''}${hasRoom && hasTarget ? ', ' : ''}${hasTarget ? `${i.target} ${value(rt)} °C` : ''}${comfort ? `; ${comfort}` : ''}`;
+          }
+        }
+      }
     }
     const outTxt = this._has('outdoor') ? `${i.outdoor} ${this._t(this._n('outdoor'))}` : '';
     this._txt('t-outdoor', outTxt); this._txt('t-outdoor-hp', outTxt);
@@ -5236,6 +5229,12 @@ HeatpumpFlowCard.styles = `
   .fws-plates { fill: none; stroke: var(--hfc-muted); stroke-width: 2; opacity: .25; }
   .house-temp { font-size: calc(26px * var(--kt, 1)); font-weight: 700; }
   .house-sub { font-size: calc(14px * var(--k2, 1)); }
+  .house-row-name { font-size: calc(12px * var(--k2, 1)); }
+  .house-row-value { font-size: calc(13px * var(--k2, 1)); font-weight: 600; }
+  .house-comfort { fill: var(--disabled-text-color, #9e9e9e); stroke: var(--card-background-color, #fff); stroke-width: 1.5; }
+  .house-comfort.below { fill: ${hfcVar('cool-strong')}; }
+  .house-comfort.on { fill: ${hfcVar('good')}; }
+  .house-comfort.above { fill: ${hfcVar('hot')}; }
   .coil { fill: none; stroke: rgba(255,255,255,.55); stroke-width: 3; stroke-linejoin: round; opacity: .25; }
   .coil.on { opacity: .6; stroke-width: 2.5; stroke-dasharray: 5 9; animation: hfc-cdash var(--hfc-coil, 1.4s) linear infinite; }
   .circ { opacity: .35; } .circ.on { opacity: 1; fill: ${hfcVar('cool-strong')}; }

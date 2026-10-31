@@ -25,7 +25,7 @@ The SVG is 1000 units wide; height grows by 250 per extra heating circuit.
 | Diverter valve | x 420, y 250 | DHW branch up to y 80, heating branch down to y 360 |
 | Storage column | x 520–640 | DHW tank y 40–240, buffer y 320–520 |
 | Buffer bypass / series buffer | x 520–640, y 360–495 | when no parallel buffer is drawn |
-| Heating circuits | from x 640, rows of 250 | up to six; house x 720–940 above |
+| Heating circuits | from x 640, rows of 250 | up to six; single-circuit house x 720–940, multi-circuit room overview x 720–965 above |
 
 The DHW branch already enters the column at y 80 (top) and the heating branch at y 360 (middle), with returns at y 215 and y 495. A tall single tank in the same column fits these heights without moving any pipe.
 
