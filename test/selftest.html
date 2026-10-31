@@ -3275,18 +3275,18 @@
     check(!noFull.shadowRoot.getElementById('fullscreen-toggle'), 'fullscreen: false removes the button');
     noFull.remove();
 
-    const custom = { ...s.config, title: undefined, language: 'nl', texts: { nl: {
+    const custom = { ...s.config, title: undefined, language: 'xy', texts: { xy: {
       title: 'Warmtepomp & huis', heat_pump: 'Warm <bron>', details: 'Details NL',
       modes: { heating: 'Verwarming' }, tiles: { spread: 'Verschil' },
     } } };
-    const nl = mount(custom, { ...h, locale: { language: 'nl-NL' }, language: 'nl-NL' }); await wait(20);
-    check(nl._lang === 'nl' && nl.shadowRoot.querySelector('.title').textContent === 'Warmtepomp & huis'
-      && nl.shadowRoot.querySelector('.unit-title').textContent === 'Warm <bron>' && !nl.shadowRoot.querySelector('.unit-title').querySelector('bron'), 'custom language renders escaped labels');
-    check(nl.shadowRoot.getElementById('chip-mode').textContent.startsWith('Verwarming')
-      && nl.shadowRoot.getElementById('drawer-toggle').textContent.startsWith('Details NL') && nl._i.compressor_off === 'Compressor off', 'custom texts merge recursively and missing labels fall back to English');
+    const xy = mount(custom, { ...h, locale: { language: 'xy-NL' }, language: 'xy-NL' }); await wait(20);
+    check(xy._lang === 'xy' && xy.shadowRoot.querySelector('.title').textContent === 'Warmtepomp & huis'
+      && xy.shadowRoot.querySelector('.unit-title').textContent === 'Warm <bron>' && !xy.shadowRoot.querySelector('.unit-title').querySelector('bron'), 'custom language renders escaped labels');
+    check(xy.shadowRoot.getElementById('chip-mode').textContent.startsWith('Verwarming')
+      && xy.shadowRoot.getElementById('drawer-toggle').textContent.startsWith('Details NL') && xy._i.compressor_off === 'Compressor off', 'custom texts merge recursively and missing labels fall back to English');
     const tileOptions = C._tileOptions(custom, C._resolve(custom, h), h).options;
     check(tileOptions.some((o) => o.value === 'spread' && o.label === 'Verschil'), 'custom tile labels reach the editor options');
-    nl.remove();
+    xy.remove();
 
     for (const theme of ['auto', 'night', 'contrast']) {
       const themed = mount({ ...s.config, theme }, h); await wait(10);
@@ -3299,12 +3299,12 @@
     const schema = C._formSchema(custom).schema;
     check(['theme', 'fullscreen', 'language'].every((key) => schema.flatMap(keysOf).includes(key)), 'editor offers theme, full-screen and language controls');
     const languageField = (() => { let found; const visit = (n) => { if (n.name === 'language') found = n; (n.schema || []).forEach(visit); }; schema.forEach(visit); return found; })();
-    check(languageField.selector.select.options.some((o) => o.value === 'nl'), 'editor language selector includes configured custom languages');
+    check(['nl', 'xy'].every((value) => languageField.selector.select.options.some((o) => o.value === value)), 'editor language selector includes built-in and configured custom languages');
     const ed = document.createElement('heatpump-flow-card-editor'); let changed;
     ed.addEventListener('config-changed', (ev) => { changed = ev.detail.config; });
     ed.setConfig(custom); ed.hass = h; await wait(10);
-    ed._changed({ preset: 'lambda', language: 'nl', theme: 'night', fullscreen: false, entities: ed._form.data.entities });
-    check(changed.texts.nl.title === 'Warmtepomp & huis' && changed.theme === 'night' && changed.fullscreen === false, 'editor preserves YAML translations and writes theme/full-screen options');
+    ed._changed({ preset: 'lambda', language: 'xy', theme: 'night', fullscreen: false, entities: ed._form.data.entities });
+    check(changed.texts.xy.title === 'Warmtepomp & huis' && changed.theme === 'night' && changed.fullscreen === false, 'editor preserves YAML translations and writes theme/full-screen options');
     ed.remove();
   }
 
@@ -3432,8 +3432,8 @@
     HFC_I18N.xx = { title: 'Xx title', det: { hours: 'Xx hours' }, modes: { heating: 'Xx heating' } };
     HFC_EDITOR.xx = { title: 'Xx editor title' };
     try {
-      const options = C._formSchema({ texts: { nl: { title: 'x' } } }).schema.flatMap(function find(n) { return n.name === 'language' ? [n.selector.select.options] : n.schema ? n.schema.flatMap(find) : []; })[0];
-      check(options[0].value === 'auto' && ['de', 'en', 'xx', 'nl'].every((v) => options.some((o) => o.value === v)), 'the editor lists Auto, the built-in languages and the custom ones');
+      const options = C._formSchema({ texts: { xy: { title: 'x' } } }).schema.flatMap(function find(n) { return n.name === 'language' ? [n.selector.select.options] : n.schema ? n.schema.flatMap(find) : []; })[0];
+      check(options[0].value === 'auto' && ['de', 'en', 'nl', 'xx', 'xy'].every((v) => options.some((o) => o.value === v)), 'the editor lists Auto, the built-in languages and the custom ones');
       check(options.find((o) => o.value === 'xx').label === 'Xxish' && options.find((o) => o.value === 'de').label === 'Deutsch', 'built-in languages are listed with their own name');
       check(options.filter((o) => o.value === 'de').length === 1 && options.filter((o) => o.value === 'xx').length === 1, 'a language is listed once');
       check(hfcBuiltin(HFC_EDITOR, 'xx').title === 'Xx editor title' && hfcBuiltin(HFC_EDITOR, 'xx').preset === HFC_EDITOR.en.preset, 'editor labels of a partial language fall back to English');
@@ -3640,6 +3640,18 @@
       }
       check(steps.every((d) => Math.abs(d) < 0.01), `a new flow rate does not move the dashes (offset changes ${steps.join(', ')})`);
     }
+    card.remove();
+  }
+
+  // Return under flow: where the return from the hot-water tank crosses the flow pipes, the return lies underneath
+  {
+    const s = setups.find((x) => x.config.preset === 'heishamon') || setups[0];
+    const card = mount(s.config, hassOf(toStates(s.states('heat')), s.registry || {}, null, s)); await wait(20);
+    const el = (id) => card.shadowRoot.getElementById(id);
+    const before = (a, b) => !!(el(a) && el(b) && el(a).compareDocumentPosition(el(b)) & Node.DOCUMENT_POSITION_FOLLOWING);
+    check(['p-vl', 'p-vl-dhw'].every((id) => before('p-rl-dhw', id) && before('f-rl-dhw', id)),
+      'the return from the hot-water tank and its dashes are drawn under the flow and the hot-water flow');
+    check(['p-rl-buf', 'p-rl'].every((id) => before(id, 'p-vl')), 'all return pipes of the heat pump are drawn before its flow pipes');
     card.remove();
   }
 
