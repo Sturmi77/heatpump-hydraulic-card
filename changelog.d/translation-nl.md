@@ -1,1 +1,0 @@
-- Dutch translation of the card and the editor.
