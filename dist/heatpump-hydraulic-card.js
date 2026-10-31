@@ -6,7 +6,7 @@
  *
  * https://github.com/Sturmi77/heatpump-hydraulic-card · MIT License
  */
-const HFC_VERSION = '0.15.0';
+const HFC_VERSION = '0.16.0';
 // Address this file was loaded from: shows at once when a dashboard resource still points to an old file.
 const HFC_SCRIPT_URL = (() => {
   try {
@@ -66,6 +66,23 @@ function hfcPointT(ctx) {
 
 // Wolf: the prefix '' marks the wolf_smartset branch (sensors by translation key), a device slug the wolflink branch (entity ids).
 const hfcWolfSensor = (p, ctx) => (p === '' ? (tk) => ctx.key('wolf_smartset', 'sensor', tk) : (name) => `sensor.${p}_${name}`);
+
+// ebusd can publish several legitimate copies of the same messages. Keep one complete MQTT entity stem together instead of
+// resolving every field independently across daemons (#197). `prefix` may be the short topic prefix (`arotherm`) or the full
+// entity stem (`ebus_arotherm`); the latter selects one instance explicitly.
+function hfcEbusdInstances(ctx, requested) {
+  // Besides finding candidates below, record the platform/pattern for the editor and diagnostic detection explanation.
+  ctx.match(/^sensor\..+_hmu_rundatastatuscode$/, 'mqtt');
+  const mqtt = (id) => !ctx.registry[id] || ctx.registry[id].platform === 'mqtt';
+  const stems = [...new Set(ctx.ids.filter((id) => id.startsWith('sensor.') && id.endsWith('_hmu_rundatastatuscode') && mqtt(id))
+    .map((id) => id.slice('sensor.'.length, -'_hmu_rundatastatuscode'.length)))];
+  const want = String(requested || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const eligible = want ? stems.filter((stem) => stem === want || stem.endsWith(`_${want}`)) : stems;
+  const score = (stem) => ctx.ids.filter((id) => mqtt(id)
+    && new RegExp(`^(?:sensor|binary_sensor|number|select|switch)\\.${stem}_(?:hmu|vwzio|broadcast|ctl[sv]\\d)_`).test(id)).length;
+  return eligible.map((stem) => ({ stem, score: score(stem) }))
+    .sort((a, b) => b.score - a.score || a.stem.localeCompare(b.stem));
+}
 const HFC_PRESETS = {
   bosch_buderus_heating: {
     name: 'Bosch/Buderus Home Comfort (PointT cloud)',
@@ -987,13 +1004,11 @@ const HFC_PRESETS = {
     unit_style: 'vaillant',
     // The controller reports all its circuits, inactive ones included, so the editor stub cannot count them.
     auto_circuits: false,
-    detect: (ctx) => {
-      const id = ctx.match(/^sensor\.(?:.+_)?[a-z0-9]+_hmu_rundatastatuscode$/, 'mqtt');
-      return id === undefined ? undefined : id.match(/([a-z0-9]+)_hmu_rundatastatuscode$/)[1];
-    },
+    detect: (ctx) => hfcEbusdInstances(ctx)[0]?.stem,
+    instances: (ctx, requested) => hfcEbusdInstances(ctx, requested),
     entities: (p, i, ctx) => {
-      const x = p.replace(/[^a-z0-9_]/g, '');
-      const e = (circuit, name) => ctx.match(new RegExp(`^sensor\\.(?:.+_)?${x}_${circuit}_${name}$`), 'mqtt');
+      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      const e = (circuit, name) => ctx.match(new RegExp(`^sensor\\.${x}_${circuit}_${name}$`), 'mqtt');
       const h = (n) => e('hmu', n); const c = (n) => e('ctl[sv]\\d', n); const w = (n) => e('vwzio', n);
       return {
         mode: h('rundatastatuscode'),
@@ -1034,15 +1049,18 @@ const HFC_PRESETS = {
     },
     // Lifetime counters per mode; today, month … come from their long-term statistics.
     tiles: (p, i, ctx) => {
-      const x = p.replace(/[^a-z0-9_]/g, '');
-      const t = (name) => ({ total: ctx.match(new RegExp(`^sensor\\.(?:.+_)?${x}_hmu_${name}$`), 'mqtt') });
+      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      const t = (name) => ({ total: ctx.match(new RegExp(`^sensor\\.${x}_hmu_${name}$`), 'mqtt') });
       return {
         energy: t('statelectricenergysum'), energy_heating: t('statelectricenergysumhc'), energy_dhw: t('statelectricenergysumhwc'),
         energy_cooling: t('statelectricenergysumcool'), env_energy: t('statenvironmentenergysum'),
         starts: t('runstatscompressorstarts'), hours: t('runstatscompressorhours'),
       };
     },
-    errors: (p, i, ctx) => [ctx.match(new RegExp(`^sensor\\.(?:.+_)?${p.replace(/[^a-z0-9_]/g, '')}_hmu_currenterror_error$`), 'mqtt')].filter(Boolean),
+    errors: (p, i, ctx) => {
+      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      return [ctx.match(new RegExp(`^sensor\\.${x}_hmu_currenterror_error$`), 'mqtt')].filter(Boolean);
+    },
     // Pre-run, overrun and shutdown keep the mode of their phase; the compressor speed tells whether it runs.
     // Fault codes (fan1_blocked, building_circuit_flow_too_low …) stay unmapped and show as text.
     mode_map: {
@@ -2499,12 +2517,18 @@ class HeatpumpFlowCard extends HTMLElement {
     const counts = {};
     Object.values(reg).forEach((e) => { if (e?.platform && platformPresets[e.platform]) counts[e.platform] = (counts[e.platform] || 0) + 1; });
     const matches = HeatpumpFlowCard._presetMatches(hass);
+    const instanceGroups = r.preset?.instances ? r.preset.instances(HeatpumpFlowCard._ctx(hass, config.device, r.idx)) : [];
+    const bestInstanceScore = instanceGroups[0]?.score;
+    const tiedInstances = instanceGroups.filter((g) => g.score === bestInstanceScore);
+    const configuredInstance = String(config.prefix || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const instanceExplicit = !!configuredInstance && instanceGroups.some((g) => g.stem === configuredInstance);
     const detection = [
       ...(r.preset ? [`- ${clean(config.preset)} looked for: ${own.looked.length
         ? own.looked.map((l) => `${l.what}${l.platform ? ` (${l.platform})` : ''}: ${l.hit ? 'found' : 'not found'}`).join('; ') : 'its own entity ids'}`] : []),
       `- Heat pump integrations here: ${Object.keys(counts).length ? Object.entries(counts).sort(([a], [b]) => (a < b ? -1 : 1))
         .map(([pl, n]) => `${pl} (${n} ${n === 1 ? 'entity' : 'entities'}; preset${platformPresets[pl].size > 1 ? 's' : ''} ${[...platformPresets[pl]].join(', ')})`).join(', ') : 'none found'}`,
       `- Presets that match here: ${matches.length ? matches.map((m) => `${m.name} (${m.score} of ${HFC_CORE_KEYS.length} core entities)`).join(', ') : 'none'}`,
+      ...(instanceGroups.length ? [`- Preset entity groups: selected ${r.prefix || '(none)'}; ${instanceGroups.map((g) => `${g.stem} (${g.score} entities)`).join(', ')}${tiedInstances.length > 1 && !instanceExplicit ? '; equally complete groups: set prefix to the full group name' : ''}`] : []),
     ];
     // Source of each mapping (#147): found by the preset, set in the configuration ("own", naming its integration when it is not
     // one the preset reads), or cleared on purpose. Keys of circuits beyond hc_count are left out of the unmapped list.
@@ -4973,10 +4997,13 @@ class HeatpumpFlowCard extends HTMLElement {
       this._txt('t-valve', loop ? (toDhw ? i.valve_dhw : (cooling ? i.valve_cooling : i.valve_heating)) : '');
       // Without a top sensor the large value stays empty: the lower sensors show their value at their own position.
       const hasTop = this._has('dhw_top');
-      const top = this._n(hasTop ? 'dhw_top' : this._has('dhw_middle') ? 'dhw_middle' : 'dhw_bottom');
-      const bot = this._has('dhw_bottom') ? this._n('dhw_bottom') : top - 5;
+      const middle = this._has('dhw_middle') ? this._n('dhw_middle') : NaN;
+      const top = hasTop ? this._n('dhw_top') : NaN;
+      // A lower sensor says nothing reliable about the water above it. Keep an unmeasured upper zone neutral instead of
+      // painting the whole tank with a cool middle/bottom value (#215). With a measured top, the old two-point fallback stays.
+      const bot = this._has('dhw_bottom') ? this._n('dhw_bottom') : Number.isFinite(middle) ? middle : top - 5;
       this._$('g-dhw-top').setAttribute('stop-color', this._tankColor(top));
-      if (this._has('dhw_middle')) this._$('g-dhw-middle')?.setAttribute('stop-color', this._tankColor(this._n('dhw_middle')));
+      if (this._has('dhw_middle')) this._$('g-dhw-middle')?.setAttribute('stop-color', this._tankColor(middle));
       this._$('g-dhw-bottom').setAttribute('stop-color', this._tankColor(bot));
       this._txt('t-dhw-top', hasTop ? this._t(top) : '');
       this._txt('t-dhw-middle', this._has('dhw_middle') ? this._t(this._n('dhw_middle')) : '');

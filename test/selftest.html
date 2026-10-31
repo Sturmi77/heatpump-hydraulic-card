@@ -173,11 +173,36 @@
     const s = setups[10]; const hass = hassOf(toStates(s.states('heat')), s.registry);
     const r = C._resolve(s.config, hass);
     check(r.prefix === 'ebusd', `ebusd prefix detected (got ${r.prefix})`);
-    check(r.entities.evap_temp === 'sensor.heating_ebusd_hmu_rundataevaporationtemp', 'ebusd: entity with device-name prefix found');
+    check(r.entities.evap_temp === 'sensor.ebusd_hmu_rundataevaporationtemp', 'ebusd: optional entities stay in the selected entity group');
     check(r.entities.hc2_flow === 'sensor.ebusd_ctlv2_hc2flowtemp' && r.entities.hc2_pump === 'sensor.ebusd_ctlv2_hc2pumpstatus', 'ebusd: second circuit from the controller');
     check(r.entities.hc_pressure === 'sensor.ebusd_hmu_flowpressure' && r.entities.hc2_pressure === undefined, 'ebusd: one system pressure, not copied to circuit 2');
     check(r.entities.buffer_top === undefined, 'ebusd: buffer stays unmapped');
     check(r.tiles.env_energy?.total === 'sensor.ebusd_hmu_statenvironmentenergysum', 'ebusd: environmental energy tile');
+
+    const multi = toStates({
+      'sensor.ebus_arotherm_hmu_rundatastatuscode': 'standby', 'sensor.ebus_arotherm_hmu_rundataflowtemp': ['31', '°C'],
+      'sensor.ebus_arotherm_hmu_rundatareturntemp': ['27', '°C'],
+      'sensor.ebusd_arotherm_ebusd_arotherm_hmu_rundatastatuscode': 'heat_compressor_active',
+      'sensor.ebusd_arotherm_ebusd_arotherm_hmu_rundataflowtemp': ['35', '°C'],
+      'sensor.ebusd_arotherm_ebusd_arotherm_hmu_rundatareturntemp': ['30', '°C'],
+      'sensor.ebusd_arotherm_ebusd_arotherm_hmu_currentconsumedpower': ['1.2', 'kW'],
+      'sensor.ebusd_arotherm_ebusd_arotherm_hmu_currentyieldpower': ['4.8', 'kW'],
+    });
+    const multiReg = Object.fromEntries(Object.keys(multi).map((id) => [id, { platform: 'mqtt' }]));
+    const grouped = C._resolve({ preset: 'ebusd' }, hassOf(multi, multiReg));
+    check(grouped.prefix === 'ebusd_arotherm_ebusd_arotherm'
+      && ['mode', 'flow', 'return', 'power', 'heat'].every((key) => grouped.entities[key]?.startsWith(`sensor.${grouped.prefix}_`)),
+    `ebusd selects one most-complete daemon for every mapping (${grouped.prefix})`);
+    const explicit = C._resolve({ preset: 'ebusd', prefix: 'ebus_arotherm' }, hassOf(multi, multiReg));
+    check(explicit.prefix === 'ebus_arotherm' && ['mode', 'flow', 'return'].every((key) => explicit.entities[key]?.startsWith('sensor.ebus_arotherm_'))
+      && explicit.entities.power === undefined, 'a full ebusd prefix selects one instance explicitly without falling back to another');
+    const tiedStates = toStates({
+      'sensor.alpha_arotherm_hmu_rundatastatuscode': 'standby', 'sensor.alpha_arotherm_hmu_rundataflowtemp': ['31', '°C'],
+      'sensor.beta_arotherm_hmu_rundatastatuscode': 'standby', 'sensor.beta_arotherm_hmu_rundataflowtemp': ['32', '°C'],
+    });
+    const tiedReg = Object.fromEntries(Object.keys(tiedStates).map((id) => [id, { platform: 'mqtt' }]));
+    const tiedReport = C._diagnosticReport({ preset: 'ebusd' }, hassOf(tiedStates, tiedReg));
+    check(/Preset entity groups: selected alpha_arotherm; alpha_arotherm \(2 entities\), beta_arotherm \(2 entities\); equally complete groups: set prefix/.test(tiedReport), 'diagnostic report names equally complete ebusd groups and the explicit-prefix remedy');
     // Without the hydraulic station's hot water flag the operating state decides (#155): hwc_* is hot water, the zone valve
     // status of the controller (open/closed) is no diverter valve and stays unmapped.
     {
@@ -3462,7 +3487,8 @@
     const $ = (id) => card.shadowRoot.getElementById(id);
     check(ok(card) && !!card.shadowRoot.querySelector('rect.tank'), 'DHW tank is drawn with only a bottom sensor');
     check($('t-dhw-top').textContent === '' && $('t-dhw-bottom').textContent === card._t(37), `the value shows at the bottom without a position label (${$('t-dhw-bottom').textContent})`);
-    check($('g-dhw-top').getAttribute('stop-color') === $('g-dhw-bottom').getAttribute('stop-color'), 'the tank colour comes from the bottom sensor');
+    check($('g-dhw-top').getAttribute('stop-color') === card._tankColor(NaN)
+      && $('g-dhw-top').getAttribute('stop-color') !== $('g-dhw-bottom').getAttribute('stop-color'), 'an unmeasured upper tank zone stays neutral instead of copying the bottom sensor');
     check(card.shadowRoot.querySelector('rect.tank').closest('.tap')?.getAttribute('data-entity') === 'sensor.dhw', 'tapping the tank opens the bottom sensor');
     card.remove();
     const preset = mount({ preset: 'heishamon', entities: { dhw_top: null, dhw_bottom: 'sensor.panasonic_heat_pump_main_dhw_temp' } }, hassOf(toStates({
@@ -3471,6 +3497,13 @@
     }))); await wait(20);
     check(!preset._has('dhw_top') && /37/.test(preset.shadowRoot.getElementById('t-dhw-bottom').textContent), 'a preset sensor can be moved from top to bottom in the config');
     preset.remove();
+    const layered = mount({ entities: { flow: 'sensor.flow', return: 'sensor.return', dhw_middle: 'sensor.mid', dhw_bottom: 'sensor.dhw' } }, hassOf(toStates({
+      'sensor.flow': ['35', '°C'], 'sensor.return': ['30', '°C'], 'sensor.mid': ['44', '°C'], 'sensor.dhw': ['37', '°C'],
+    }))); await wait(20);
+    check(layered.shadowRoot.getElementById('g-dhw-top').getAttribute('stop-color') === layered._tankColor(NaN)
+      && layered.shadowRoot.getElementById('g-dhw-middle').getAttribute('stop-color') === layered._tankColor(44)
+      && layered.shadowRoot.getElementById('g-dhw-bottom').getAttribute('stop-color') === layered._tankColor(37), 'middle and bottom sensors colour only their measured tank zones');
+    layered.remove();
   }
 
   // 20c. radiator ribs take the flow and return colours: every gradient id is unique, the ribs use the coloured one

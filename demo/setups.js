@@ -311,10 +311,10 @@ const ebusdStates = (s) => ({
   'sensor.ebusd_hmu_statelectricenergysumhc': { state: '13515.2', attributes: { unit_of_measurement: 'kWh', state_class: 'total_increasing' } },
   'sensor.ebusd_hmu_statelectricenergysumhwc': { state: '7081.8', attributes: { unit_of_measurement: 'kWh', state_class: 'total_increasing' } },
   'sensor.ebusd_hmu_statenvironmentenergysum': { state: '31922.9', attributes: { unit_of_measurement: 'kWh', state_class: 'total_increasing' } },
-  'sensor.heating_ebusd_hmu_rundataevaporationtemp': ['3.2', '°C'],
+  'sensor.ebusd_hmu_rundataevaporationtemp': ['3.2', '°C'],
   'sensor.ebusd_hmu_rundatacompressorinlettemp': ['1.7', '°C'], 'sensor.ebusd_hmu_rundatacompressoroutlettemp': ['55.5', '°C'],
   'sensor.ebusd_hmu_rundatahighpressure': ['15.2', 'bar'], 'sensor.ebusd_hmu_rundataeevpositionabs': '143',
-  'sensor.heating_ebusd_hmu_rundataoverheatingactualvalue': ['0.2', 'K'],
+  'sensor.ebusd_hmu_rundataoverheatingactualvalue': ['0.2', 'K'],
   'sensor.ebusd_hmu_currenterror_error': s === 'idle' ? '1100' : 'unknown',
 });
 // Luxtronik controller (Alpha Innotec, Novelan, Roth …) through the Luxtronik integration (BenPru/luxtronik), resolved via translation_key.
