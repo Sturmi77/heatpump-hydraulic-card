@@ -3605,6 +3605,18 @@
     check(!C._disabledMappings({ ...lux.config, entities: { power: 'sensor.own_power' } }, admin, [{ entity_id: powerId, ...powerReg }]).length, 'an own entity for the key hides the hint');
   }
 
+  // Return under flow: where the return from the hot-water tank crosses the flow pipes, the return lies underneath
+  {
+    const s = setups.find((x) => x.config.preset === 'heishamon') || setups[0];
+    const card = mount(s.config, hassOf(toStates(s.states('heat')), s.registry || {}, null, s)); await wait(20);
+    const el = (id) => card.shadowRoot.getElementById(id);
+    const before = (a, b) => !!(el(a) && el(b) && el(a).compareDocumentPosition(el(b)) & Node.DOCUMENT_POSITION_FOLLOWING);
+    check(['p-vl', 'p-vl-dhw'].every((id) => before('p-rl-dhw', id) && before('f-rl-dhw', id)),
+      'the return from the hot-water tank and its dashes are drawn under the flow and the hot-water flow');
+    check(['p-rl-buf', 'p-rl'].every((id) => before(id, 'p-vl')), 'all return pipes of the heat pump are drawn before its flow pipes');
+    card.remove();
+  }
+
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');
   document.getElementById('result').textContent = fails.length ? 'FAIL' : 'PASS';

@@ -1,0 +1,1 @@
+- The return pipes are drawn under the flow pipes: where the return from the hot-water tank crosses the flow (next to the diverter valve) and the hot-water flow, the flow now lies on top.
