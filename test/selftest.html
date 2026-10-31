@@ -221,6 +221,7 @@
     check(modes.deicing_active === 'defrost' && modes.hwc_overrun === 'dhw' && modes.heat_compressor_blocked === 'blocked' && modes.standby === 'idle', 'ebusd status codes normalized');
   }
   const detects = (preset, states, registry) => HFC_PRESETS[preset].detect(C._ctx(hassOf(toStates(states), registry), undefined, { hp: 1, dhw: 1, buffer: 1, hc: 1 })) !== undefined;
+  check(HFC_PRESETS.emsesp.tested === true, 'EMS-ESP preset is marked real-installation tested on a Buderus WLW186i (#220)');
   check(!detects('emsesp', { 'sensor.boiler_curflowtemp': '45', 'sensor.boiler_outdoortemp': '5' }, { 'sensor.boiler_curflowtemp': { platform: 'mqtt' } }), 'EMS-ESP gas boiler is not a heat pump');
   check(!detects('vicare', { 'sensor.vitodens_outside_temperature': '5', 'sensor.vitodens_boiler_temperature': '60' },
     { 'sensor.vitodens_outside_temperature': { platform: 'vicare', translation_key: 'outside_temperature' } }), 'ViCare gas boiler is not a heat pump');

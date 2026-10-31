@@ -2,6 +2,8 @@
 
 Preset `emsesp`. Back to the [README](../../README.md#supported-heat-pumps).
 
+Confirmed on a real Buderus Logatherm WLW186i-5 TP70 installation with an EMS-ESP BBQKees gateway (#220). Other EMS/EMS+ heat-pump models remain welcome test coverage.
+
 ## Setup
 
 ```yaml
@@ -24,3 +26,9 @@ What you get:
 - details: compressor operating time and starts, total energy consumed and supplied, compressor speed, refrigerant temperatures (PL1, PH1, TR3, TR5, TR6)
 
 Without a heat output sensor, the heat output is estimated from flow rate × spread. With `hc_count: 2` (up to 6) the mixer and thermostat entities of the further circuits are added; `index: {hc: 2}` starts at circuit 2 instead.
+
+### PV, battery and grid
+
+Do not map whole-house PV production, battery power or grid import directly to `pv`, `battery` and `grid`: explicit entities are interpreted as the part of the heat pump's consumption supplied by that source. Leave those overrides empty with `power_sources: auto` to let the card split the mapped heat-pump power by the current Energy-dashboard supply mix. Use `power_sources: manual` only when the mapped source sensors already measure the heat pump's individual shares.
+
+The preset draws the hydraulic components, not the casing of an indoor unit. An integrated small buffer is represented by its mapped buffer sensor and the buffer symbol; a vendor-specific indoor-unit enclosure is a separate drawing feature.

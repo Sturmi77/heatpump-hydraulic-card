@@ -504,6 +504,7 @@ const HFC_PRESETS = {
   // the "multiple instances" entity format adds a prefix, which is detected. Enum texts follow the EMS-ESP language.
   emsesp: {
     name: 'EMS-ESP (Bosch, Buderus, Junkers, Nefit …)',
+    tested: true,
     unit_style: 'bosch',
     source_type: (e, hass) => (/hpbrinein$/.test(e.source_in || '') && hass.states[e.source_in] ? 'brine' : 'air'),
     detect: (ctx) => {
