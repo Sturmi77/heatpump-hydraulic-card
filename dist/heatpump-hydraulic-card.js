@@ -3765,7 +3765,8 @@ class HeatpumpFlowCard extends HTMLElement {
       <rect class="tank" id="sb-tank" x="450" y="452" width="116" height="86" rx="20"/>
       <text class="small series-title" x="508" y="499" text-anchor="middle">${this._esc(i.series_tank)}</text>`;
     }
-    return `${pp('byp-vl', 'M520 360 H600')}${pp('sb-vl', 'M600 360 H640')}${pp('sb-a', 'M600 360 V477')}${pp('sb-b', 'M640 495 H618')}${pp('byp-rl', 'M582 495 H520')}
+    // The branches leave the flow line under its end, so the round cap of the idle branch does not cover the flowing pipe.
+    return `${pp('sb-a', 'M600 360 V477')}${pp('sb-vl', 'M600 360 H640')}${pp('byp-vl', 'M520 360 H600')}${pp('sb-b', 'M640 495 H618')}${pp('byp-rl', 'M582 495 H520')}
       <g class="tap" ${de(e.bypass_valve ? 'bypass_valve' : 'defrost')}>
         <rect class="tank" id="sb-tank" x="450" y="452" width="116" height="86" rx="20"/>
         <text class="small series-title" x="508" y="499" text-anchor="middle">${this._esc(i.series_tank)}</text>
