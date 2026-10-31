@@ -3249,12 +3249,14 @@ class HeatpumpFlowCard extends HTMLElement {
             ${SRC.map(([id, , , d]) => `<path class="eflow ${id}" id="ef-${id}" d="${d}"/>`).join('')}
             ${SRC.map(([id, x, label, , key]) => this._source(id, x, label, this._srcEntity(key))).join('')}` : ''}
 
+          ${
+    // The return pipes lie under the flow pipes where they cross (the flow at x 380, the hot-water flow at x 420).
+    pipePair('rl-dhw', 'M520 215 H400 Q380 215 380 235 V380', P.dhw && !P.station)}
+          ${pipePair('rl-buf', 'M520 495 H400 Q380 495 380 475 V380')}
+          ${pipePair('rl', 'M380 380 H290')}
           ${pipePair('vl', P.dhw && !P.station ? 'M290 250 H402' : 'M290 250 H400 Q420 250 420 270 V338 Q420 360 442 360 H520')}
           ${pipePair('vl-dhw', 'M420 232 V102 Q420 80 442 80 H520', P.dhw && !P.station)}
           ${pipePair('vl-buf', 'M420 268 V338 Q420 360 442 360 H520', P.dhw && !P.station)}
-          ${pipePair('rl-dhw', 'M520 215 H400 Q380 215 380 235 V380', P.dhw && !P.station)}
-          ${pipePair('rl-buf', 'M520 495 H400 Q380 495 380 475 V380')}
-          ${pipePair('rl', 'M380 380 H290')}
           ${P.buffer ? '' : P.series ? this._seriesSvg() : `${pipePair('byp-vl', 'M520 360 H640')}${pipePair('byp-rl', 'M640 495 H520')}`}
           ${showHc ? Array.from({ length: this._hcCount }, (_, n) => this._circuitSvg(n + 1)
     // The trunk shared by all circuits lies over circuit 1 and under the risers and crossings of the others.
@@ -3890,7 +3892,8 @@ class HeatpumpFlowCard extends HTMLElement {
       <rect class="tank" id="sb-tank" x="450" y="452" width="116" height="86" rx="20"/>
       <text class="small series-title" x="508" y="499" text-anchor="middle">${this._esc(i.series_tank)}</text>`;
     }
-    return `${pp('byp-vl', 'M520 360 H600')}${pp('sb-vl', 'M600 360 H640')}${pp('sb-a', 'M600 360 V477')}${pp('sb-b', 'M640 495 H618')}${pp('byp-rl', 'M582 495 H520')}
+    // The branches leave the flow line under its end, so the round cap of the idle branch does not cover the flowing pipe.
+    return `${pp('sb-a', 'M600 360 V477')}${pp('sb-vl', 'M600 360 H640')}${pp('byp-vl', 'M520 360 H600')}${pp('sb-b', 'M640 495 H618')}${pp('byp-rl', 'M582 495 H520')}
       <g class="tap" ${de(e.bypass_valve ? 'bypass_valve' : 'defrost')}>
         <rect class="tank" id="sb-tank" x="450" y="452" width="116" height="86" rx="20"/>
         <text class="small series-title" x="508" y="499" text-anchor="middle">${this._esc(i.series_tank)}</text>
