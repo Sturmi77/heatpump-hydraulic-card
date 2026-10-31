@@ -1,0 +1,2 @@
+- card-mod colour variables survive the initial render and later card rebuilds because the card no longer replaces integration-owned styles in its shadow root (#164).
+- Manual and Energy-dashboard PV, battery and grid sources consistently accept W, kW and MW as live power, convert them to watts, and keep Wh, kWh and MWh classified as energy counters (#210).

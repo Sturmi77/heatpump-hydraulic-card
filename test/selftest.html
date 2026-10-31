@@ -634,6 +634,31 @@
       `editor explains a missing Energy-dashboard power sensor (${JSON.stringify(ed._energyMissing)} / ${ed.textContent.trim()})`);
     card.remove(); ed.remove();
   }
+  {
+    // #210: scaled power units are live power; energy units remain counters and cannot drive a live flow.
+    const attrs = (unit, device_class) => ({ state: '1', attributes: { unit_of_measurement: unit, device_class, state_class: 'measurement' } });
+    const prefs = { energy_sources: [{ type: 'battery', stat_rate: 'sensor.source' }] };
+    for (const [unit, value, watts] of [['W', '1000', 1000], ['kW', '1', 1000], ['MW', '0.001', 1000]]) {
+      const states = toStates({ 'sensor.hp': ['1200', 'W'], 'sensor.source': { ...attrs(unit, 'power'), state: value } });
+      const hass = hassOf(states, {}, prefs);
+      const info = C._energyInfo(prefs, hass);
+      check(!info.missing.length && info.energy.battery.length === 1, `Energy dashboard accepts ${unit} as current power`);
+      const card = mount({ entities: { power: 'sensor.hp' } }, hass); await wait(10);
+      check(card._rateW({ id: 'sensor.source' }) === watts, `${unit} Energy-dashboard power converts to ${watts} W`);
+      card.remove();
+    }
+    for (const unit of ['Wh', 'kWh', 'MWh']) {
+      const hass = hassOf(toStates({ 'sensor.source': attrs(unit, 'energy') }), {}, prefs);
+      const info = C._energyInfo(prefs, hass);
+      check(info.missing.includes('battery') && !info.energy.battery.length, `${unit} stays an energy counter, not live power`);
+    }
+    // A manually mapped source switches the card to manual sources and must not leave an unrelated Energy-dashboard warning behind.
+    const manualHass = hassOf(toStates({ 'sensor.hp': ['1200', 'W'], 'sensor.battery': { ...attrs('kW', 'power'), state: '0.012' } }), {},
+      { energy_sources: [{ type: 'battery', stat_energy_from: 'sensor.battery_energy' }] });
+    const manual = mount({ entities: { power: 'sensor.hp', battery: 'sensor.battery' } }, manualHass); await wait(20);
+    check(manual._w('battery') === 12 && !/no power sensor/i.test(manual.shadowRoot.textContent), 'manual kW battery is used without an Energy-dashboard warning');
+    manual.remove();
+  }
 
   // 6a. power sources the installation has (#102, #103): absent sources are left out, grid tariffs share one power sensor
   {
@@ -1008,6 +1033,15 @@
     card.style.setProperty('--hfc-heat', 'rgb(1, 2, 3)');
     const box = card.shadowRoot.getElementById('hp-box'); box.classList.add('on'); box.style.transition = 'none';
     check(getComputedStyle(box).stroke === 'rgb(1, 2, 3)', `--hfc-heat overrides the running colour (${getComputedStyle(box).stroke})`);
+
+    // card-mod adds its style beside the card's own markup. A later setConfig/render must not delete it (#164).
+    card.style.removeProperty('--hfc-heat');
+    const mod = document.createElement('style'); mod.id = 'card-mod-regression'; mod.textContent = ':host { --hfc-heat: rgb(4, 5, 6); }';
+    card.shadowRoot.appendChild(mod);
+    card.setConfig({ ...s.config, title: 'Rebuilt' }); await wait(10);
+    const rebuilt = card.shadowRoot.getElementById('hp-box'); rebuilt.classList.add('on'); rebuilt.style.transition = 'none';
+    check(mod.isConnected && card.shadowRoot.getElementById('card-mod-regression') === mod, 'setConfig keeps a card-mod style in the shadow root');
+    check(getComputedStyle(rebuilt).stroke === 'rgb(4, 5, 6)', `card-mod variables still apply after the rebuild (${getComputedStyle(rebuilt).stroke})`);
     card.remove();
 
     // layouts
@@ -3456,6 +3490,14 @@
     const base = { 'sensor.flow': ['35', '°C'], 'sensor.return': ['30', '°C'], 'sensor.power': ['1200', 'W'] };
     const ents = { flow: 'sensor.flow', return: 'sensor.return', power: 'sensor.power' };
     check(codes({ entities: ents }, base) === '', 'a correct mapping has no findings');
+    for (const unit of ['W', 'kW', 'MW']) {
+      check(codes({ entities: { ...ents, battery: 'sensor.source' } }, { ...base, 'sensor.source': { state: '1', attributes: { unit_of_measurement: unit, device_class: 'power', state_class: 'measurement' } } }) === '',
+        `manual ${unit} power source has no plausibility finding`);
+    }
+    for (const unit of ['Wh', 'kWh']) {
+      check(codes({ entities: { ...ents, battery: 'sensor.source' } }, { ...base, 'sensor.source': { state: '1', attributes: { unit_of_measurement: unit, device_class: 'energy', state_class: 'total_increasing' } } }) === 'battery:unit',
+        `manual ${unit} energy counter is rejected as live power`);
+    }
     // The mix-ups of the reports #75, #180, #186, #189
     check(codes({ entities: { ...ents, valve: 'sensor.ww_temp' } }, { ...base, 'sensor.ww_temp': ['unknown', '°C'] }) === 'valve:unit', '#186: a temperature as the valve');
     check(codes({ entities: { ...ents, heater: 'sensor.rod_starts' } }, { ...base, 'sensor.rod_starts': { state: '244', attributes: { state_class: 'total_increasing' } } }) === 'heater:counter',

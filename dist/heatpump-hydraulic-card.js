@@ -1789,6 +1789,15 @@ const HFC_COLORS = {
   'flow-dash': 'rgba(255,255,255,.9)', anthracite: '#3b4148', casing: '#e6e9ec',
 };
 const hfcVar = (name) => `var(--hfc-${name}, ${HFC_COLORS[name]})`;
+// Home Assistant's power units normalized to watts. Keep the case so MW (megawatt) and mW (milliwatt) stay distinct.
+const hfcPowerFactor = (unit) => ({ W: 1, kW: 1000, MW: 1000000, mW: 0.001 }[String(unit || '').trim()]);
+const hfcPowerW = (st, unitlessFactor = 1) => {
+  const value = parseFloat(st?.state); const unit = String(st?.attributes?.unit_of_measurement || '').trim();
+  if (!Number.isFinite(value)) return NaN;
+  if (!unit) return value * unitlessFactor; // Preserve the field's historical default (W for power, kW for heat).
+  const factor = hfcPowerFactor(unit);
+  return factor === undefined ? NaN : value * factor;
+};
 // Translucent fill and a darker text colour of the same role, for chips and highlighted controls.
 const hfcTint = (name, pct) => `color-mix(in srgb, ${hfcVar(name)} ${pct}%, transparent)`;
 const hfcInk = (name) => `color-mix(in srgb, ${hfcVar(name)} 47%, var(--primary-text-color, #212121))`;
@@ -1838,7 +1847,7 @@ class HeatpumpFlowCard extends HTMLElement {
   // Comparing each id also catches removals/additions with an unchanged count.
   // Cards and the editor share the result; ordinary value changes keep its identity.
   // HA also sends a new registry object after a change to any entity anywhere: the revision follows the enabled and present
-  // ids, not the object, because a new revision rebuilds the card and drops styles injected by card-mod (#164).
+  // ids, not the object, so unrelated registry updates do not trigger needless rebuilds (#164).
   static _pointtRevision(hass) {
     if (!hass?.entities || !hass.states) return undefined;
     let cache = this._pointtStates.get(hass.entities);
@@ -1896,7 +1905,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (host._registryRequest === cache.promise) return;
     host._registryRequest = cache.promise;
     // HA sends a new compact registry after a change to any entity. The host rebuilds only when the PointT entries differ from
-    // the ones it was built with: a rebuild makes the card flicker and drops styles set with card-mod (#164).
+    // the ones it was built with, avoiding flicker and unnecessary work (#164).
     // Without carried-over entries (first list of a connection) the host drew without the registry and needs the update.
     cache.promise.then(() => {
       if (host._registryRequest !== cache.promise || host._hass?.entities !== cache.display) return;
@@ -2578,13 +2587,18 @@ class HeatpumpFlowCard extends HTMLElement {
     ]);
   }
 
-  static _energyInfo(prefs) {
+  static _energyInfo(prefs, hass) {
     const sources = prefs?.energy_sources || [];
     const rate = (src) => {
       const pc = src.power_config;
-      if (pc && (pc.stat_rate_from || pc.stat_rate_to)) return { from: pc.stat_rate_from, to: pc.stat_rate_to };
-      if (pc && pc.stat_rate) return { id: pc.stat_rate, inv: !!pc.stat_rate_inverted };
-      return src.stat_rate ? { id: src.stat_rate } : null;
+      let result = null;
+      if (pc && (pc.stat_rate_from || pc.stat_rate_to)) result = { from: pc.stat_rate_from, to: pc.stat_rate_to };
+      else if (pc && pc.stat_rate) result = { id: pc.stat_rate, inv: !!pc.stat_rate_inverted };
+      else if (src.stat_rate) result = { id: src.stat_rate };
+      if (!result || !hass) return result;
+      const ids = [result.id, result.from, result.to].filter(Boolean);
+      // A missing state remains usable until HA supplies it; a known energy counter (Wh/kWh/MWh) is not current power.
+      return ids.every((id) => !hass.states[id] || HeatpumpFlowCard._fit('power', id, hass.states[id]).verdict !== 'bad') ? result : null;
     };
     const configured = {}; const missing = [];
     const of = (type) => {
@@ -2608,7 +2622,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._energyReq = true;
     HeatpumpFlowCard._energyPrefs = HeatpumpFlowCard._energyPrefs || this._hass.callWS({ type: 'energy/get_prefs' });
     HeatpumpFlowCard._energyPrefs.then((prefs) => {
-      const { energy, configured, missing } = HeatpumpFlowCard._energyInfo(prefs);
+      const { energy, configured, missing } = HeatpumpFlowCard._energyInfo(prefs, this._hass);
       this._energy = energy.solar.length || energy.battery.length || energy.grid.length ? energy : null;
       this._energyConfigured = configured;
       this._energyMissing = missing;
@@ -2632,11 +2646,7 @@ class HeatpumpFlowCard extends HTMLElement {
   }
 
   _rateW(r) {
-    const w = (id) => {
-      const st = id && this._hass.states[id]; const v = parseFloat(st?.state);
-      if (!Number.isFinite(v)) return NaN;
-      return String(st.attributes?.unit_of_measurement || '').toLowerCase() === 'kw' ? v * 1000 : v;
-    };
+    const w = (id) => hfcPowerW(id && this._hass.states[id]);
     if (r.id) return w(r.id) * (r.inv ? -1 : 1);
     return (r.from ? w(r.from) : 0) - (r.to ? w(r.to) : 0);
   }
@@ -2674,12 +2684,24 @@ class HeatpumpFlowCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+    this._renderRoot();
     if (!this._config) return;
     HeatpumpFlowCard._loadPresetRegistry(this, () => {
       this._needsBuild = true; this._rendered = false; this.hass = this._hass;
     });
     try { this._apply(); } catch (err) { this._fail(err); }
+  }
+
+  // Only this container belongs to the card. card-mod and other integrations may add styles beside it in the shadow root;
+  // keeping those nodes out of our render target prevents a later setConfig/rebuild from deleting their CSS variables (#164).
+  _renderRoot() {
+    if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+    if (!this._ownedRoot?.isConnected) {
+      this._ownedRoot = document.createElement('div');
+      this._ownedRoot.setAttribute('data-hfc-root', '');
+      this.shadowRoot.prepend(this._ownedRoot);
+    }
+    return this._ownedRoot;
   }
 
   _apply() {
@@ -2710,7 +2732,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._failed = true;
     this._rendered = false;
     const msg = this._esc(err && err.message ? err.message : String(err));
-    this.shadowRoot.innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card><div class="hint">Heat Pump Hydraulic Card: ${msg}<br>Details in the browser console. Please report it: github.com/Sturmi77/heatpump-hydraulic-card/issues</div></ha-card>`;
+    this._renderRoot().innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card><div class="hint">Heat Pump Hydraulic Card: ${msg}<br>Details in the browser console. Please report it: github.com/Sturmi77/heatpump-hydraulic-card/issues</div></ha-card>`;
   }
 
   /* ---------- helpers ---------- */
@@ -2732,10 +2754,10 @@ class HeatpumpFlowCard extends HTMLElement {
   }
   _unit(key) { return String(this._st(key)?.attributes?.unit_of_measurement || '').toLowerCase(); }
   // Unit-aware readings: power in W, heat in kW, flow rates in l/h. A list of entities gives the sum of the members that report a number.
-  _w(key) { return this._sum(key, 'kw', (v) => v * 1000); }
-  _kw(key) { return this._sum(key, 'w', (v) => v / 1000); }
-  _sum(key, unit, convert) {
-    const read = (st) => { const v = parseFloat(st?.state); return String(st?.attributes?.unit_of_measurement || '').toLowerCase() === unit ? convert(v) : v; };
+  _w(key) { return this._sumPower(key, 1); }
+  _kw(key) { return this._sumPower(key, 1000); }
+  _sumPower(key, divisor) {
+    const read = (st) => hfcPowerW(st, divisor) / divisor;
     if (!this._sums?.[key]) { const v = read(this._st(key)); return Number.isFinite(v) ? v : NaN; }
     const values = this._sums[key].map((id) => read(this._hass?.states[id])).filter(Number.isFinite);
     return values.length ? values.reduce((a, b) => a + b, 0) : NaN;
@@ -3062,7 +3084,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const i = this._i;
     const T = this._esc(this._config.title ?? i.title);
     if (this._startState()) {
-      this.shadowRoot.innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card class="start"><div class="head">${T ? `<div class="title">${T}</div>` : '<div></div>'}</div>
+      this._renderRoot().innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card class="start"><div class="head">${T ? `<div class="title">${T}</div>` : '<div></div>'}</div>
         <div class="hint" id="start-hint">${this._esc(i.start)} <a href="https://github.com/Sturmi77/heatpump-hydraulic-card#quick-start" target="_blank" rel="noopener noreferrer">${this._esc(i.start_link)}</a></div></ha-card>`;
       this._rendered = true;
       return;
@@ -3072,7 +3094,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const fullscreenIcon = this._fullscreenOpen
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>'
       : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>';
-    const energyHint = this._config.power_sources !== 'manual' && this._energyMissing?.length
+    const energyHint = this._powerMode() === 'energy' && this._energyMissing?.length
       ? i.energy_missing.replace('{sources}', this._energyMissing.map((type) => ({ solar: i.pv, battery: i.battery, grid: i.grid }[type])).join(', ')) : '';
     const de = (k) => (e[k] ? `data-entity="${this._esc(e[k])}"` : '');
     const pipePair = (id, d, show = true) => (show
@@ -3086,7 +3108,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const U = this._sourceType === 'air' ? this._unitArt() : null;
     const H = 560 + (showHc ? (this._hcCount - 1) * 250 : 0);
 
-    this.shadowRoot.innerHTML = `
+    this._renderRoot().innerHTML = `
       <style>${HeatpumpFlowCard.styles}</style>
       <div class="fullscreen-backdrop" id="fullscreen-backdrop" ${this._fullscreenOpen ? '' : 'hidden'}></div>
       <ha-card class="layout-${this._layout} motion-${this._animations} theme-${this._theme}${this._fullscreenOpen ? ' fullscreen' : ''}"${this._fullscreenOpen ? ` role="dialog" aria-modal="true" aria-label="${T}"` : ''}>
@@ -5408,7 +5430,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     this._energyReq = true;
     HeatpumpFlowCard._energyPrefs = HeatpumpFlowCard._energyPrefs || this._hass.callWS({ type: 'energy/get_prefs' });
     HeatpumpFlowCard._energyPrefs.then((prefs) => {
-      this._energyMissing = HeatpumpFlowCard._energyInfo(prefs).missing;
+      this._energyMissing = HeatpumpFlowCard._energyInfo(prefs, this._hass).missing;
       this._render();
     }).catch(() => { this._energyMissing = []; });
   }
@@ -5476,7 +5498,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       const field = (key) => String(computeLabel({ name: key })).replace(/\s*\(.*\)\s*$/, '');
       warn.push(L.warn_disabled.replace('{list}', disabled.map((d) => `${field(d.key)}: ${d.name ? `${d.name} (${d.id})` : d.id}`).join('; ')));
     }
-    if (this._config.power_sources !== 'manual' && this._energyMissing?.length) {
+    if (this._config.power_sources !== 'manual' && !['pv', 'battery', 'grid'].some((key) => r.entities[key]) && this._energyMissing?.length) {
       const names = this._energyMissing.map((type) => ({ solar: L.pv, battery: L.battery, grid: L.grid }[type])).join(', ');
       warn.push(L.warn_energy_sources.replace('{sources}', names));
     }
