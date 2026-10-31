@@ -3,6 +3,7 @@
 ## Unreleased
 
 ## 0.16.0 – unreleased
+- Vaillant/myPyllant installations with several heating circuits bind each zone to the circuit number in its entity id and fill `hc2_room` / `hc2_room_target` through `hc6_…`; before, the first zone could be reused and only circuit 1 received room values (#223).
 - Flow dashes, fans and pumps no longer jump when their speed changes. A new flow rate, modulation or fan speed set a new animation duration, which moved the running animation to another point of its cycle; the card now changes the playback rate while preserving the current position (#218).
 - Return pipes are drawn under flow pipes at crossings, and the idle series-buffer bypass branch lies behind the active flow line, so inactive pipe ends no longer cover flowing pipes or their dashes (#217).
 - Dutch is built in for the card and the editor, including the 0.16 room-comfort and display options (#221).

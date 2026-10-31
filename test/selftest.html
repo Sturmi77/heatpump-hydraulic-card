@@ -1623,6 +1623,23 @@
       'sensor.home_zone_1_current_temperature': ['21.0', '°C'], 'sensor.home_zone_1_desired_temperature': ['22.0', '°C'] }); e = r.entities;
     check(e.mode === 'sensor.home_energy_manager_state' && e.flow === 'sensor.home_system_flow_temperature', 'the plain id wins over the one with a number');
     check(e.room === 'sensor.home_zone_1_current_temperature' && e.room_target === 'sensor.home_zone_1_desired_temperature', 'zone sensors win over the thermostat');
+    const multi = { ...base,
+      'sensor.home_zone_1_circuit_0_current_temperature': ['21.1', '°C'], 'sensor.home_zone_1_circuit_0_desired_temperature': ['21.5', '°C'],
+      'sensor.home_zone_1_circuit_0_current_special_function': 'None',
+      'sensor.home_circuit_1_current_flow_temperature': ['41.75', '°C'], 'sensor.home_circuit_1_flow_temperature_setpoint': ['42.0', '°C'], 'sensor.home_circuit_1_state': 'HEATING',
+      'sensor.home_zone_2_circuit_1_current_temperature': ['20.2', '°C'], 'sensor.home_zone_2_circuit_1_desired_temperature': ['20.5', '°C'],
+      'sensor.home_zone_2_circuit_1_current_special_function': 'None',
+    };
+    r = resolve(multi, { preset: 'vaillant', hc_count: 2 }); e = r.entities;
+    check(e.room === 'sensor.home_zone_1_circuit_0_current_temperature' && e.room_target === 'sensor.home_zone_1_circuit_0_desired_temperature'
+      && e.hc2_room === 'sensor.home_zone_2_circuit_1_current_temperature' && e.hc2_room_target === 'sensor.home_zone_2_circuit_1_desired_temperature',
+    'each myPyllant zone is bound to its named heating circuit');
+    check(e.program === 'sensor.home_zone_1_circuit_0_current_special_function' && e.hc2_program === undefined,
+      'the card-wide program follows circuit 1 and does not invent a numbered program key');
+    const multiCard = mount({ preset: 'vaillant', hc_count: 2 }, hassOf(toStates(multi), reg(multi))); await wait(30);
+    check(/21\.1/.test(multiCard.shadowRoot.getElementById('t-house-room')?.textContent || '')
+      && /20\.2/.test(multiCard.shadowRoot.getElementById('t-house-room2')?.textContent || ''), 'the house overview shows both myPyllant zones');
+    multiCard.remove();
     r = resolve({ 'sensor.home_2_energy_manager_state': 'COOLING' });
     check(r.ready && r.prefix === 'home_2' && r.entities.mode === 'sensor.home_2_energy_manager_state', `a home that is named home_2 keeps its name as the prefix (${r.prefix})`);
     r = resolve(base, { preset: 'vaillant', prefix: 'home' });

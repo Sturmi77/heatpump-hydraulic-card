@@ -423,6 +423,7 @@ const HFC_PRESETS = {
   vaillant: {
     name: 'Vaillant (myPyllant)',
     tested: true,
+    circuit_rooms: true,
     index: { hc: 0, dhw: 0 },
     unit_style: 'vaillant',
     // Home Assistant adds a number (_2) to an entity id that was already taken: the home name stands before the name of
@@ -451,6 +452,12 @@ const HFC_PRESETS = {
         const exact = `sensor.${p}_${name}`;
         return ctx.state(exact) !== undefined ? exact : (m(new RegExp(`^sensor\\.${p}_${name}_\\d+$`)) || exact);
       };
+      // A myPyllant zone names the circuit it belongs to (`zone_2_circuit_1_…`). Bind every room to that circuit instead
+      // of taking the first zone of the home. Older integrations without the circuit part remain the fallback for circuit 0.
+      const zoneSensor = (suffix) => m(new RegExp(`^sensor\\.${p}_zone_.+_circuit_${i.hc}_${suffix}(?:_\\d+)?$`))
+        || (i.hc === 0 ? m(new RegExp(`^sensor\\.${p}_zone_.+_${suffix}(?:_\\d+)?$`)) : undefined);
+      const zoneClimate = m(new RegExp(`^climate\\.${p}_zone_.+_circuit_${i.hc}(?:_climate)?(?:_\\d+)?$`))
+        || (i.hc === 0 ? m(new RegExp(`^climate\\.${p}_zone_[^.]+$`)) : undefined);
       return {
         mode: e('energy_manager_state'),
         flow: e('system_flow_temperature'),
@@ -464,11 +471,10 @@ const HFC_PRESETS = {
         hc_flow: e(`circuit_${i.hc}_current_flow_temperature`),
         hc_setpoint: e(`circuit_${i.hc}_flow_temperature_setpoint`),
         hc_mode: e(`circuit_${i.hc}_state`),
-        // The room comes from the zone sensors; an installation with only the zone thermostat (climate) uses its
-        // current temperature and its target.
-        room: [m(new RegExp(`^sensor\\.${p}_zone_.+_current_temperature(?:_\\d+)?$`)), m(new RegExp(`^climate\\.${p}_zone_[^.]+$`))],
-        room_target: [m(new RegExp(`^sensor\\.${p}_zone_.+_desired_temperature(?:_\\d+)?$`)), m(new RegExp(`^climate\\.${p}_zone_[^.]+$`))],
-        program: m(new RegExp(`^sensor\\.${p}_zone_.+_current_special_function(?:_\\d+)?$`)),
+        // An installation with only the zone thermostat (climate) uses its current temperature and target.
+        room: [zoneSensor('current_temperature'), zoneClimate],
+        room_target: [zoneSensor('desired_temperature'), zoneClimate],
+        program: zoneSensor('current_special_function'),
         cop_heating_today: m(new RegExp(`^sensor\\.${p}.*_heating_energy_efficiency(?:_\\d+)?$`)),
         hc_pressure: e('system_water_pressure'),
         hours: counters.hours,
@@ -2475,6 +2481,9 @@ class HeatpumpFlowCard extends HTMLElement {
       const rawN = preset.entities(prefix, { ...idx, hc: idx.hc + n - 1 }, ctx);
       // hc_pressure is the pressure of the whole heating system, drawn at circuit 1 only.
       Object.entries(rawN).filter(([k]) => k.startsWith('hc_') && k !== 'hc_pressure').forEach(([k, v]) => take(`hc${n}_${k.slice(3)}`, v));
+      // Room keys are not prefixed with hc_ in a preset because circuit 1 uses room/room_target. Carry the circuit-specific
+      // result into the numbered public keys so the house overview receives the rooms of circuits 2 to 6.
+      if (preset.circuit_rooms) ['room', 'room_target'].forEach((k) => take(`hc${n}_${k}`, rawN[k]));
     }
     const e = { ...fromPreset };
     const sums = {};
