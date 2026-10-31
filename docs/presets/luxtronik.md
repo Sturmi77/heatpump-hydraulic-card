@@ -1,6 +1,6 @@
 # Luxtronik preset (Alpha Innotec, Novelan, Roth, Siemens, Elco, Buderus, Nibe, Wolf)
 
-Source: the [Luxtronik integration](https://github.com/BenPru/luxtronik) (HACS, domain `luxtronik2`, MIT), version 2026.10.18. It is built on [Bouni/luxtronik](https://github.com/Bouni/luxtronik), which can run side by side. The preset is **not tested on an installation**: it is derived from the integration source (`sensor_entities_predefined.py`, `binary_sensor_entities_predefined.py`, `number_entities_predefined.py`, `select_entities_predefined.py`, `const.py`, `translations/en.json`). Reports from real installations are tracked in [#75](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/75).
+Source: the [Luxtronik integration](https://github.com/BenPru/luxtronik) (HACS, domain `luxtronik2`, MIT), version 2026.10.18. It is built on [Bouni/luxtronik](https://github.com/Bouni/luxtronik), which can run side by side. The preset is confirmed on one real water-to-water installation with a combined storage and fresh-water station ([#75](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/75), #208). Reports from air units (including the Hybrox drawing) and brine installations are still welcome.
 
 The integration sets the translation key of every entity to its `SensorKey` value, so the preset finds entities through the entity registry (platform `luxtronik2`). Entity ids (`sensor.luxtronik2_flow_in_temperature` with the default prefix) and the Home Assistant language do not matter.
 

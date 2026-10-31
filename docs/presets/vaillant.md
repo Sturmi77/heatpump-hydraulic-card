@@ -2,6 +2,8 @@
 
 Preset `vaillant`. Back to the [README](../../README.md#supported-heat-pumps).
 
+Confirmed on a real Vaillant aroTHERM plus installation with the myPyllant integration (#1, #211). Installation-specific PV, battery, grid and external electricity-meter entities remain optional manual overrides.
+
 ## Setup
 
 ```yaml

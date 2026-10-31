@@ -1268,6 +1268,26 @@
     check(o.k === '1.2' && o.vol !== 'none', `medium schematic: type 1.2x, labels stay (${JSON.stringify(o)})`);
     o = await sized(400);
     check(o.k === '1.4' && o.vol === 'none' && o.pre === 'none' && o.valve === 'none', `narrow schematic: type 1.4x, secondary labels hidden (${JSON.stringify(o)})`);
+    const kept = mount({ ...s.config, hc_return_label: true, narrow_values: true }, hass); kept.style.display = 'block'; kept.style.width = '400px'; await wait(30);
+    check(getComputedStyle(q(kept, 't-buf-bottom')).display !== 'none' && getComputedStyle(q(kept, 't-hc-rl')).display !== 'none'
+      && getComputedStyle(q(kept, 't-vol')).display === 'none' && getComputedStyle(q(kept, 't-dhw-bottom')).display === 'none',
+    'narrow_values keeps buffer sub-values and circuit return, but not unrelated secondary labels');
+    kept.remove();
+    const bufferCard = async (keys, equal = true) => {
+      const entities = Object.fromEntries(keys.map((key) => [key, `sensor.${key}`]));
+      const states = toStates(Object.fromEntries(keys.map((key, n) => [`sensor.${key}`, [`${40 - n * 5}`, '°C']])));
+      const c = mount({ buffer_values: equal ? 'equal' : 'default', entities }, hassOf(states)); await wait(20); return c;
+    };
+    let bc = await bufferCard(['buffer_top']);
+    check(q(bc, 't-buf-top').getAttribute('y') === '446', 'equal buffer layout centres one configured value'); bc.remove();
+    bc = await bufferCard(['buffer_top', 'buffer_bottom']);
+    check(q(bc, 't-buf-top').getAttribute('y') === '382' && q(bc, 't-buf-bottom').getAttribute('y') === '500'
+      && getComputedStyle(q(bc, 't-buf-top')).fontSize === getComputedStyle(q(bc, 't-buf-bottom')).fontSize, 'equal buffer layout distributes two equally sized values'); bc.remove();
+    bc = await bufferCard(['buffer_top', 'buffer_middle', 'buffer_bottom']);
+    check(['382', '441', '500'].join() === ['t-buf-top', 't-buf-middle', 't-buf-bottom'].map((id) => q(bc, id).getAttribute('y')).join(), 'equal buffer layout distributes three values'); bc.remove();
+    bc = await bufferCard(['buffer_top', 'buffer_middle', 'buffer_bottom'], false);
+    check(['392', '446', '502'].join() === ['t-buf-top', 't-buf-middle', 't-buf-bottom'].map((id) => q(bc, id).getAttribute('y')).join()
+      && getComputedStyle(q(bc, 't-buf-top')).fontSize !== getComputedStyle(q(bc, 't-buf-bottom')).fontSize, 'default buffer emphasis is unchanged'); bc.remove();
     const card = mount(s.config, hass); await wait(20);
     check(!!card.shadowRoot.querySelector('.body > .stage > #svg'), 'schematic sits in its own container');
     check(q(card, 't-vl').textContent.startsWith('VL ') && !!q(card, 't-vl').querySelector('.pre'), 'flow label keeps its VL prefix as a separate part');
@@ -1320,7 +1340,7 @@
     const s = setups[12]; const reg = s.registry; const px = 'luxtronik2';
     const hass = (scen, extra = {}) => hassOf(toStates({ ...s.states(scen), ...extra }), reg);
     const r = C._resolve(s.config, hass('heat')); const e = r.entities;
-    check(HFC_PRESETS.luxtronik.tested !== true && r.ready && r.prefix === '', 'Luxtronik is detected through translation keys and marked untested');
+    check(HFC_PRESETS.luxtronik.tested === true && r.ready && r.prefix === '', 'Luxtronik is detected through translation keys and marked tested');
     check(e.mode === `sensor.${px}_status` && e.compressor === `binary_sensor.${px}_compressor`
       && e.flow === `sensor.${px}_flow_in_temperature` && e.return === `sensor.${px}_flow_out_temperature`, `Luxtronik mode, compressor, flow (Vorlauf) and return (Rücklauf) (${e.flow} / ${e.return})`);
     check(e.power === `sensor.${px}_current_power_consumption` && e.heat === `sensor.${px}_current_heat_output` && e.volume === `sensor.${px}_heat_amount_flow_rate`, 'Luxtronik power, heat output and heating flow rate');
@@ -1566,7 +1586,7 @@
     };
     const resolve = (states, config = { preset: 'vaillant' }) => C._resolve(config, hassOf(toStates(states), reg(states)));
     let r = resolve(base); let e = r.entities;
-    check(r.ready && r.prefix === 'home', `the home is found although its entity ids end in _2 (ready ${r.ready}, prefix "${r.prefix}")`);
+    check(HFC_PRESETS.vaillant.tested === true && r.ready && r.prefix === 'home', `the confirmed preset finds the home although its entity ids end in _2 (ready ${r.ready}, prefix "${r.prefix}")`);
     check(e.mode === 'sensor.home_energy_manager_state_2' && e.flow === 'sensor.home_system_flow_temperature_2', 'entities with a number are used where the plain id does not exist');
     check(e.hc_flow === 'sensor.home_circuit_0_current_flow_temperature' && e.dhw_top === 'sensor.home_domestic_hot_water_0_tank_temperature'
       && e.dhw_target === 'sensor.home_domestic_hot_water_0_setpoint' && e.buffer_top === 'sensor.home_top_central_heating_cylinder_temperature', 'circuit, hot water and buffer of the same home');
@@ -2813,6 +2833,19 @@
       hassOf(toStates({ 'sensor.f': ['35', '°C'], 'binary_sensor.comp': 'off', 'binary_sensor.valve': 'off', 'sensor.top': ['40', '°C'], 'climate.tank': { state: 'heat', attributes: { current_temperature: 38 } } }))); await wait(20);
     check(mixed._tilePeriods('dhw_loss').join() === 'now' && mixed._lossIds().temps.join() === 'sensor.top', 'a thermostat below a plain top sensor is left out of the measurement');
     mixed.remove();
+    // An explicit measurement sensor is fitted first, while the displayed tank sensors still participate in draw-off detection (#216).
+    const explicit = mount({ entities: { flow: 'sensor.f', compressor: 'binary_sensor.comp', valve: 'binary_sensor.valve', dhw_top: 'sensor.top', dhw_bottom: 'sensor.bottom', dhw_loss_sensor: 'sensor.measure' } },
+      hassOf(toStates({ 'sensor.f': ['35', '°C'], 'binary_sensor.comp': 'off', 'binary_sensor.valve': 'off', 'sensor.top': ['50', '°C'], 'sensor.bottom': ['38', '°C'], 'sensor.measure': ['42', '°C'] }))); await wait(20);
+    const explicitIds = explicit._lossIds();
+    check(explicitIds.temps.join() === 'sensor.measure,sensor.top,sensor.bottom' && explicit._tileEntity(explicit._tileSource('dhw_loss', 'now')) === 'sensor.measure',
+      `explicit standby-loss sensor is fitted and opens from the tile (${explicitIds.temps.join()})`);
+    check(/- dhw_loss_sensor: sensor\.measure = 42 °C/.test(C._diagnosticReport(explicit._config, explicit._hass)), 'diagnostic report lists the explicit standby-loss sensor');
+    const explicitHistory = hist({ ...base, 'sensor.measure': [...cool(48, 46.2, 40, -4), ...cool(46, 0, 48, 0.7)] });
+    check(near(explicit._dhwLoss(explicitHistory, explicitIds, start, end), 0.7), 'explicit sensor determines the fitted standby-loss slope');
+    explicit.remove();
+    let badExplicit = '';
+    try { const bad = document.createElement('heatpump-flow-card'); bad.setConfig({ entities: { dhw_loss_sensor: 'climate.tank' } }); } catch (err) { badExplicit = err.message; }
+    check(/sensor\.\*/.test(badExplicit), `a thermostat cannot be configured as the standby-loss history sensor (${badExplicit})`);
     // Tile: needs a tank sensor and a running signal; reads the history and shows K/h.
     const st = toStates({ 'sensor.f': ['35', '°C'], 'binary_sensor.comp': 'off', 'binary_sensor.valve': 'off', 'sensor.top': ['33.6', '°C'] });
     const setup = { states: () => ({}), history: Object.fromEntries(Object.entries(base).filter(([id]) => id !== 'switch.rod' && id !== 'sensor.bottom')) };
