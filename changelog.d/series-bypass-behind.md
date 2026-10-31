@@ -1,0 +1,1 @@
+- Series buffer with bypass valve: the idle pipe from the flow line down to the bypass valve is drawn behind the flow line, so its round end no longer covers the flowing pipe and its dashes at the junction.
