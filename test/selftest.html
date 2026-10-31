@@ -3661,6 +3661,44 @@
     check(!C._disabledMappings({ ...lux.config, entities: { power: 'sensor.own_power' } }, admin, [{ entity_id: powerId, ...powerReg }]).length, 'an own entity for the key hides the hint');
   }
 
+  // Flow speed: a new flow rate changes the playback rate of the running dashes, so they keep their position and never step back
+  {
+    const p = 'panasonic_heat_pump';
+    const st = (lmin) => toStates({
+      [`sensor.${p}_main_main_outlet_temp`]: ['36', '°C'], [`sensor.${p}_main_main_inlet_temp`]: ['32', '°C'],
+      [`sensor.${p}_main_compressor_freq`]: ['19', 'Hz'], [`sensor.${p}_main_threeway_valve_state`]: 'Room',
+      [`sensor.${p}_main_pump_flow`]: [lmin, 'l/min'], [`sensor.${p}_main_z1_water_temp`]: ['-78', '°C'],
+    });
+    const card = mount({ preset: 'heishamon', hc_type: 'radiator', animations: 'always' }, hassOf(st('38'))); await wait(20);
+    const dash = card.shadowRoot.getElementById('f-vl');
+    const anim = () => dash.getAnimations()[0];
+    const css = card.shadowRoot.querySelector('style').textContent;
+    check(/\.flow\.on \{[^}]*hfc-dash 1s/.test(css) && /\.fan\.on \{[^}]*hfc-spin 1s/.test(css) && /\.impeller\.on \{[^}]*hfc-spin 1s/.test(css),
+      'flow dashes, fans and pumps run for 1 s in the stylesheet; the card sets their speed');
+    if (!anim()) check(false, 'the flow dashes animate with animations: always');
+    else {
+      await anim().ready;
+      const rate = (lmin) => 1 / Math.min(Math.max(1000 / (lmin * 60), 0.4), 30);
+      check(Math.abs(anim().playbackRate - rate(38)) < 0.01, `the playback rate follows the flow rate (${anim().playbackRate.toFixed(3)}, expected ${rate(38).toFixed(3)})`);
+      const offset = () => parseFloat(getComputedStyle(dash).strokeDashoffset);
+      const frames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      // A small change of the flow rate, as a heat pump reports it every few seconds. The dashes move by -40 per cycle; a step
+      // backwards is a positive change of the offset, a jump a change of more than a few units within two frames.
+      const steps = [];
+      for (const lmin of ['37.5', '40', '38.3', '36', '38']) {
+        anim().pause(); await anim().ready; const before = offset(); const same = anim();
+        card.hass = hassOf(st(lmin)); await wait(5);
+        await anim().ready;
+        steps.push(+(offset() - before).toFixed(2));
+        check(anim() === same, `a new flow rate keeps the running animation (${lmin} l/min)`);
+        check(Math.abs(anim().playbackRate - rate(+lmin)) < 0.01, `the playback rate follows ${lmin} l/min (${anim().playbackRate.toFixed(3)})`);
+        anim().play(); await frames();
+      }
+      check(steps.every((d) => Math.abs(d) < 0.01), `a new flow rate does not move the dashes (offset changes ${steps.join(', ')})`);
+    }
+    card.remove();
+  }
+
   // Return under flow: where the return from the hot-water tank crosses the flow pipes, the return lies underneath
   {
     const s = setups.find((x) => x.config.preset === 'heishamon') || setups[0];
