@@ -174,7 +174,7 @@ Added from the card picker, the card looks for a supported integration and fills
 
 When no supported preset is detected, the editor offers **Find entities on this heat pump device**. Pick the Home Assistant device, review every proposed field and select only the mappings you want to save. Nothing is written merely by choosing a device. A field is omitted when several entities match, because an empty mapping is safer than a guessed one.
 
-The assistant uses this small exact naming table. It also checks that the entity's unit, device class and domain fit the target field; words before a listed name in the entity id are allowed (`heat_pump_flow_temperature` → `flow temperature`). It does not use fuzzy matching.
+The assistant uses this small exact naming table. It also checks that the entity's unit, device class and domain fit the target field. Underscores and punctuation in entity ids are normalized (`heat_pump_flow_temperature` → `heat pump flow temperature`), but measurement qualifiers are never discarded: `thermal_power` does not become `power`. It does not use fuzzy matching.
 
 | Field | Exact English names | Exact German names |
 |---|---|---|
@@ -182,8 +182,8 @@ The assistant uses this small exact naming table. It also checks that the entity
 | Return | heat pump return temperature, return temperature | WP Rücklauf, Rücklauf, Rücklauftemperatur (also `ruecklauf`) |
 | Electrical power | heat pump electrical power, electrical power, power consumption, input power, power | WP Leistung, Leistungsaufnahme, Leistung |
 | Operating mode | heat pump operating mode, operating mode, operation mode, HP mode | WP Betriebsart, Betriebsart, Betriebsmodus |
-| Compressor | compressor running, compressor frequency, compressor speed, compressor | Verdichter Status, Verdichterfrequenz, Verdichterdrehzahl, Verdichter |
-| Diverter valve | diverter valve, three way valve, 3 way valve, DHW valve | Umschaltventil, Dreiwegeventil, 3 Wege Ventil, WW Ventil |
+| Compressor | compressor running, compressor frequency, compressor speed, compressor | WP Verdichter, Verdichter Status, Verdichterfrequenz, Verdichterdrehzahl, Verdichter |
+| Diverter valve | diverter valve, three way valve, 3 way valve, DHW valve | WP Umschaltventil, Umschaltventil, Dreiwegeventil, 3 Wege Ventil, WW Ventil |
 | Hot-water temperature | domestic hot water temperature, hot water temperature, DHW temperature | Warmwasser Temperatur, Warmwassertemperatur, WW Temperatur |
 | Outdoor temperature | outdoor temperature, outside temperature, ambient temperature | Außentemperatur, Außen Temperatur, Außen |
 

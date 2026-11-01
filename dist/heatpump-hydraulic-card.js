@@ -1903,15 +1903,15 @@ const HFC_KEY_KINDS = Object.fromEntries(Object.entries({
 const hfcKindOf = (key) => HFC_KEY_KINDS[key] || HFC_KEY_KINDS[String(key).replace(/^hc[2-6]_/, 'hc_')] || HFC_KEY_KINDS[String(key).replace(/^hc[2-6]_/, '')];
 
 // Guided mapping without a preset (#149). These are deliberately small exact-name tables, not fuzzy matching. A name can be
-// the entity's friendly/original name or a suffix of its entity id ("heat_pump_flow_temperature" → "flow temperature").
+// the entity's friendly/original name or its complete entity-id object name (underscores and punctuation are normalized).
 // A proposal is made only when exactly one entity on the selected device has a fitting kind and an exact listed name.
 const HFC_ASSISTANT_RULES = {
   flow: { kind: 'temperature', names: ['heat pump flow temperature', 'heatpump flow temperature', 'flow temperature', 'supply temperature', 'flow', 'supply', 'wp vorlauf', 'vorlauf', 'vorlauftemperatur'] },
   return: { kind: 'temperature', names: ['heat pump return temperature', 'heatpump return temperature', 'return temperature', 'wp return', 'wp rucklauf', 'wp ruecklauf', 'rucklauf', 'ruecklauf', 'rucklauftemperatur', 'ruecklauftemperatur'] },
   power: { kind: 'power', names: ['heat pump electrical power', 'heatpump electrical power', 'electrical power', 'power consumption', 'input power', 'power', 'wp leistung', 'leistungsaufnahme', 'leistung'] },
   mode: { kind: 'text', names: ['heat pump operating mode', 'heatpump operating mode', 'operating mode', 'operation mode', 'hp mode', 'wp betriebsart', 'betriebsart', 'betriebsmodus'] },
-  compressor: { kind: 'speed', names: ['compressor running', 'compressor frequency', 'compressor speed', 'compressor', 'verdichter status', 'verdichterfrequenz', 'verdichterdrehzahl', 'verdichter'] },
-  valve: { kind: 'valve', names: ['diverter valve', 'three way valve', '3 way valve', 'dhw valve', 'umschaltventil', 'dreiwegeventil', '3 wege ventil', 'ww ventil'] },
+  compressor: { kind: 'speed', names: ['compressor running', 'compressor frequency', 'compressor speed', 'compressor', 'wp verdichter', 'verdichter status', 'verdichterfrequenz', 'verdichterdrehzahl', 'verdichter'] },
+  valve: { kind: 'valve', names: ['diverter valve', 'three way valve', '3 way valve', 'dhw valve', 'wp umschaltventil', 'umschaltventil', 'dreiwegeventil', '3 wege ventil', 'ww ventil'] },
   dhw_top: { kind: 'temperature', names: ['domestic hot water temperature', 'hot water temperature', 'dhw temperature', 'warmwasser temperatur', 'warmwassertemperatur', 'ww temperatur'] },
   outdoor: { kind: 'temperature', names: ['outdoor temperature', 'outside temperature', 'ambient temperature', 'aussentemperatur', 'aussen temperatur', 'aussen'] },
 };
@@ -1919,12 +1919,7 @@ const hfcAssistantName = (value) => String(value || '').trim().toLowerCase().rep
   .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 const hfcAssistantNames = (id, entry, state) => {
   const values = [String(id || '').split('.').slice(1).join('.'), entry?.name, entry?.original_name, state?.attributes?.friendly_name];
-  const out = new Set();
-  values.forEach((value) => {
-    const words = hfcAssistantName(value).split(' ').filter(Boolean);
-    for (let n = 0; n < words.length; n++) out.add(words.slice(n).join(' '));
-  });
-  return out;
+  return new Set(values.map(hfcAssistantName).filter(Boolean));
 };
 // Units of the measuring kinds: one of them on a text, on/off or counter key is a mistake.
 const HFC_PHYSICAL_UNITS = new Set(['temperature', 'power', 'energy', 'pressure', 'flowrate', 'hours'].flatMap((kind) => HFC_KINDS[kind].units));

@@ -166,8 +166,9 @@
     const states = toStates({ ...other.states('heat'),
       'binary_sensor.wp_verdichter': 'on', 'sensor.wp_umschaltventil': 'Heating',
       'sensor.wp_room_temperature': ['21.5', '°C'], 'sensor.wp_heat_output': ['6200', 'W'],
-      'sensor.second_vorlauf': ['33', '°C'] });
-    const registry = Object.fromEntries(Object.keys(states).map((id) => [id, { device_id: id === 'sensor.second_vorlauf' ? 'device-second' : 'device-any' }]));
+      'sensor.second_vorlauf': ['33', '°C'], 'sensor.hp_thermal_power': ['6200', 'W'] });
+    const registry = Object.fromEntries(Object.keys(states).map((id) => [id, { device_id: id === 'sensor.second_vorlauf' ? 'device-second'
+      : id === 'sensor.hp_thermal_power' ? 'device-thermal' : 'device-any' }]));
     const h = hassOf(states, registry);
     const proposals = C._assistantProposals(h, 'device-any', {});
     const proposed = Object.fromEntries(proposals.map((p) => [p.key, p.id]));
@@ -179,8 +180,10 @@
       `assistant proposes the eight exact demo mappings and no distractor (${JSON.stringify(proposed)})`);
     check(!Object.values(proposed).includes('sensor.wp_room_temperature') && !Object.values(proposed).includes('sensor.wp_heat_output')
       && !Object.values(proposed).includes('sensor.second_vorlauf'), 'assistant ignores other fields and entities on another device');
-    const ambiguousStates = { ...states, 'sensor.wp_supply_temperature': { entity_id: 'sensor.wp_supply_temperature', state: '34', attributes: { unit_of_measurement: '°C' } } };
-    const ambiguousRegistry = { ...registry, 'sensor.wp_supply_temperature': { device_id: 'device-any' } };
+    check(!C._assistantProposals(h, 'device-thermal', {}).some((p) => p.key === 'power'),
+      'assistant preserves the thermal qualifier and never proposes thermal power as electrical power');
+    const ambiguousStates = { ...states, 'sensor.supply_temperature': { entity_id: 'sensor.supply_temperature', state: '34', attributes: { unit_of_measurement: '°C' } } };
+    const ambiguousRegistry = { ...registry, 'sensor.supply_temperature': { device_id: 'device-any' } };
     check(!C._assistantProposals(hassOf(ambiguousStates, ambiguousRegistry), 'device-any', {}).some((p) => p.key === 'flow'),
       'assistant omits an ambiguous field instead of choosing one flow sensor');
 
