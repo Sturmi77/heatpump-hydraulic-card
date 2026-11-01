@@ -311,7 +311,7 @@ const HFC_PRESETS = {
         cop_heating_today: s('cop_heating'),
         cop_dhw_today: s('cop_dhw'),
         energy_today: s('power_consumption_today'),
-        starts_today: s('compressor_starts'),
+        starts_total: s('compressor_starts'),
         hours: s('compressor_hours'),
         aux_hours: s('heating_rod_hours'),
         compressor_speed: s('compressor_modulation'),
@@ -1040,22 +1040,26 @@ const HFC_PRESETS = {
       const x = hfcEbusdStem(ctx, p);
       const e = (circuit, name) => ctx.match(new RegExp(`^sensor\\.${x}_${circuit}_${name}$`), 'mqtt');
       const h = (n) => e('hmu', n); const c = (n) => e('ctl[sv]\\d', n); const w = (n) => e('vwzio', n);
+      // Writable controller values that ebusd publishes as number or select entities.
+      const cd = (domain, n) => ctx.match(new RegExp(`^${domain}\\.${x}_ctl[sv]\\d_${n}$`), 'mqtt');
       return {
         mode: h('rundatastatuscode'),
-        compressor: h('rundatacompressorspeed'),
+        compressor: [h('rundatacompressorspeed'), h('currentcompressorutil')],
         // The hydraulic station's hot water flag, where ebusd reports it. Without it the operating state (hwc_*) tells hot water.
         // The controller's Z1ValveStatus is the zone 1 valve (open/closed), also closed in standby and while another zone heats,
         // so it is no diverter valve and stays unmapped (#155).
         valve: w('statusdhw_dhwactive'),
-        power: h('currentconsumedpower'),
+        power: [h('currentconsumedpower'), h('rundataelectricpowerconsumption')],
         heat: h('currentyieldpower'),
         flow: h('rundataflowtemp'),
         return: h('rundatareturntemp'),
         volume: h('buildingcircuitflow'),
         source_in: h('rundataairinlettemp'),
-        outdoor: [e('broadcast', 'outsidetemp'), c('displayedoutsidetemp')],
+        outdoor: [e('broadcast', 'outsidetemp'), c('displayedoutsidetemp'), c('outsidetemp')],
         dhw_top: [c('hwcstoragetemp'), w('statusdhw_hwcstoragetemp')],
-        dhw_target: c('hwctempdesired'),
+        dhw_target: [c('hwctempdesired'), cd('number', 'hwctempdesired')],
+        dhw_mode: cd('select', 'hwcopmode'),
+        fan_speed: h('rundatafan1speed'),
         hc_flow: c(`hc${i.hc}flowtemp`),
         hc_setpoint: c(`hc${i.hc}actualflowtempdesired`),
         hc_pump: c(`hc${i.hc}pumpstatus`),

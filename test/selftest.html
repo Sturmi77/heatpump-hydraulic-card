@@ -230,6 +230,19 @@
     check(r.entities.hc2_flow === 'sensor.ebusd_ctlv2_hc2flowtemp' && r.entities.hc2_pump === 'sensor.ebusd_ctlv2_hc2pumpstatus', 'ebusd: second circuit from the controller');
     check(r.entities.hc_pressure === 'sensor.ebusd_hmu_flowpressure' && r.entities.hc2_pressure === undefined, 'ebusd: one system pressure, not copied to circuit 2');
     // #1: a mixed circuit's signed mixer movement from the controller draws the mixer; a circuit without it draws none.
+    // #189: fallbacks seen on an aroTHERM plus where the selected daemon lacks the usual messages.
+    const alt = toStates({
+      'sensor.ebus_x_hmu_rundatastatuscode': 'heat_compressor_active', 'sensor.ebus_x_hmu_rundataflowtemp': ['27.2', '°C'],
+      'sensor.ebus_x_hmu_rundataelectricpowerconsumption': ['383.6', 'W'], 'sensor.ebus_x_hmu_currentcompressorutil': ['40', '%'],
+      'sensor.ebus_x_hmu_rundatafan1speed': ['419', 'rpm'], 'sensor.ebus_x_ctlv2_outsidetemp': ['9.9', '°C'],
+      'number.ebus_x_ctlv2_hwctempdesired': ['50', '°C'], 'select.ebus_x_ctlv2_hwcopmode': 'auto',
+    });
+    const altReg = Object.fromEntries(Object.keys(alt).map((id) => [id, { platform: 'mqtt' }]));
+    const ae = C._resolve({ preset: 'ebusd' }, hassOf(alt, altReg)).entities;
+    check(ae.power === 'sensor.ebus_x_hmu_rundataelectricpowerconsumption' && ae.compressor === 'sensor.ebus_x_hmu_currentcompressorutil'
+      && ae.fan_speed === 'sensor.ebus_x_hmu_rundatafan1speed' && ae.outdoor === 'sensor.ebus_x_ctlv2_outsidetemp'
+      && ae.dhw_target === 'number.ebus_x_ctlv2_hwctempdesired' && ae.dhw_mode === 'select.ebus_x_ctlv2_hwcopmode',
+    `ebusd fallbacks: power, compressor utilisation, fan, outdoor, hot-water target (number) and mode (select) (${JSON.stringify([ae.power, ae.dhw_target, ae.dhw_mode])})`);
     const withMixer = C._resolve(s.config, hassOf(toStates({ ...s.states('heat'), 'sensor.ebusd_ctlv2_hc2mixermovement': ['-15', '%'] }), s.registry)).entities;
     check(withMixer.hc2_mixer_opening === 'sensor.ebusd_ctlv2_hc2mixermovement' && withMixer.hc_mixer_opening === undefined,
       `ebusd: the controller's mixer movement maps to the circuit's mixer (${withMixer.hc2_mixer_opening} / ${withMixer.hc_mixer_opening})`);
@@ -344,6 +357,13 @@
     check(r.entities.heat === undefined, 'EMS-ESP compressor current power is electrical input, not heat output');
     check(!detects('emsesp', { 'sensor.boiler_current_flow_temperature': '45', 'sensor.boiler_outside_temperature': '5' }, registry),
       'descriptive EMS-ESP flow and outdoor names alone still do not detect a gas boiler');
+  }
+  {
+    // #262: ViCare's compressor_starts is the lifetime counter, not today's starts.
+    const states = toStates({ 'binary_sensor.vc_compressor': 'off', 'sensor.vc_starts': '24755' });
+    const registry = { 'binary_sensor.vc_compressor': { platform: 'vicare', translation_key: 'compressor' }, 'sensor.vc_starts': { platform: 'vicare', translation_key: 'compressor_starts' } };
+    const v = C._resolve({ preset: 'vicare' }, hassOf(states, registry)).entities;
+    check(v.starts_total === 'sensor.vc_starts' && v.starts_today === undefined, `ViCare compressor starts are the total, not today's (${v.starts_total} / ${v.starts_today})`);
   }
   {
     // #257: the complete "long names" entity list of a Nefit EnviLine (EMS-ESP 3.8.6).
