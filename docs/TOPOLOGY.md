@@ -9,7 +9,7 @@ It answers five questions: how the schematic should grow (fixed slots or an inte
 - **No user-facing topology language.** A freely composable graph in the configuration would make every dashboard a hydraulic design task. The configuration stays semantic (`storage: combined`, stove entities, boiler entities); how the card draws it is internal.
 - **Existing configurations do not change.** Every variant is off by default and selected by an explicit option or by entities that only exist on such installations.
 - **Reuse entity keys where the meaning holds.** Presets, the editor and the diagnostic report keep working without a parallel set of keys.
-- **No guessed semantics.** A variant that depends on integration states (#51) waits for a reviewed diagnostic report from a real installation.
+- **No guessed preset semantics.** A generic feature may ship with explicit, card-defined manual entities and conservative defaults. Integration-specific automatic mappings still require a reviewed diagnostic report from a real installation.
 - **Invalid combinations are rejected or resolved visibly**, never drawn as plumbing that cannot exist.
 - **Same quality gate as other features:** layout signature, EN/DE texts, editor fields, keyboard access, compact/wide/wall layouts and full screen, demo setup, self-test with geometry collision checks, README section.
 
@@ -62,7 +62,7 @@ Not a big-bang rewrite, and not unguarded option A. The [coverage analysis](#cov
 | 0a | **Safety net:** geometry snapshot test (position and size of every element for each demo setup, compared before/after) and the combination test harness over the valid set below, still over today's code | every later step, option A and B alike |
 | 0b | **Flow model:** one function decides active generator and open paths; `_update` reads from it. No visual change. | every new hydraulic variant; removes the shared flags that caused the conflicts in #95–#97 |
 | 1 | **Combined storage and `dhw_type` as fixed slots** in the storage column, on top of 0a/0b | about 85 % coverage |
-| 3a | **Boiler in series** as a fixed slot on the flow pipe, once the data from #51 is there | about 90 % coverage |
+| 3a | **Boiler in series** as a fixed slot on the flow pipe, manually configured first; preset mappings follow verified data | about 90 % coverage |
 | 0c/0d | **Columns as components** – only at the decision point below | wood stove, boiler in parallel, further variants |
 
 **Decision point before phase 2:** the component refactor (0c, then 0d where needed) starts when one of these holds; otherwise the remaining variants are added as fixed slots as well:
@@ -85,7 +85,7 @@ Relative sizes as in the [roadmap](ROADMAP.md) (`S` local, `M` several code path
 | 0d remaining columns | – | L, 3–5 d | only when needed |
 | Phase 1 combined storage | M, 2–3 d | S–M, 1–2 d | |
 | Phase 2 wood stove (incl. geometry spike) | L, 3–5 d | M, 2–3 d | B: stove = component in the generator column |
-| Phase 3 second generator (after data) | M–L, 2–4 d | M, 2 d | |
+| Phase 3 second generator (generic manual contract) | M–L, 2–4 d | M, 2 d | |
 | **Sum for the three requests** | **7–12 d** | **12–19 d** (incl. 0d) | B costs about 5–7 d more up front |
 | Each further variant | M–L, growing | S–M, roughly constant | break-even after about 3–5 further variants |
 
@@ -96,7 +96,7 @@ The time is not the only difference: under option B the generated combination te
 | Target | Building blocks | Pareto path | Full refactor (0a–0d) |
 | --- | --- | --- | --- |
 | about 85 % | combined storage, `dhw_type` | 6–8 d | 8–11 d |
-| about 90 % | + boiler in series (after data) | 8–11 d | 13–18 d (needs 0d) |
+| about 90 % | + boiler in series | 8–11 d | 13–18 d (needs 0d) |
 | 100 % of the catalogue | + boiler in parallel, wood stove | 13–18 d | 16–23 d |
 | each variant beyond the catalogue | – | M–L, growing | S–M, roughly constant |
 
@@ -238,9 +238,7 @@ The wood stove appears in 36 of the 88 topologies, which together hold only abou
 
 ## Phase 3 – second heat generator in hybrid systems (#51)
 
-**Blocked** until a reviewed diagnostic report from a real hybrid installation (for example Intergas Xtend with ESPHome) shows the boiler's states and power values.
-
-**Proposed model** (to be confirmed with that data): keys `boiler_state`, `boiler_power`, optional `boiler_flow`; a normalised mode `hp_only`, `boiler_only` or `both`; first the boiler in series on the flow pipe between heat pump and valve, separate from the inline heater rod; later the boiler in parallel into the buffer or combined storage. Whether the boiler also heats DHW is decided from the data, not assumed.
+**0.17 scope:** implement the vendor-neutral manual contract without waiting for integration-specific data: keys `boiler_state`, `boiler_power`, optional `boiler_flow`; a normalised mode `hp_only`, `boiler_only` or `both`; and the boiler in series on the common flow between heat pump and the existing diverter valve, separate from the inline heater rod. The valve already decides whether that common flow goes to heating or DHW, so the first version needs no boiler-specific DHW branch. A boiler in parallel into a buffer or combined storage and all preset auto-mappings remain evidence-driven follow-ups.
 
 ## Standby loss of the hot-water tank (#32)
 
@@ -253,7 +251,7 @@ Shipped separately as the tile `dhw_loss` (cool-down in K/h from verified standb
 | 1 | 0a safety net (snapshot + combination harness) – **done** ([#111](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/111)) | patch | – |
 | 2 | 0b flow model, no visual change – **done** ([#111](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/111)) | minor, right after a release, short contributor freeze | step 1 |
 | 3 | Phase 1 combined storage and `dhw_type` as fixed slots – **done** ([#133](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/133), 0.14.0) | next minor | step 2 |
-| 4 | Phase 3a boiler in series as a fixed slot | when data is available | step 2, reviewed diagnostic report |
+| 4 | Phase 3a boiler in series as a fixed slot | 0.17 after the guided setup | step 2; manual contract first |
 | 5 | Decision point: fixed slots or component refactor (0c/0d) for the tail | – | requests after steps 3–4 |
 | 6 | Phase 2 wood stove, boiler in parallel | following minors | step 5 |
 
@@ -265,7 +263,7 @@ Each step is one pull request with its changelog fragment. Umbrella issues stay 
 
 Planned after 0a and 0b were merged (28 October 2026). Each item is one pull request; items that change the flow model or the topology baseline run one after the other, never in parallel, because they touch the same code and the same baseline file.
 
-**Rule for missing input:** where an open question has no answer from users or real installations when its item starts, the item is built with the planned default below. Later input changes the default in a follow-up pull request; it does not hold the item back. Only phase 3a waits, because it needs real integration states (principle "no guessed semantics").
+**Rule for missing input:** where an open question has no answer from users or real installations when its item starts, the item is built with the planned default below. Later input changes the default in a follow-up pull request; it does not hold the item back. Phase 3a follows the same rule with explicit manual entities; only preset mappings wait for integration states.
 
 | Sprint | Item | Content | Effort | Coverage | Input needed |
 | --- | --- | --- | --- | --- | --- |
@@ -273,13 +271,13 @@ Planned after 0a and 0b were merged (28 October 2026). Each item is one pull req
 | 1 | Phase 1a combined storage – **done** ([#131](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/131), landed with [#133](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/133)) | `storage: combined` with a coil for hot water, demo setup, combination test extended by the fourth storage strategy | S–M, 1–2 d | about 78 % | none, defaults D1 and D4 |
 | 2 | Phase 1b `dhw_type` – **done** ([#132](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/132), landed with [#133](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/133)) | `coil`, `fresh_water`, `tank_in_tank` in the combined storage, and `fresh_water` on a parallel buffer | S–M, 1 d | about 85 % | none, default D2 |
 | 2 | `dhw_loss` with combined storage – **done** (with #132; the pump of every circuit is required since the pre-release review) | standby windows with running circuit pumps are left out | S, 0.5 d | – | none, default D3 |
-| 2 | Data for phase 3a – **requested** ([comment in #51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51#issuecomment-6470468181)) | ask for a diagnostic report of a hybrid installation in [#51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51) and the call for testers [#1](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) | – | – | user reports |
-| 3 | Phase 3a boiler in series | fixed slot on the flow pipe, once a reviewed report is there | M, 2 d | about 90 % | **blocked** until a report arrives |
+| 2 | Data for phase 3a – requested in parallel ([comment in #51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51#issuecomment-6470468181)) | ask for a diagnostic report of a hybrid installation in [#51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51) and the call for testers [#1](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) | – | – | user reports; does not block the generic feature |
+| 3 | Phase 3a boiler in series | fixed slot on the flow pipe with explicit manual entities | M, 2 d | about 90 % | planned for 0.17 |
 | – | Decision point | fixed slots or component refactor for the tail, by the criteria above | – | – | requests beyond the catalogue |
 
-Sprints 1 and 2 bring the card from about 73 % to about 85 % of installations in roughly 4–5 working days. Phase 3a follows when its data exists; until then the decision point is not reached.
+Sprints 1 and 2 brought the card from about 73 % to about 85 % of installations in roughly 4–5 working days. Phase 3a follows in 0.17 with a manual contract; installation data improves later automatic mappings.
 
-**Status (0.14.0):** sprints 1 and 2 are done and shipped with 0.14.0. No input arrived for the open questions, so defaults D1 to D4 apply as planned; D5 holds (0a/0b ship as an internal entry). Two decisions were taken while testing the edge cases ([#134](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/134)): cooling runs through the heating zone of a combined storage (see phase 1), and the first stretch of flow and return that feeds several circuits is a pipe of its own. Phase 3a stays blocked until a hybrid installation sends its data.
+**Status after 0.17 planning:** sprints 1 and 2 are done and shipped with 0.14.0. Defaults D1 to D4 apply as planned; D5 holds (0a/0b ship as an internal entry). Two decisions were taken while testing the edge cases ([#134](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/134)): cooling runs through the heating zone of a combined storage (see phase 1), and the first stretch of flow and return that feeds several circuits is a pipe of its own. Phase 3a is now scheduled for 0.17 with manual entities; hybrid-installation reports run in parallel.
 
 **Planned defaults** (used when no input arrives; each can be changed later without breaking configurations):
 
