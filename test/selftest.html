@@ -259,7 +259,8 @@
       && r.entities.hc_pump === 'binary_sensor.boiler_heating_pump' && r.entities.room === 'sensor.thermostat_hc1_current_room_temperature',
     'EMS-ESP descriptive ids map the reported valve, hot water, heater, pump and room values');
     const twoCircuits = C._resolve({ preset: 'emsesp', hc_count: 2 }, hass);
-    check(twoCircuits.entities.hc_pump === 'binary_sensor.boiler_heating_pump' && twoCircuits.entities.hc2_pump === undefined,
+    check(twoCircuits.entities.hc_pump === 'binary_sensor.boiler_heating_pump'
+      && twoCircuits.entities.hc2_pump !== 'binary_sensor.boiler_heating_pump' && !hass.states[twoCircuits.entities.hc2_pump],
       'the EMS-ESP boiler pump belongs only to the direct first circuit');
     check(r.entities.heat === undefined, 'EMS-ESP compressor current power is electrical input, not heat output');
     check(!detects('emsesp', { 'sensor.boiler_current_flow_temperature': '45', 'sensor.boiler_outside_temperature': '5' }, registry),
