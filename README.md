@@ -19,7 +19,7 @@ It shows electricity flowing from **PV, battery and grid** into the heat pump, t
 
 1. **Install** the card through HACS: search for **Heat Pump Hydraulic Card**, download it and reload the browser ([details](#installation)).
 2. **Add the card**: edit a dashboard, *Add card*, pick **Heat Pump Hydraulic Card**. It looks for a supported integration and fills in the preset; without one it shows a short start hint.
-3. **Check the preset** in the card editor: the preset field says *Detected* and how many entities it found. If it says *Not found*, pick the preset of your integration ([which preset](#quick-start)) or map your entities yourself ([any other heat pump](#any-other-heat-pump)).
+3. **Check the preset** in the card editor: the preset field says *Detected* and how many entities it found. If no supported preset is detected, select the heat-pump device in the mapping assistant, review its conservative proposals, or map your entities yourself ([any other heat pump](#any-other-heat-pump)).
 4. **Fix what the editor reports**: *Check these fields* lists entities that do not fit their field (a temperature as the valve, a counter as the heater, the same sensor in two places), *Missing in the card* lists what the card cannot show without an entity, and entities the preset would use but that are disabled in Home Assistant. The most important fields come first in each group; the rest are under *More fields*.
 5. **Something looks wrong?** Look up the symptom under [Troubleshooting](#troubleshooting). Still stuck: copy the diagnostic report (document button on the card), check it for private names and paste it into a [preset feedback issue](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/new?template=preset_feedback.yml).
 
@@ -171,7 +171,23 @@ Added from the card picker, the card looks for a supported integration and fills
 | anything else | none | [Any other heat pump](#any-other-heat-pump) |
 
 ### Any other heat pump
-Map your entities and translate your mode states to the card's normalized modes:
+
+When no supported preset is detected, the editor offers **Find entities on this heat pump device**. Pick the Home Assistant device, review every proposed field and select only the mappings you want to save. Nothing is written merely by choosing a device. A field is omitted when several entities match, because an empty mapping is safer than a guessed one.
+
+The assistant uses this small exact naming table. It also checks that the entity's unit, device class and domain fit the target field. Underscores and punctuation in entity ids are normalized (`heat_pump_flow_temperature` → `heat pump flow temperature`), but measurement qualifiers are never discarded: `thermal_power` does not become `power`. It does not use fuzzy matching.
+
+| Field | Exact English names | Exact German names |
+|---|---|---|
+| Flow | heat pump flow temperature, flow temperature, supply temperature, flow, supply | WP Vorlauf, Vorlauf, Vorlauftemperatur |
+| Return | heat pump return temperature, return temperature | WP Rücklauf, Rücklauf, Rücklauftemperatur (also `ruecklauf`) |
+| Electrical power | heat pump electrical power, electrical power, power consumption, input power, power | WP Leistung, Leistungsaufnahme, Leistung |
+| Operating mode | heat pump operating mode, operating mode, operation mode, HP mode | WP Betriebsart, Betriebsart, Betriebsmodus |
+| Compressor | compressor running, compressor frequency, compressor speed, compressor | WP Verdichter, Verdichter Status, Verdichterfrequenz, Verdichterdrehzahl, Verdichter |
+| Diverter valve | diverter valve, three way valve, 3 way valve, DHW valve | WP Umschaltventil, Umschaltventil, Dreiwegeventil, 3 Wege Ventil, WW Ventil |
+| Hot-water temperature | domestic hot water temperature, hot water temperature, DHW temperature | Warmwasser Temperatur, Warmwassertemperatur, WW Temperatur |
+| Outdoor temperature | outdoor temperature, outside temperature, ambient temperature | Außentemperatur, Außen Temperatur, Außen |
+
+Afterwards, translate the raw mode states to the card's normalized modes when necessary:
 ```yaml
 type: custom:heatpump-flow-card
 title: Heat pump

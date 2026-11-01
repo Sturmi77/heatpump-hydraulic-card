@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.17.0 – unreleased
+
 ## 0.16.0 – unreleased
 - EMS-ESP is marked confirmed on a real Buderus Logatherm WLW186i-5 TP70 installation. Its preset guide now clarifies that whole-house PV, battery and grid sensors must not be mapped as the heat pump's source shares; automatic Energy-dashboard splitting is the appropriate mode for those sensors (#220).
 - Vaillant/myPyllant installations with several heating circuits bind each zone to the circuit number in its entity id and fill `hc2_room` / `hc2_room_target` through `hc6_…`; before, the first zone could be reused and only circuit 1 received room values (#223).

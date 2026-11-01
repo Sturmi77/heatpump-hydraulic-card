@@ -6,7 +6,7 @@
  *
  * https://github.com/Sturmi77/heatpump-hydraulic-card · MIT License
  */
-const HFC_VERSION = '0.16.0';
+const HFC_VERSION = '0.17.0';
 // Address this file was loaded from: shows at once when a dashboard resource still points to an old file.
 const HFC_SCRIPT_URL = (() => {
   try {
@@ -1439,6 +1439,12 @@ const HFC_EDITOR = {
     kind_onoff: 'on/off', kind_onoff_power: 'on/off, a stage or a power (W)', kind_valve: 'on/off, or a state like Tank/Room', kind_text: 'a state text',
     all_entities: 'Show all entities in the pickers',
     all_entities_help: 'Off: measurement fields offer entities whose unit or device class fits (°C, W, kWh, bar, l/h). On: every entity, for sensors without a unit.',
+    assistant_device: 'Find entities on this heat pump device',
+    assistant_device_help: 'Only available when no supported preset is detected. Suggestions are not saved until you select and confirm them.',
+    assistant_title: 'Proposed entity mapping',
+    assistant_intro: 'Exact English and German names, units and device classes are checked. Select every proposal you want to save.',
+    assistant_apply: 'Use selected proposals',
+    assistant_none: 'No unambiguous proposals were found on this device.',
     preset_help: 'Found entities are filled in below. Pick another entity to override one, clear a field to hide it.',
     from_energy: 'Empty: taken from the Energy dashboard',
     errors: 'Error entities', error_ok_text: 'Text states that mean no error',
@@ -1523,6 +1529,12 @@ const HFC_EDITOR = {
     kind_onoff: 'ein/aus', kind_onoff_power: 'ein/aus, eine Stufe oder eine Leistung (W)', kind_valve: 'ein/aus, oder ein Zustand wie Speicher/Raum', kind_text: 'ein Zustandstext',
     all_entities: 'Alle Entitäten in der Auswahl zeigen',
     all_entities_help: 'Aus: Messfelder bieten Entitäten an, deren Einheit oder Geräteklasse passt (°C, W, kWh, bar, l/h). Ein: alle Entitäten, für Sensoren ohne Einheit.',
+    assistant_device: 'Entitäten auf diesem Wärmepumpen-Gerät finden',
+    assistant_device_help: 'Nur verfügbar, wenn keine unterstützte Voreinstellung erkannt wird. Vorschläge werden erst nach Auswahl und Bestätigung gespeichert.',
+    assistant_title: 'Vorgeschlagene Entitätszuordnung',
+    assistant_intro: 'Exakte englische und deutsche Namen, Einheiten und Geräteklassen werden geprüft. Jeden gewünschten Vorschlag auswählen.',
+    assistant_apply: 'Ausgewählte Vorschläge übernehmen',
+    assistant_none: 'Auf diesem Gerät wurden keine eindeutigen Vorschläge gefunden.',
     preset_help: 'Gefundene Entitäten sind unten eingetragen. Andere Entität wählen zum Überschreiben, Feld leeren zum Ausblenden.',
     from_energy: 'Leer: aus dem Energie-Dashboard',
     errors: 'Fehler-Entitäten', error_ok_text: 'Textzustände ohne Fehler',
@@ -1889,6 +1901,26 @@ const HFC_KEY_KINDS = Object.fromEntries(Object.entries({
   text: ['mode', 'status', 'dhw_mode', 'buffer_mode', 'hc_mode', 'program'],
 }).flatMap(([kind, keys]) => keys.map((key) => [key, kind])));
 const hfcKindOf = (key) => HFC_KEY_KINDS[key] || HFC_KEY_KINDS[String(key).replace(/^hc[2-6]_/, 'hc_')] || HFC_KEY_KINDS[String(key).replace(/^hc[2-6]_/, '')];
+
+// Guided mapping without a preset (#149). These are deliberately small exact-name tables, not fuzzy matching. A name can be
+// the entity's friendly/original name or its complete entity-id object name (underscores and punctuation are normalized).
+// A proposal is made only when exactly one entity on the selected device has a fitting kind and an exact listed name.
+const HFC_ASSISTANT_RULES = {
+  flow: { kind: 'temperature', names: ['heat pump flow temperature', 'heatpump flow temperature', 'flow temperature', 'supply temperature', 'flow', 'supply', 'wp vorlauf', 'vorlauf', 'vorlauftemperatur'] },
+  return: { kind: 'temperature', names: ['heat pump return temperature', 'heatpump return temperature', 'return temperature', 'wp return', 'wp rucklauf', 'wp ruecklauf', 'rucklauf', 'ruecklauf', 'rucklauftemperatur', 'ruecklauftemperatur'] },
+  power: { kind: 'power', names: ['heat pump electrical power', 'heatpump electrical power', 'electrical power', 'power consumption', 'input power', 'power', 'wp leistung', 'leistungsaufnahme', 'leistung'] },
+  mode: { kind: 'text', names: ['heat pump operating mode', 'heatpump operating mode', 'operating mode', 'operation mode', 'hp mode', 'wp betriebsart', 'betriebsart', 'betriebsmodus'] },
+  compressor: { kind: 'speed', names: ['compressor running', 'compressor frequency', 'compressor speed', 'compressor', 'wp verdichter', 'verdichter status', 'verdichterfrequenz', 'verdichterdrehzahl', 'verdichter'] },
+  valve: { kind: 'valve', names: ['diverter valve', 'three way valve', '3 way valve', 'dhw valve', 'wp umschaltventil', 'umschaltventil', 'dreiwegeventil', '3 wege ventil', 'ww ventil'] },
+  dhw_top: { kind: 'temperature', names: ['domestic hot water temperature', 'hot water temperature', 'dhw temperature', 'warmwasser temperatur', 'warmwassertemperatur', 'ww temperatur'] },
+  outdoor: { kind: 'temperature', names: ['outdoor temperature', 'outside temperature', 'ambient temperature', 'aussentemperatur', 'aussen temperatur', 'aussen'] },
+};
+const hfcAssistantName = (value) => String(value || '').trim().toLowerCase().replace(/ß/g, 'ss').normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const hfcAssistantNames = (id, entry, state) => {
+  const values = [String(id || '').split('.').slice(1).join('.'), entry?.name, entry?.original_name, state?.attributes?.friendly_name];
+  return new Set(values.map(hfcAssistantName).filter(Boolean));
+};
 // Units of the measuring kinds: one of them on a text, on/off or counter key is a mistake.
 const HFC_PHYSICAL_UNITS = new Set(['temperature', 'power', 'energy', 'pressure', 'flowrate', 'hours'].flatMap((kind) => HFC_KINDS[kind].units));
 // On/off keys keep the domain filter of their entity picker (a sensor can report on/off as text).
@@ -2137,6 +2169,7 @@ class HeatpumpFlowCard extends HTMLElement {
 
   // Form schema. With a config, circuit fields and groups are limited to hc_count.
   // opts.valve: a valve entity is mapped, so the editor offers its states for hot water and heating (valve_map, #126).
+  // opts.assistant: no supported preset was detected, so the editor offers the confirmed-proposal assistant (#149).
   static _formSchema(config, tiles, opts = {}) {
     // The full locale first (pt-br), then its language (pt), like the card does; each table has its own set of languages.
     const locale = String(document.querySelector('home-assistant')?.hass?.locale?.language || navigator.language || 'en').toLowerCase().replace('_', '-');
@@ -2179,6 +2212,7 @@ class HeatpumpFlowCard extends HTMLElement {
             return { value: k, label: p.tested ? label : `${label} · ${L.untested}` };
           })] } },
         },
+        ...(opts.assistant ? [{ name: 'assistant_device', selector: { device: {} } }] : []),
         {
           type: 'grid', name: '', schema: [
             { name: 'title', selector: { text: {} } },
@@ -2524,6 +2558,25 @@ class HeatpumpFlowCard extends HTMLElement {
     const details = config.details !== undefined ? config.details : presetDetails;
     return { preset, prefix, ready, idx, fromPreset, entities: e, sums, presetErrors, errors, tiles,
       presetControls, controls, details };
+  }
+
+  // Conservative suggestions for the no-preset assistant (#149). Existing mappings are left alone, disabled/unavailable entities
+  // are ignored, and an ambiguous field receives no proposal. The editor writes none of these until the user confirms them.
+  static _assistantProposals(hass, device, config = {}) {
+    if (!device || !hass?.states || !hass?.entities) return [];
+    const rows = Object.entries(hass.states).filter(([id, state]) => {
+      const entry = hass.entities[id];
+      return entry?.device_id === device && !entry.disabled_by && !['unknown', 'unavailable'].includes(String(state?.state || '').toLowerCase());
+    });
+    return Object.entries(HFC_ASSISTANT_RULES).flatMap(([key, rule]) => {
+      if (config.entities?.[key] && config.entities[key] !== 'none') return [];
+      const wanted = new Set(rule.names.map(hfcAssistantName));
+      const hits = rows.filter(([id, state]) => {
+        if (HeatpumpFlowCard._fit(rule.kind, id, state).verdict === 'bad') return false;
+        return [...hfcAssistantNames(id, hass.entities[id], state)].some((name) => wanted.has(name));
+      });
+      return hits.length === 1 ? [{ key, id: hits[0][0] }] : [];
+    });
   }
 
   // How an entity fits a kind of HFC_KINDS: 'ok' with positive evidence (unit, device class, thermostat), 'bad' with a reason
@@ -5655,12 +5708,48 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     try { this._renderForm(); } catch (err) { console.error('heatpump-flow-card editor:', err); }
   }
 
+  _renderAssistant(show, proposals, L, computeLabel) {
+    if (!this._assistant) return;
+    if (!show) { this._assistant.innerHTML = ''; return; }
+    const esc = (x) => String(x).replace(/[&<>\"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));
+    const intro = `<ha-alert alert-type="info" title="${esc(L.assistant_title)}">${esc(L.assistant_intro)}</ha-alert>`;
+    if (!this._assistantDevice) { this._assistant.innerHTML = intro; return; }
+    if (!proposals.length) { this._assistant.innerHTML = `${intro}<p style="margin:10px 0 14px">${esc(L.assistant_none)}</p>`; return; }
+    const field = (key) => String(computeLabel({ name: key })).replace(/\s*\(.*\)\s*$/, '');
+    const rows = proposals.map((proposal, n) => {
+      const state = this._hass.states[proposal.id];
+      const name = state?.attributes?.friendly_name;
+      const entity = name ? `${name} (${proposal.id})` : proposal.id;
+      return `<label style="display:flex;gap:10px;align-items:flex-start;margin:9px 2px"><input type="checkbox" data-hfc-assistant="${n}" style="margin-top:3px"><span><strong>${esc(field(proposal.key))}</strong><br><code>${esc(entity)}</code></span></label>`;
+    }).join('');
+    this._assistant.innerHTML = `${intro}<div style="margin:10px 0">${rows}</div><button type="button" data-hfc-assistant-apply disabled>${esc(L.assistant_apply)}</button>`;
+    const button = this._assistant.querySelector('[data-hfc-assistant-apply]');
+    this._assistant.onchange = () => { button.disabled = !this._assistant.querySelector('input[data-hfc-assistant]:checked'); };
+    this._assistant.onclick = (ev) => {
+      if (ev.target !== button) return;
+      const selected = [...this._assistant.querySelectorAll('input[data-hfc-assistant]:checked')]
+        .map((input) => proposals[+input.dataset.hfcAssistant]).filter(Boolean);
+      if (selected.length) this._applyAssistant(selected);
+    };
+  }
+
+  _applyAssistant(proposals) {
+    const entities = { ...(this._config.entities || {}) };
+    proposals.forEach(({ key, id }) => { if (key && id) entities[key] = id; });
+    const config = { ...this._config, entities };
+    this._config = config;
+    this.dispatchEvent(new CustomEvent('config-changed', { detail: { config }, bubbles: true, composed: true }));
+    this._render();
+  }
+
   _renderForm() {
     if (!this._config || !this._hass) return;
     if (!this._form) {
       this._form = document.createElement('ha-form');
       this._form.addEventListener('value-changed', (ev) => { ev.stopPropagation(); this._changed(ev.detail.value); });
+      this._assistant = document.createElement('div');
       this._warn = document.createElement('div');
+      this.appendChild(this._assistant);
       this.appendChild(this._warn);
       this.appendChild(this._form);
     }
@@ -5682,6 +5771,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     this._valveShown = !!valveId;
     // Preset detection for the dropdown (#145): once per registry, not on every change in the form.
     if (this._matchesFor !== this._hass.entities) { this._matches = HeatpumpFlowCard._presetMatches(this._hass); this._matchesFor = this._hass.entities; }
+    const assistant = !r.preset && !(this._matches || []).length;
     const own = this._config.entities || {};
     const shown = { ...this._fromPreset };
     Object.entries(own).forEach(([k, v]) => { if (v === null || v === 'none') delete shown[k]; else if (v) shown[k] = v; });
@@ -5692,7 +5782,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
         Object.entries(this._hass.states).filter(([id, st]) => HeatpumpFlowCard._fit(name, id, st).verdict === 'ok').map(([id]) => id).sort()]));
     }
     const { schema, computeLabel, L } = HeatpumpFlowCard._formSchema(this._config, tiles,
-      { valve: !!valveId, matches: this._matches, fits: this._fits, all: !!this._allEntities, shown });
+      { valve: !!valveId, matches: this._matches, fits: this._fits, all: !!this._allEntities, shown, assistant });
     const found = Object.keys(this._fromPreset).length;
     // Core entities the card needs; warn about what is missing (not while a preset is not detected, its field says so).
     const has = (k) => { const id = r.entities[k]; return !!(id && this._hass.states[id]); };
@@ -5731,6 +5821,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     const html = (checks.length ? `<ha-alert alert-type="warning" title="${esc(L.checks_title)}">${list(checks.map((f) => HeatpumpFlowCard._checkText(f, L, fieldName)))}</ha-alert>` : '')
       + (info.length ? `<ha-alert alert-type="info" title="${esc(L.warn_title)}">${list(info)}</ha-alert>` : '');
     if (this._warn._html !== html) { this._warn.innerHTML = html; this._warn._html = html; this._warn.style.marginBottom = html ? '12px' : '0'; }
+    const proposals = assistant ? HeatpumpFlowCard._assistantProposals(this._hass, this._assistantDevice, this._config) : [];
+    this._renderAssistant(assistant, proposals, L, computeLabel);
     this._form.hass = this._hass;
     this._form.schema = schema;
     this._form.computeLabel = computeLabel;
@@ -5751,6 +5843,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       if (['energy_total', 'env_energy', 'heat_total'].includes(s.name)) return L.total_cop_help;
       if (s.name === 'language') return L.language_help;
       if (s.name === 'all_entities') return L.all_entities_help;
+      if (s.name === 'assistant_device') return L.assistant_device_help;
       if (this._checkHelp[s.name]) return this._checkHelp[s.name];
       if (own[s.name] === undefined && this._fromPreset[s.name]) return L.from_preset;
       if (Array.isArray(own[s.name])) return L.sum_help;
@@ -5765,7 +5858,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       animations: this._config.animations || 'auto', flow_speed: this._config.flow_speed ?? 1, source_spread: this._config.source_spread !== false,
       theme: this._config.theme || 'auto', fullscreen: this._config.fullscreen !== false, series_bypass: this._config.series_bypass !== false,
       storage: this._config.storage || 'separate', dhw_type: this._config.dhw_type || 'coil',
-      valve_dhw_text: this._valveText.dhw, valve_heating_text: this._valveText.heating, all_entities: !!this._allEntities };
+      valve_dhw_text: this._valveText.dhw, valve_heating_text: this._valveText.heating, all_entities: !!this._allEntities,
+      ...(assistant ? { assistant_device: this._assistantDevice || '' } : {}) };
     if (this._config.controls === undefined && !r.presetControls.length) delete data.controls;
     if (custom && tiles.editable) data.tiles = tiles.value;
     this._priceShown = custom;
@@ -5779,6 +5873,13 @@ class HeatpumpFlowCardEditor extends HTMLElement {
 
   // Writes back only what differs from the preset: other entities as overrides, cleared preset entities as null.
   _changed(value) {
+    // The device choice belongs to the assistant, not to the card. Changing it only computes proposals; no configuration is emitted.
+    if (Object.prototype.hasOwnProperty.call(value, 'assistant_device')
+      && String(value.assistant_device || '') !== String(this._assistantDevice || '')) {
+      this._assistantDevice = value.assistant_device || '';
+      this._render();
+      return;
+    }
     // "Show all entities" (#194) belongs to the editor, not to the card: switching it only redraws the form.
     if (!!value.all_entities !== !!this._allEntities) { this._allEntities = !!value.all_entities; this._render(); return; }
     const own = this._config.entities || {};
@@ -5806,7 +5907,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       }).filter(Boolean);
       if (this._config.controls === undefined && JSON.stringify(config.controls) === JSON.stringify(this._presetControls)) delete config.controls;
     }
-    delete config.error_ok_text; delete config.all_entities;
+    delete config.error_ok_text; delete config.all_entities; delete config.assistant_device;
     // Valve states (#126): untouched fields keep the YAML map as it is; edited ones write back only what differs from the preset.
     delete config.valve_dhw_text; delete config.valve_heating_text;
     // ha-form may drop a text field that was cleared, so a missing value counts as empty while the fields are shown.
