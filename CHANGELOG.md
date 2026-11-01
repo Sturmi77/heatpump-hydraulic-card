@@ -2,9 +2,10 @@
 
 ## Unreleased
 
-## 0.17.0 – unreleased
-
-## 0.16.0 – unreleased
+## 0.17.0 – 2026-11-01
+- The editor can propose a conservative entity mapping for an unsupported heat pump after the user selects its Home Assistant device. Exact English/German names, units and device classes identify flow, return, electrical power, operating mode, compressor, diverter valve, hot-water temperature and outdoor temperature; ambiguous matches are omitted and only individually selected proposals are saved (#149).
+- EMS-ESP 3.7.3 installations using descriptive Home Assistant entity ids such as `boiler_compressor_activity` are detected and mapped alongside the established short ids (#225).
+- A manually configured boiler or second heat generator can now be drawn in series in the common flow before the diverter valve. `boiler_state`, optional `boiler_power` and optional `boiler_flow` distinguish heat-pump-only, boiler-only and simultaneous operation without changing the existing inline heater (#51).
 - EMS-ESP is marked confirmed on a real Buderus Logatherm WLW186i-5 TP70 installation. Its preset guide now clarifies that whole-house PV, battery and grid sensors must not be mapped as the heat pump's source shares; automatic Energy-dashboard splitting is the appropriate mode for those sensors (#220).
 - Vaillant/myPyllant installations with several heating circuits bind each zone to the circuit number in its entity id and fill `hc2_room` / `hc2_room_target` through `hc6_…`; before, the first zone could be reused and only circuit 1 received room values (#223).
 - Flow dashes, fans and pumps no longer jump when their speed changes. A new flow rate, modulation or fan speed set a new animation duration, which moved the running animation to another point of its cycle; the card now changes the playback rate while preserving the current position (#218).
