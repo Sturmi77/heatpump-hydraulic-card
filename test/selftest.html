@@ -2207,12 +2207,11 @@
       'room row has a complete accessible label');
     const longName = 'Very long upstairs heating circuit name';
     c.setConfig({ ...cfg, hc2_name: longName }); c.hass = hassOf(toStates(states)); await wait(20); c._a11y(true);
-    const nameClip = c.shadowRoot.getElementById('house-row-name-clip').querySelector('rect');
-    const clippedName = q(c, 'house-row2').querySelector('.house-row-name'); const roomValue = q(c, 't-house-room2').getBBox();
-    check(clippedName.getAttribute('clip-path') === 'url(#house-row-name-clip)'
-      && +nameClip.getAttribute('x') + +nameClip.getAttribute('width') < roomValue.x
+    const clippedName = q(c, 'house-row2').querySelector('.house-row-name');
+    check(/polygon\(.+80px/.test(getComputedStyle(clippedName).clipPath)
       && (q(c, 'house-row2').getAttribute('aria-label') || '').startsWith(longName),
     'long room names are visually constrained before the temperatures and remain complete for assistive technology');
+    c.setConfig(cfg); c.hass = hassOf(toStates(states)); await wait(20);
     let ev = []; c.addEventListener('hass-more-info', (e) => ev.push(e.detail.entityId)); tap(c, 't-house-room2');
     check(ev.join() === 'sensor.attic', 'a tap on the overview row opens the room sensor');
     states['sensor.attic'] = { ...states['sensor.attic'], state: 'unavailable' }; c.hass = hassOf(toStates(states));

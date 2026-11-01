@@ -3276,7 +3276,6 @@ class HeatpumpFlowCard extends HTMLElement {
             <linearGradient id="g-dhw" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-dhw-top"/>${this._has('dhw_middle') ? '<stop offset="50%" id="g-dhw-middle"/>' : ''}<stop offset="100%" id="g-dhw-bottom"/></linearGradient>
             <linearGradient id="g-buf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-buf-top"/>${this._has('buffer_middle') ? '<stop offset="50%" id="g-buf-middle"/>' : ''}<stop offset="100%" id="g-buf-bottom"/></linearGradient>
             ${P.combined ? `<linearGradient id="g-cs" x1="0" y1="0" x2="0" y2="1">${this._combinedSensors().map(([k, y]) => `<stop offset="${(((y - 40) / 480) * 100).toFixed(1)}%" id="g-cs-${k}"/>`).join('') || `<stop offset="0%" stop-color="${this._tankColor(NaN)}"/>`}</linearGradient>` : ''}
-            <clipPath id="house-row-name-clip"><rect x="746" y="98" width="80" height="137"/></clipPath>
             <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
           </defs>
 
@@ -3952,9 +3951,8 @@ class HeatpumpFlowCard extends HTMLElement {
       const name = this._config[n === 1 ? 'hc_name' : `hc${n}_name`] || `${i.heating_circuit} ${n}`;
       const y = 118 + x * 21.5;
       return `<g class="tap house-row" id="house-row${s}" ${de(entityKey)} data-name="${this._esc(name)}">
-        <title>${this._esc(name)}</title>
         <circle class="house-comfort unknown" id="house-comfort${s}" cx="734" cy="${y - 4}" r="5"/>
-        <text class="house-row-name" x="746" y="${y}" clip-path="url(#house-row-name-clip)">${this._esc(name)}</text>
+        <text class="house-row-name" x="746" y="${y}">${this._esc(name)}</text>
         <text class="house-row-value" id="t-house-room${s}" x="950" y="${y}" text-anchor="end"></text>
       </g>`;
     }).join('');
@@ -5392,7 +5390,7 @@ HeatpumpFlowCard.styles = `
   .fws-plates { fill: none; stroke: var(--hfc-muted); stroke-width: 2; opacity: .25; }
   .house-temp { font-size: calc(26px * var(--kt, 1)); font-weight: 700; }
   .house-sub { font-size: calc(14px * var(--k2, 1)); }
-  .house-row-name { font-size: calc(12px * var(--k2, 1)); }
+  .house-row-name { font-size: calc(12px * var(--k2, 1)); clip-path: polygon(0 0, 80px 0, 80px 100%, 0 100%); }
   .house-row-value { font-size: calc(13px * var(--k2, 1)); font-weight: 600; }
   .house-comfort { fill: var(--disabled-text-color, #9e9e9e); stroke: var(--card-background-color, #fff); stroke-width: 1.5; }
   .house-comfort.below { fill: ${hfcVar('cool-strong')}; }
