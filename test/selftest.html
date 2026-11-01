@@ -229,6 +229,10 @@
     check(r.entities.evap_temp === 'sensor.ebusd_hmu_rundataevaporationtemp', 'ebusd: optional entities stay in the selected entity group');
     check(r.entities.hc2_flow === 'sensor.ebusd_ctlv2_hc2flowtemp' && r.entities.hc2_pump === 'sensor.ebusd_ctlv2_hc2pumpstatus', 'ebusd: second circuit from the controller');
     check(r.entities.hc_pressure === 'sensor.ebusd_hmu_flowpressure' && r.entities.hc2_pressure === undefined, 'ebusd: one system pressure, not copied to circuit 2');
+    // #1: a mixed circuit's signed mixer movement from the controller draws the mixer; a circuit without it draws none.
+    const withMixer = C._resolve(s.config, hassOf(toStates({ ...s.states('heat'), 'sensor.ebusd_ctlv2_hc2mixermovement': ['-15', '%'] }), s.registry)).entities;
+    check(withMixer.hc2_mixer_opening === 'sensor.ebusd_ctlv2_hc2mixermovement' && withMixer.hc_mixer_opening === undefined,
+      `ebusd: the controller's mixer movement maps to the circuit's mixer (${withMixer.hc2_mixer_opening} / ${withMixer.hc_mixer_opening})`);
     check(r.entities.buffer_top === undefined, 'ebusd: buffer stays unmapped');
     check(r.tiles.env_energy?.total === 'sensor.ebusd_hmu_statenvironmentenergysum', 'ebusd: environmental energy tile');
 
@@ -340,6 +344,43 @@
     check(r.entities.heat === undefined, 'EMS-ESP compressor current power is electrical input, not heat output');
     check(!detects('emsesp', { 'sensor.boiler_current_flow_temperature': '45', 'sensor.boiler_outside_temperature': '5' }, registry),
       'descriptive EMS-ESP flow and outdoor names alone still do not detect a gas boiler');
+  }
+  {
+    // #257: the complete "long names" entity list of a Nefit EnviLine (EMS-ESP 3.8.6).
+    const states = toStates({
+      'sensor.boiler_compressor_activity': 'heating', 'binary_sensor.boiler_hp_compressor': 'on', 'sensor.boiler_compressor_current_power': ['322', 'W'],
+      'sensor.boiler_heat_carrier_forward_tc1': ['29.7', '°C'], 'sensor.boiler_heat_carrier_return_tc0': ['25.0', '°C'],
+      'sensor.boiler_current_flow_temperature': ['25.1', '°C'], 'sensor.boiler_return_temperature': ['25.1', '°C'],
+      'sensor.boiler_air_inlet_temperature_tl2': ['9.2', '°C'], 'sensor.boiler_outside_temperature': ['10.5', '°C'],
+      'binary_sensor.boiler_dhw_3_way_valve_active': 'off', 'sensor.boiler_aux_heater_level': ['0', '%'], 'binary_sensor.boiler_aux_heater_status': 'off',
+      'sensor.boiler_dhw_current_intern_temperature': ['65.7', '°C'], 'sensor.boiler_dhw_current_extern_temperature': ['61.2', '°C'],
+      'number.boiler_dhw_selected_temperature': ['48', '°C'], 'sensor.boiler_compressor_speed': ['34', '%'],
+      'sensor.boiler_total_compressor_control_starts': '4276', 'sensor.boiler_total_energy_consumption': ['15403', 'kWh'],
+      'sensor.boiler_compressor_inlet_temperature_tr5': ['9.9', '°C'], 'sensor.boiler_compressor_outlet_temperature_tr6': ['49.4', '°C'],
+      'sensor.boiler_refrigerant_temperature_liquid_side_condenser_output_tr3': ['27.6', '°C'],
+      'sensor.thermostat_hc1_current_room_temperature': ['20.7', '°C'], 'number.thermostat_hc1_selected_room_temperature': ['19', '°C'],
+      'sensor.thermostat_hc1_target_flow_temperature': ['23', '°C'],
+    });
+    const registry = Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'mqtt' }]));
+    const e = C._resolve({ preset: 'emsesp' }, hassOf(states, registry)).entities;
+    check(e.flow === 'sensor.boiler_heat_carrier_forward_tc1' && e.return === 'sensor.boiler_heat_carrier_return_tc0'
+      && e.compressor === 'binary_sensor.boiler_hp_compressor' && e.valve === 'binary_sensor.boiler_dhw_3_way_valve_active'
+      && e.source_in === 'sensor.boiler_air_inlet_temperature_tl2', `EMS-ESP long names: heat pump flow/return (TC1/TC0), compressor, valve, air inlet (${e.flow} / ${e.valve})`);
+    check(e.dhw_top === 'sensor.boiler_dhw_current_intern_temperature' && e.dhw_bottom === 'sensor.boiler_dhw_current_extern_temperature'
+      && e.dhw_target === 'number.boiler_dhw_selected_temperature' && e.room_target === 'number.thermostat_hc1_selected_room_temperature',
+    `EMS-ESP long names: tank top/bottom from the internal/external sensor, hot-water and room targets (${e.dhw_top} / ${e.dhw_bottom})`);
+    check(e.starts_total === 'sensor.boiler_total_compressor_control_starts' && e.energy_total === 'sensor.boiler_total_energy_consumption'
+      && e.suction_temp === 'sensor.boiler_compressor_inlet_temperature_tr5' && e.hot_gas === 'sensor.boiler_compressor_outlet_temperature_tr6'
+      && e.liquid_temp === 'sensor.boiler_refrigerant_temperature_liquid_side_condenser_output_tr3', 'EMS-ESP long names: counters and refrigerant circuit');
+    // Only the external sensor (#225): it stays the tank top and there is no bottom.
+    const { 'sensor.boiler_dhw_current_intern_temperature': _intern, ...externOnly } = states;
+    const ext = C._resolve({ preset: 'emsesp' }, hassOf(externOnly, registry)).entities;
+    // Review of #259: an internal sensor that is unavailable when the card builds stays the top; the external one is only the bottom.
+    const late = C._resolve({ preset: 'emsesp' }, hassOf({ ...states, ...toStates({ 'sensor.boiler_dhw_current_intern_temperature': 'unavailable' }) }, registry)).entities;
+    check(late.dhw_top === 'sensor.boiler_dhw_current_intern_temperature' && late.dhw_bottom === 'sensor.boiler_dhw_current_extern_temperature',
+      `EMS-ESP long names: an unavailable internal tank sensor does not move the external one to the top (${late.dhw_top} / ${late.dhw_bottom})`);
+    check(ext.dhw_top === 'sensor.boiler_dhw_current_extern_temperature' && ext.dhw_bottom !== 'sensor.boiler_dhw_current_extern_temperature' && !externOnly[ext.dhw_bottom],
+      `EMS-ESP long names with only the external tank sensor keep it as the top (${ext.dhw_top} / ${ext.dhw_bottom})`);
   }
   check(!detects('vicare', { 'sensor.vitodens_outside_temperature': '5', 'sensor.vitodens_boiler_temperature': '60' },
     { 'sensor.vitodens_outside_temperature': { platform: 'vicare', translation_key: 'outside_temperature' } }), 'ViCare gas boiler is not a heat pump');
@@ -1449,6 +1490,8 @@
     check(getComputedStyle(q(kept, 't-buf-bottom')).display !== 'none' && getComputedStyle(q(kept, 't-hc-rl')).display !== 'none'
       && getComputedStyle(q(kept, 't-vol')).display === 'none' && getComputedStyle(q(kept, 't-dhw-bottom')).display === 'none',
     'narrow_values keeps buffer sub-values and circuit return, but not unrelated secondary labels');
+    // #214 feedback: the kept circuit return grows like the other secondary labels instead of staying at 13 px.
+    check(parseFloat(getComputedStyle(q(kept, 't-hc-rl')).fontSize) > 15, `narrow_values: the circuit return label scales on a narrow card (${getComputedStyle(q(kept, 't-hc-rl')).fontSize})`);
     kept.remove();
     const bufferCard = async (keys, equal = true) => {
       const entities = Object.fromEntries(keys.map((key) => [key, `sensor.${key}`]));
@@ -3962,6 +4005,22 @@
     check(!!pulsesOnly.shadowRoot.getElementById('mixer') && pulsesOnly.shadowRoot.getElementById('t-hc-mix').textContent === ''
       && pulsesOnly.shadowRoot.getElementById('hc-mix-dir').classList.contains('on'), 'a motor output alone draws the mixer without a value');
     pulsesOnly.remove();
+
+    // #1 (VR 71 via ebusd): one signed movement on the opening key, above 0 opening, below 0 closing.
+    const moveStates = (v) => ({ ...st(68, false, false), ...toStates({ 'sensor.move': [String(v), '%'] }) });
+    const signed = mount({ entities: { ...noMixer, hc_mixer_opening: 'sensor.move' } }, hassOf(moveStates(-40))); await wait(10);
+    const dirOf = () => signed.shadowRoot.getElementById('hc-mix-dir').getAttribute('d');
+    check(/^M771 420 V434/.test(dirOf()), `a negative movement shows the closing arrow (${dirOf()})`);
+    signed.hass = hassOf(moveStates(30)); await wait(10);
+    check(/^M771 434 V420/.test(dirOf()), 'a positive movement shows the opening arrow');
+    signed.hass = hassOf(moveStates(0)); await wait(10);
+    check(dirOf() === '', 'no movement, no arrow');
+    signed.remove();
+    // #214 feedback: the mixer value grows like the other secondary labels on a narrow card.
+    const narrowMix = mount({ entities: ents }, hassOf(st(68, false, false))); narrowMix.style.display = 'block'; narrowMix.style.width = '400px'; await wait(30);
+    check(parseFloat(getComputedStyle(narrowMix.shadowRoot.getElementById('t-hc-mix')).fontSize) > 15,
+      `the mixer value scales on a narrow card (${getComputedStyle(narrowMix.shadowRoot.getElementById('t-hc-mix')).fontSize})`);
+    narrowMix.remove();
 
     const two = mount({ hc_count: 2, entities: { ...noMixer, hc2_flow: 'sensor.hf', hc2_return: 'sensor.hr', hc2_pump: 'binary_sensor.hp', hc2_mixer: 'sensor.mix' } }, hassOf(st(40, false, false))); await wait(10);
     check(!two.shadowRoot.getElementById('mixer') && !!two.shadowRoot.getElementById('mixer2') && two.shadowRoot.getElementById('t-hc-mix2').textContent === '40 %'

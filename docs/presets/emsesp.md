@@ -10,7 +10,7 @@ Confirmed on a real Buderus Logatherm WLW186i-5 TP70 installation with an EMS-ES
 type: custom:heatpump-flow-card
 preset: emsesp
 ```
-For heat pumps on the EMS bus via the [EMS-ESP](https://github.com/emsesp/EMS-ESP32) gateway with Home Assistant MQTT discovery. The preset accepts both the established EMS-ESP short ids (`boiler_hpactivity`, `boiler_hptc1`, …) and the descriptive Home Assistant object ids used by newer/entity-format configurations (`boiler_compressor_activity`, `boiler_current_flow_temperature`, …). An instance prefix from the "multiple instances" entity format (e.g. `sensor.ems_esp_boiler_…`) is detected automatically. Compressor activity texts are understood in English and German.
+For heat pumps on the EMS bus via the [EMS-ESP](https://github.com/emsesp/EMS-ESP32) gateway with Home Assistant MQTT discovery. The preset accepts both the established EMS-ESP short ids (`boiler_hpactivity`, `boiler_hptc1`, …) and the descriptive Home Assistant object ids of the "long names" entity format (`boiler_compressor_activity`, `boiler_heat_carrier_forward_tc1`, …). With long names the heat pump flow and return come from TC1/TC0 (`boiler_heat_carrier_forward_tc1`, `…_return_tc0`) before the system flow; with both hot-water sensors, `boiler_dhw_current_intern_temperature` is the tank top and `…_extern_temperature` the bottom, with only the external one it is the top. The long-name list was confirmed on a Nefit EnviLine with EMS-ESP 3.8.6 (#257). An instance prefix from the "multiple instances" entity format (e.g. `sensor.ems_esp_boiler_…`) is detected automatically. Compressor activity texts are understood in English and German.
 
 What you get:
 - compressor activity (heating, hot water, cooling, defrost) as the mode
