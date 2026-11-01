@@ -1169,7 +1169,7 @@ const HFC_I18N = {
   en: {
     not_found: 'No entities of this preset found. Check the integration and the prefix, or open the card editor.',
     start: 'No supported heat pump integration found. Open the card editor to pick a preset or to map your entities.', start_link: 'Supported integrations',
-    title: 'Heat pump', heat_pump: 'Heat pump', dhw: 'Hot water', buffer: 'Buffer', series_tank: 'Series buffer', combined_tank: 'Combined storage', heating_zone: 'Heating', fresh_water_station: 'Fresh-water station', heating_circuit: 'Heating circuit',
+    title: 'Heat pump', heat_pump: 'Heat pump', boiler: 'Boiler', boiler_off: 'Boiler off', dhw: 'Hot water', buffer: 'Buffer', series_tank: 'Series buffer', combined_tank: 'Combined storage', heating_zone: 'Heating', fresh_water_station: 'Fresh-water station', heating_circuit: 'Heating circuit',
     house: 'Rooms', room: 'Room', room_target: 'Room target', comfort_below: 'below target', comfort_on: 'at target', comfort_above: 'above target', running: 'running', compressor_off: 'Compressor off', source_in: 'Air inlet', outdoor: 'Outdoor',
     energy_missing: 'Energy dashboard: no power sensor for {sources}; energy counters alone cannot show live flow.',
     brine_in: 'Brine in', brine_out: 'Brine out', well_in: 'Well in', well_out: 'Well out',
@@ -1210,7 +1210,7 @@ const HFC_I18N = {
   de: {
     not_found: 'Keine Entitäten dieser Voreinstellung gefunden. Integration und Präfix prüfen oder den Karteneditor öffnen.',
     start: 'Keine unterstützte Wärmepumpen-Integration gefunden. Im Karteneditor eine Voreinstellung wählen oder die Entitäten selbst zuordnen.', start_link: 'Unterstützte Integrationen',
-    title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', dhw: 'Warmwasser', buffer: 'Puffer', series_tank: 'Reihenpuffer', combined_tank: 'Kombispeicher', heating_zone: 'Heizung', fresh_water_station: 'Frischwasserstation', heating_circuit: 'Heizkreis',
+    title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', boiler: 'Heizkessel', boiler_off: 'Kessel aus', dhw: 'Warmwasser', buffer: 'Puffer', series_tank: 'Reihenpuffer', combined_tank: 'Kombispeicher', heating_zone: 'Heizung', fresh_water_station: 'Frischwasserstation', heating_circuit: 'Heizkreis',
     house: 'Wohnräume', room: 'Raum', room_target: 'Raum-Soll', comfort_below: 'unter Soll', comfort_on: 'im Soll', comfort_above: 'über Soll', running: 'läuft', compressor_off: 'Verdichter aus', source_in: 'Luft-Eintritt', outdoor: 'Außen',
     energy_missing: 'Energie-Dashboard: kein Leistungssensor für {sources}; Energiezähler allein zeigen keinen aktuellen Fluss.',
     brine_in: 'Sole ein', brine_out: 'Sole aus', well_in: 'Brunnen ein', well_out: 'Brunnen aus',
@@ -1463,9 +1463,10 @@ const HFC_EDITOR = {
     hc_underfloor: 'Underfloor heating', hc_radiator: 'Panel radiators', hc_column: 'Column radiators',
     brine_pressure_min: 'Brine pressure warning below', brine_pressure_crit: 'Brine pressure critical below', brine_pressure_max: 'Brine pressure warning above',
     hc_pressure_min: 'Heating pressure warning below', hc_pressure_crit: 'Heating pressure critical below', hc_pressure_max: 'Heating pressure warning above',
-    sec_hp: 'Heat pump', sec_storage: 'Storage', sec_hc: 'Heating circuit & house', sec_power: 'Power sources', sec_stats: 'Statistics',
+    sec_hp: 'Heat pump', sec_boiler: 'Boiler / second heat generator', sec_storage: 'Storage', sec_hc: 'Heating circuit & house', sec_power: 'Power sources', sec_stats: 'Statistics',
     mode: 'Operating mode (state text)', status: 'Status / sub-state (text)', compressor: 'Compressor running (on/off, or frequency / speed above 0)', defrost: 'Defrost active (on/off)', fan_speed: 'Fan speed (rpm, or on/off)', power: 'Electrical power of the heat pump (W or kW)',
     heat: 'Heat output (kW or W)', flow: 'Heat pump flow temperature (°C)', return: 'Heat pump return temperature (°C)', volume: 'Flow rate of the heat pump loop (l/h or l/min, primary pump)',
+    boiler_state: 'Boiler running (on/off, or a power above 0)', boiler_power: 'Boiler output (W or kW)', boiler_flow: 'Boiler flow temperature (°C)',
     source_volume: 'Flow rate of the brine or well loop (l/h or l/min, not for air)', source_in: 'Source inlet temperature (°C: air, brine or well water in)', outdoor: 'Outdoor temperature (°C)',
     valve: 'Diverter valve towards hot water (on/off, or a state like Tank/Room)', bypass_valve: 'Series buffer bypass valve (on = bypass; default: defrost)',
     pv_boost: 'PV surplus mode (on, or a power above 0)',
@@ -1553,9 +1554,10 @@ const HFC_EDITOR = {
     hc_underfloor: 'Flächenheizung', hc_radiator: 'Plattenheizkörper', hc_column: 'Gliederheizkörper',
     brine_pressure_min: 'Soledruck Warnung unter', brine_pressure_crit: 'Soledruck kritisch unter', brine_pressure_max: 'Soledruck Warnung über',
     hc_pressure_min: 'Heizungsdruck Warnung unter', hc_pressure_crit: 'Heizungsdruck kritisch unter', hc_pressure_max: 'Heizungsdruck Warnung über',
-    sec_hp: 'Wärmepumpe', sec_storage: 'Speicher', sec_hc: 'Heizkreis & Haus', sec_power: 'Stromquellen', sec_stats: 'Kennzahlen',
+    sec_hp: 'Wärmepumpe', sec_boiler: 'Heizkessel / zweiter Wärmeerzeuger', sec_storage: 'Speicher', sec_hc: 'Heizkreis & Haus', sec_power: 'Stromquellen', sec_stats: 'Kennzahlen',
     mode: 'Betriebsart (Statustext)', status: 'Status / Unterzustand (Text)', compressor: 'Verdichter läuft (ein/aus, oder Frequenz / Drehzahl über 0)', defrost: 'Abtauen aktiv (ein/aus)', fan_speed: 'Lüfterdrehzahl (U/min, oder ein/aus)', power: 'Elektrische Leistungsaufnahme der Wärmepumpe (W oder kW)',
     heat: 'Wärmeleistung (kW oder W)', flow: 'Vorlauftemperatur der Wärmepumpe (°C)', return: 'Rücklauftemperatur der Wärmepumpe (°C)', volume: 'Volumenstrom Wärmepumpenkreis (l/h oder l/min, Primärpumpe)',
+    boiler_state: 'Heizkessel läuft (ein/aus, oder Leistung über 0)', boiler_power: 'Kesselleistung (W oder kW)', boiler_flow: 'Kessel-Vorlauftemperatur (°C)',
     source_volume: 'Volumenstrom Sole- oder Brunnenkreis (l/h oder l/min, nicht bei Luft)', source_in: 'Quelle Eintritt (°C: Luft, Sole oder Brunnenwasser rein)', outdoor: 'Außentemperatur (°C)',
     valve: 'Umschaltventil auf Warmwasser (ein/aus, oder Zustand wie Tank/Room)', bypass_valve: 'Bypass-Ventil Reihenpuffer (ein = Bypass; Standard: Abtauen)',
     pv_boost: 'PV-Überschussbetrieb (ein, oder Leistung über 0)',
@@ -1835,6 +1837,7 @@ const hfcHcCount = (config) => Math.min(Math.max(Math.round(+config?.hc_count) |
 
 const HFC_ENTITY_GROUPS = {
   sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost'],
+  sec_boiler: ['boiler_state', 'boiler_power', 'boiler_flow'],
   sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'dhw_loss_sensor', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
   sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_pressure', 'room', 'room_target', 'program'],
   // The room of circuit 1 uses room/room_target; circuits 2 to 6 use their numbered keys in the shared house overview.
@@ -1852,7 +1855,7 @@ const HFC_ENTITY_GROUPS = {
 const HFC_DIAGNOSTIC_KEYS = [...new Set(Object.values(HFC_ENTITY_GROUPS).flat())];
 // Editor (#193): the fields a group shows before "More fields" (circuits 2 to 6 use those of circuit 1), and the fields of a brine
 // or well loop, which an air heat pump does not have.
-const HFC_CORE_FIELDS = ['mode', 'compressor', 'power', 'heat', 'flow', 'return', 'volume', 'outdoor', 'valve', 'dhw_top', 'dhw_target',
+const HFC_CORE_FIELDS = ['mode', 'compressor', 'power', 'heat', 'flow', 'return', 'volume', 'outdoor', 'valve', 'boiler_state', 'boiler_power', 'boiler_flow', 'dhw_top', 'dhw_target',
   'hc_flow', 'hc_return', 'hc_pump', 'room'];
 const HFC_SOURCE_KEYS = ['source_volume', 'source_out', 'brine_pressure'];
 // Entity domains usable as quick controls and the service each one calls.
@@ -1883,10 +1886,10 @@ const HFC_KINDS = {
 };
 // Keys of circuits 2 to 6 use the kind of circuit 1 (hc2_flow → hc_flow, hc2_room → room); keys not listed are not checked.
 const HFC_KEY_KINDS = Object.fromEntries(Object.entries({
-  temperature: ['flow', 'return', 'source_in', 'source_out', 'outdoor', 'dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_loss_sensor', 'buffer_top', 'buffer_middle',
+  temperature: ['flow', 'return', 'source_in', 'source_out', 'outdoor', 'boiler_flow', 'dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_loss_sensor', 'buffer_top', 'buffer_middle',
     'buffer_bottom', 'solar_collector', 'hc_flow', 'hc_return', 'hc_setpoint', 'room', 'room_target', 'evap_temp', 'cond_temp', 'suction_temp', 'hot_gas', 'liquid_temp'],
   offset: ['hc_curve_offset', 'superheat', 'subcooling'],
-  power: ['power', 'heat', 'pv', 'battery', 'grid'],
+  power: ['power', 'heat', 'boiler_power', 'pv', 'battery', 'grid'],
   energy: ['energy_total', 'env_energy', 'heat_total', 'energy_today'],
   pressure: ['brine_pressure', 'hc_pressure', 'low_pressure', 'high_pressure'],
   flowrate: ['volume', 'source_volume', 'hc_volume'],
@@ -1896,7 +1899,7 @@ const HFC_KEY_KINDS = Object.fromEntries(Object.entries({
   ratio: ['cop_heating_today', 'cop_dhw_today'],
   speed: ['compressor', 'fan_speed', 'compressor_speed'],
   onoff: ['defrost', 'circulation', 'hc_pump', 'solar_pump', 'bypass_valve'],
-  onoff_power: ['heater', ...HFC_TANK_HEATERS, 'pv_boost'],
+  onoff_power: ['heater', 'boiler_state', ...HFC_TANK_HEATERS, 'pv_boost'],
   valve: ['valve'],
   text: ['mode', 'status', 'dhw_mode', 'buffer_mode', 'hc_mode', 'program'],
 }).flatMap(([kind, keys]) => keys.map((key) => [key, kind])));
@@ -3031,6 +3034,13 @@ class HeatpumpFlowCard extends HTMLElement {
     group.dataset.a11y = `${label}: ${this._pressureText(key)}, ${this._i[`pressure_${state}`]}`;
   }
   _on(key) { return ['on', 'true', 'open', '1', 'ein'].includes(String(this._s(key)).toLowerCase()); }
+  // A manually mapped second heat generator may be binary, a numeric level/power, or a common running-state text.
+  _boilerOn() {
+    if (!this._has('boiler_state')) return this._w('boiler_power') > 0;
+    const s = String(this._s('boiler_state')).trim().toLowerCase();
+    return ['on', 'true', 'open', 'ein', 'active', 'running', 'heating', 'heat', 'burner', 'firing'].includes(s)
+      || parseFloat(s) > 0;
+  }
   // Diverter valve state through `valve_map`: true = hot water, false = heating, undefined = the state is not in the map.
   _valveMapped(raw) {
     const mapped = this._norm(this._maps.valve, raw);
@@ -3215,6 +3225,7 @@ class HeatpumpFlowCard extends HTMLElement {
       hcs: this._hcCount > 1 ? this._hcTypes.slice(0, this._hcCount).join() : '',
       src: this._sourceType,
       unit: this._unitKey(),
+      boiler: ['boiler_state', 'boiler_power', 'boiler_flow'].some((k) => this._has(k)),
       heaters: ['heater', ...HFC_TANK_HEATERS].map((k) => (this._has(k) ? 1 : 0)).join(''),
       middle: [this._has('dhw_middle') ? 1 : 0, this._has('buffer_middle') ? 1 : 0].join(''),
       // The gradient of a combined storage has one stop per sensor present: a sensor that appears later rebuilds it.
@@ -3355,11 +3366,11 @@ class HeatpumpFlowCard extends HTMLElement {
           ${this._sourceSvg()}
 
           ${this._primaryPump() ? `<g class="tap" ${de(e.volume ? 'volume' : 'mode')}>
-            <circle class="pump" cx="340" cy="250" r="16"/>
-            <g class="impeller" id="impeller-primary" style="transform-origin:340px 250px"><path d="M340 238 L346 250 L334 250Z M340 262 L334 250 L346 250Z" class="imp"/></g>
+            <circle class="pump" cx="${P.boiler ? 316 : 340}" cy="250" r="16"/>
+            <g class="impeller" id="impeller-primary" style="transform-origin:${P.boiler ? 316 : 340}px 250px"><path d="M${P.boiler ? 316 : 340} 238 L${P.boiler ? 322 : 346} 250 L${P.boiler ? 310 : 334} 250Z M${P.boiler ? 316 : 340} 262 L${P.boiler ? 310 : 334} 250 L${P.boiler ? 322 : 346} 250Z" class="imp"/></g>
           </g>` : ''}
-          <g class="tap" ${de('flow')}><text class="pipe-label" id="t-vl" x="${this._primaryPump() ? 340 : 338}" y="${this._primaryPump() ? 226 : 236}" text-anchor="middle"></text></g>
-          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${this._primaryPump() ? 340 : 346}" y="${this._primaryPump() ? 284 : 275}" text-anchor="middle"></text></g>
+          <g class="tap" ${de('flow')}><text class="pipe-label" id="t-vl" x="${P.boiler ? 316 : (this._primaryPump() ? 340 : 338)}" y="${this._primaryPump() ? 226 : 236}" text-anchor="middle"></text></g>
+          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${P.boiler ? 316 : (this._primaryPump() ? 340 : 346)}" y="${this._primaryPump() ? 284 : 275}" text-anchor="middle"></text></g>
           <g class="tap" ${de('return')}><text class="pipe-label" id="t-rl" x="335" y="406" text-anchor="middle"></text></g>
 
           <g class="tap" ${de('mode')}>
@@ -3376,6 +3387,15 @@ class HeatpumpFlowCard extends HTMLElement {
           </g>
           ${this._sourceType === 'air' ? `<g class="tap" ${de(e.source_in ? 'source_in' : 'source_volume')}><text class="small" id="t-src-in" x="170" y="450" text-anchor="middle"></text></g>${this._has('outdoor') ? `<g class="tap" ${de('outdoor')}><text class="small" id="t-outdoor-hp" x="170" y="472" text-anchor="middle"></text></g>` : ''}` : ''}
           ${this._heaterSvg('heater', 'inline')}
+          ${P.boiler ? `<g class="tap boiler" id="boiler" ${de(e.boiler_state ? 'boiler_state' : (e.boiler_power ? 'boiler_power' : 'boiler_flow'))}>
+            <text class="boiler-title" x="372" y="207" text-anchor="middle">${this._esc(i.boiler)}</text>
+            <rect class="boiler-box" x="348" y="216" width="48" height="68" rx="8"/>
+            <path class="boiler-water" d="M348 250 H396"/>
+            <path class="flow" id="f-boiler" d="M348 250 H396"/>
+            <path class="boiler-flame" d="M372 244 C360 237 365 226 373 222 C371 229 384 232 378 242 C377 244 375 245 372 244Z"/>
+            <text class="boiler-value" id="t-boiler-power" x="372" y="274" text-anchor="middle"></text>
+            <text class="small boiler-flow" id="t-boiler-flow" x="372" y="304" text-anchor="middle"></text>
+          </g>` : ''}
 
           ${P.station ? this._stationSvg() : ''}
           ${P.dhw && !P.station ? `
@@ -4920,6 +4940,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const compOn = this._has('compressor') && (this._on('compressor') || this._n('compressor') > 0);
     const running = compOn || power > this._threshold || this._runningStates.includes(status)
       || (!this._has('compressor') && !this._has('power') && !this._has('status') && ['heating', 'dhw', 'cooling', 'defrost'].includes(hp));
+    const boilerRunning = !!P.boiler && this._boilerOn();
+    const generatorMode = running ? (boilerRunning ? 'both' : 'hp_only') : (boilerRunning ? 'boiler_only' : 'idle');
+    const generatorRunning = running || boilerRunning;
     const defrost = hp === 'defrost' || status.toUpperCase().includes('DEFROST') || (this._has('defrost') && this._on('defrost'));
     // Valve: binary (on = DHW) or a state such as "Tank" / "DHW".
     // A `valve_map` (raw state → dhw | heating) decides first, for valves that report 1 for heating or other texts.
@@ -4933,8 +4956,10 @@ class HeatpumpFlowCard extends HTMLElement {
     const cooling = hp === 'cooling' || bufMode === 'cooling';
 
     const dhwActive = P.dhw && (hp === 'dhw' || ['dhw', 'legionella'].includes(dhwMode) || valveDhw);
-    const toDhw = dhwActive && (running || dhwMode === 'trailing' || hp === 'dhw');
-    const toHeat = !toDhw && (['heating', 'defrost', 'cooling'].includes(hp) || ['heating', 'cooling'].includes(bufMode));
+    const toDhw = dhwActive && (generatorRunning || dhwMode === 'trailing' || hp === 'dhw');
+    // The manually configured boiler feeds the same common flow as the heat pump. The existing valve remains the only routing
+    // decision: boiler-only operation therefore goes to DHW when the valve says DHW, otherwise to the heating side.
+    const toHeat = !toDhw && (boilerRunning || ['heating', 'defrost', 'cooling'].includes(hp) || ['heating', 'cooling'].includes(bufMode));
     const loop = toDhw || toHeat;
     // The primary pump also runs without heating or hot water (Panasonic "sniffing", run-on): the water then circulates
     // slowly along the valve path (flow dashes 2000 / l/h seconds, 6 to 30 s). It only moves the water, so mode chip, valve text, spread and heat stay idle.
@@ -4968,6 +4993,7 @@ class HeatpumpFlowCard extends HTMLElement {
       vl: flowLoop || pumped, rl: flowLoop || pumped, 'vl-dhw': flowDhw, 'rl-dhw': flowDhw,
       'vl-buf': heatLoop, 'rl-buf': heatLoop, 'byp-vl': heatLoop, 'byp-rl': heatLoop,
     };
+    if (P.boiler) pipes.boiler = flowLoop || pumped;
     if (P.series) Object.assign(pipes, { 'sb-vl': heatLoop && !bypass, 'sb-a': heatLoop && bypass, 'sb-b': heatLoop && !bypass });
     // A fresh-water station on the buffer has no diverter valve: hot-water operation heats the buffer along the heating path.
     // Its own pipes do not animate, because the card does not know when water is drawn.
@@ -4989,7 +5015,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (P.solar) { pipes.sol = solar; pipes['sol-rl'] = solar; }
 
     return {
-      rawMode, status, hp, dhwMode, bufMode, power, vol, running, defrost, cooling, valveDhw,
+      rawMode, status, hp, dhwMode, bufMode, power, vol, running, boilerRunning, generatorMode, generatorRunning, defrost, cooling, valveDhw,
       toDhw, toHeat, loop, circ, flowDhw, flowHeat, flowLoop, bypass, heatLoop,
       // The heat pump's own primary pump runs with a flow rate, else with the hot-water or heating loop.
       primaryPump: Number.isFinite(vol) ? vol > 0 : loop,
@@ -5005,8 +5031,10 @@ class HeatpumpFlowCard extends HTMLElement {
     const i = this._i;
     const P = this._parts;
     const F = this._flowModel();
-    const { rawMode, status, hp, dhwMode, bufMode, power, vol, running, defrost, cooling, toDhw, toHeat, loop, flowLoop, bypass } = F;
+    const { rawMode, status, hp, dhwMode, bufMode, power, vol, running, boilerRunning, generatorMode, defrost, cooling, toDhw, toHeat, loop, flowLoop, bypass } = F;
     const tFlow = this._n('flow'); const tRet = this._n('return');
+    const tBoiler = this._n('boiler_flow');
+    const tCommonFlow = boilerRunning && Number.isFinite(tBoiler) ? tBoiler : tFlow;
     const spread = Number.isFinite(tFlow) && Number.isFinite(tRet) ? tFlow - tRet : NaN;
 
     // Heat output: sensor, or estimated from flow rate × spread × 1.163 Wh/(l·K) for water.
@@ -5044,7 +5072,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this.style.setProperty('--hfc-wave-delay2', scaled(1.6));
 
     // pipes
-    const cFlow = defrost || cooling ? hfcVar('defrost') : this._vlColor(tFlow);
+    const cFlow = defrost || cooling ? hfcVar('defrost') : this._vlColor(tCommonFlow);
     const cRet = this._rlColor(tRet);
     const stroke = (id, c) => { const el = this._$(`p-${id}`); if (el) el.style.setProperty('--pc', c); };
     ['vl', 'vl-dhw', 'vl-buf', 'byp-vl'].forEach((id) => stroke(id, cFlow));
@@ -5125,6 +5153,21 @@ class HeatpumpFlowCard extends HTMLElement {
       el.classList.toggle('on', lv > 0); el.classList.toggle('stage2', lv > 1);
       el.querySelector('.waves')?.classList.toggle('on', lv > 0);
     });
+
+    if (P.boiler) {
+      this._cls('boiler', boilerRunning);
+      const boilerPower = this._w('boiler_power');
+      this._txt('t-boiler-power', boilerRunning
+        ? (Number.isFinite(boilerPower) && boilerPower > 0 ? `${this._fmt(boilerPower >= 1000 ? boilerPower / 1000 : boilerPower, boilerPower >= 1000 ? 1 : 0)} ${boilerPower >= 1000 ? 'kW' : 'W'}` : i.running)
+        : i.boiler_off);
+      this._txt('t-boiler-flow', this._has('boiler_flow') ? this._t(tBoiler) : '');
+      const boiler = this._$('boiler');
+      if (boiler) {
+        const state = { hp_only: `${i.heat_pump}: ${i.running}; ${i.boiler_off}`, boiler_only: `${i.heat_pump}: ${i.compressor_off}; ${i.boiler}: ${i.running}`, both: `${i.heat_pump}: ${i.running}; ${i.boiler}: ${i.running}`, idle: `${i.compressor_off}; ${i.boiler_off}` }[generatorMode];
+        const values = [state, this._has('boiler_power') && Number.isFinite(boilerPower) ? `${this._fmt(boilerPower, 0)} W` : '', this._has('boiler_flow') ? this._t(tBoiler) : ''].filter(Boolean);
+        boiler.dataset.a11y = values.join(', ');
+      }
+    }
 
     this._txtPre('t-vl', 'VL', this._has('flow') ? this._t(tFlow) : '');
     this._txtPre('t-rl', 'RL', this._has('return') ? this._t(tRet) : '');
@@ -5471,6 +5514,15 @@ HeatpumpFlowCard.styles = `
   .heater.on .heater-el { stroke: ${hfcVar('heat')}; filter: url(#glow); }
   .heater.on.stage2 .heater-el { stroke: ${hfcVar('hot')}; }
   .heater.rod.on .heater-el, .rod-waves .wave { stroke: ${hfcVar('hot')}; } .rod-waves .wave { stroke-width: 2; }
+  .boiler-title { font-size: 12px; font-weight: 600; fill: var(--primary-text-color); }
+  .boiler-box { fill: var(--card-background-color, #fff); stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 2; }
+  .boiler-water { fill: none; stroke: var(--hfc-muted); stroke-width: 6; }
+  .boiler-flame { fill: var(--disabled-text-color, #9e9e9e); transition: fill .4s; }
+  .boiler-value { font-size: 10px; fill: var(--secondary-text-color, #727272); }
+  .boiler-flow { font-size: 11px; }
+  .boiler.on .boiler-box { stroke: ${hfcVar('heat')}; }
+  .boiler.on .boiler-water { stroke: ${hfcVar('heat')}; }
+  .boiler.on .boiler-flame { fill: ${hfcVar('hot')}; filter: url(#glow); }
   .ground { fill: none; stroke: ${hfcVar('ground')}; stroke-width: 3; stroke-dasharray: 10 5; opacity: .7; }
   .well { fill: none; stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 2; }
   .water { fill: none; stroke: ${hfcVar('cool')}; stroke-width: 2; }

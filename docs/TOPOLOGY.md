@@ -238,7 +238,7 @@ The wood stove appears in 36 of the 88 topologies, which together hold only abou
 
 ## Phase 3 – second heat generator in hybrid systems (#51)
 
-**0.17 scope:** implement the vendor-neutral manual contract without waiting for integration-specific data: keys `boiler_state`, `boiler_power`, optional `boiler_flow`; a normalised mode `hp_only`, `boiler_only` or `both`; and the boiler in series on the common flow between heat pump and the existing diverter valve, separate from the inline heater rod. The valve already decides whether that common flow goes to heating or DHW, so the first version needs no boiler-specific DHW branch. A boiler in parallel into a buffer or combined storage and all preset auto-mappings remain evidence-driven follow-ups.
+**Implemented for 0.17:** the vendor-neutral manual contract uses `boiler_state`, optional `boiler_power` and optional `boiler_flow`; a normalised mode `hp_only`, `boiler_only` or `both`; and a fixed boiler slot in series on the common flow between heat pump and the existing diverter valve, separate from the inline heater rod. `boiler_power` also serves as the running signal when `boiler_state` is absent. The valve decides whether that common flow goes to heating or DHW, so the first version needs no boiler-specific DHW branch. A boiler in parallel into a buffer or combined storage and all preset auto-mappings remain evidence-driven follow-ups.
 
 ## Standby loss of the hot-water tank (#32)
 
@@ -251,7 +251,7 @@ Shipped separately as the tile `dhw_loss` (cool-down in K/h from verified standb
 | 1 | 0a safety net (snapshot + combination harness) – **done** ([#111](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/111)) | patch | – |
 | 2 | 0b flow model, no visual change – **done** ([#111](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/111)) | minor, right after a release, short contributor freeze | step 1 |
 | 3 | Phase 1 combined storage and `dhw_type` as fixed slots – **done** ([#133](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/133), 0.14.0) | next minor | step 2 |
-| 4 | Phase 3a boiler in series as a fixed slot | 0.17 after the guided setup | step 2; manual contract first |
+| 4 | Phase 3a boiler in series as a fixed slot – **done for 0.17** | 0.17 after the guided setup | step 2; manual contract first |
 | 5 | Decision point: fixed slots or component refactor (0c/0d) for the tail | – | requests after steps 3–4 |
 | 6 | Phase 2 wood stove, boiler in parallel | following minors | step 5 |
 
@@ -272,12 +272,12 @@ Planned after 0a and 0b were merged (28 October 2026). Each item is one pull req
 | 2 | Phase 1b `dhw_type` – **done** ([#132](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/132), landed with [#133](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/133)) | `coil`, `fresh_water`, `tank_in_tank` in the combined storage, and `fresh_water` on a parallel buffer | S–M, 1 d | about 85 % | none, default D2 |
 | 2 | `dhw_loss` with combined storage – **done** (with #132; the pump of every circuit is required since the pre-release review) | standby windows with running circuit pumps are left out | S, 0.5 d | – | none, default D3 |
 | 2 | Data for phase 3a – requested in parallel ([comment in #51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51#issuecomment-6470468181)) | ask for a diagnostic report of a hybrid installation in [#51](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/51) and the call for testers [#1](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) | – | – | user reports; does not block the generic feature |
-| 3 | Phase 3a boiler in series | fixed slot on the flow pipe with explicit manual entities | M, 2 d | about 90 % | planned for 0.17 |
+| 3 | Phase 3a boiler in series – **done for 0.17** | fixed slot on the flow pipe with explicit manual entities | M, 2 d | about 90 % | generic contract complete; preset data remains parallel |
 | – | Decision point | fixed slots or component refactor for the tail, by the criteria above | – | – | requests beyond the catalogue |
 
 Sprints 1 and 2 brought the card from about 73 % to about 85 % of installations in roughly 4–5 working days. Phase 3a follows in 0.17 with a manual contract; installation data improves later automatic mappings.
 
-**Status after 0.17 planning:** sprints 1 and 2 are done and shipped with 0.14.0. Defaults D1 to D4 apply as planned; D5 holds (0a/0b ship as an internal entry). Two decisions were taken while testing the edge cases ([#134](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/134)): cooling runs through the heating zone of a combined storage (see phase 1), and the first stretch of flow and return that feeds several circuits is a pipe of its own. Phase 3a is now scheduled for 0.17 with manual entities; hybrid-installation reports run in parallel.
+**Status for 0.17:** sprints 1 and 2 shipped with 0.14.0 and phase 3a is implemented with manual entities. Defaults D1 to D4 apply as planned; D5 holds (0a/0b ship as an internal entry). Two decisions were taken while testing the earlier edge cases ([#134](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/134)): cooling runs through the heating zone of a combined storage (see phase 1), and the first stretch of flow and return that feeds several circuits is a pipe of its own. Hybrid-installation reports continue in parallel for later preset mappings and rarer hydraulic variants.
 
 **Planned defaults** (used when no input arrives; each can be changed later without breaking configurations):
 

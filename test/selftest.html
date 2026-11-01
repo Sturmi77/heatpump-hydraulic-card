@@ -3870,6 +3870,44 @@
     card.remove();
   }
 
+  // #51: a manually configured boiler is a separate heat generator in the common flow before the existing diverter valve
+  {
+    const ids = { mode: 'sensor.mode', compressor: 'binary_sensor.compressor', power: 'sensor.hp_power', flow: 'sensor.hp_flow', return: 'sensor.hp_return',
+      valve: 'sensor.valve', heater: 'binary_sensor.inline_heater', boiler_state: 'binary_sensor.boiler', boiler_power: 'sensor.boiler_power', boiler_flow: 'sensor.boiler_flow',
+      dhw_top: 'sensor.dhw', hc_flow: 'sensor.hc_flow' };
+    const state = (hp, boiler, valve = 'Room') => toStates({
+      'sensor.mode': hp ? 'Heating' : 'Standby', 'binary_sensor.compressor': hp ? 'on' : 'off', 'sensor.hp_power': [hp ? '1200' : '0', 'W'],
+      'sensor.hp_flow': ['36', '°C'], 'sensor.hp_return': ['30', '°C'], 'sensor.valve': valve, 'binary_sensor.inline_heater': 'off',
+      'binary_sensor.boiler': boiler ? 'on' : 'off', 'sensor.boiler_power': [boiler ? '8000' : '0', 'W'], 'sensor.boiler_flow': ['52', '°C'],
+      'sensor.dhw': ['48', '°C'], 'sensor.hc_flow': ['35', '°C'],
+    });
+    const cfg = { mode_map: { Heating: 'heating', Standby: 'idle' }, entities: ids };
+    const card = mount(cfg, hassOf(state(true, false))); await wait(20);
+    const el = (id) => card.shadowRoot.getElementById(id);
+    check(el('boiler') && !el('boiler').classList.contains('on') && el('f-boiler').classList.contains('on') && !el('heater-inline').classList.contains('on')
+      && card._flowModel().generatorMode === 'hp_only', 'HP-only: water crosses the idle boiler, which stays separate from the inline heater');
+    card.hass = hassOf(state(false, true)); await wait(10);
+    check(el('boiler').classList.contains('on') && el('f-vl').classList.contains('on') && el('f-vl-buf').classList.contains('on') && !el('hp-box').classList.contains('on')
+      && card._flowModel().generatorMode === 'boiler_only', 'boiler-only: the common heating flow runs while the heat pump stays off');
+    check(el('t-boiler-power').textContent === '8.0 kW' && el('t-boiler-flow').textContent === '52.0 °C' && /Boiler: running/.test(el('boiler').dataset.a11y),
+      `boiler power, flow and accessible state are shown (${el('t-boiler-power').textContent}, ${el('t-boiler-flow').textContent})`);
+    card.hass = hassOf(state(true, true)); await wait(10);
+    check(card._flowModel().generatorMode === 'both' && el('boiler').classList.contains('on') && el('hp-box').classList.contains('on'), 'simultaneous operation identifies both generators');
+    card.hass = hassOf(state(false, true, 'Tank')); await wait(10);
+    check(el('f-vl-dhw').classList.contains('on') && !el('f-vl-buf').classList.contains('on'), 'boiler-only hot water follows the existing diverter valve');
+    card.remove();
+
+    const noBoiler = mount({ entities: { flow: ids.flow, return: ids.return } }, hassOf(state(false, false))); await wait(10);
+    check(!noBoiler.shadowRoot.getElementById('boiler') && JSON.parse(noBoiler._layoutSignature()).boiler === false, 'without boiler entities the existing geometry is unchanged');
+    noBoiler.remove();
+    const powerOnly = mount({ entities: { flow: ids.flow, return: ids.return, boiler_power: ids.boiler_power } }, hassOf(state(false, true))); await wait(10);
+    check(powerOnly._flowModel().generatorMode === 'boiler_only' && powerOnly.shadowRoot.getElementById('boiler').classList.contains('on'), 'boiler power alone can supply the running state');
+    powerOnly.remove();
+    const boilerGroup = C._formSchema({}).schema.find((g) => g.type === 'expandable' && g.title === HFC_EDITOR.en.sec_boiler);
+    check(boilerGroup?.schema.map((f) => f.name).join() === 'boiler_state,boiler_power,boiler_flow'
+      && ['boiler_state', 'boiler_power', 'boiler_flow'].every((key) => HFC_DIAGNOSTIC_KEYS.includes(key)), 'editor and diagnostics expose the three manual boiler fields');
+  }
+
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');
   document.getElementById('result').textContent = fails.length ? 'FAIL' : 'PASS';
