@@ -520,47 +520,50 @@ const HFC_PRESETS = {
     source_type: (e, hass) => (/hpbrinein$/.test(e.source_in || '') && hass.states[e.source_in] ? 'brine' : 'air'),
     detect: (ctx) => {
       // Gas boilers have curflowtemp as well; only heat pump entities count.
-      const id = ctx.match(/^sensor\.(?:(.+)_)?boiler_(hpactivity|hptc1|compressor_activity)$/, 'mqtt');
+      const id = ctx.match(/^sensor\.(?:(.+)_)?boiler_(hpactivity|hptc1|compressor_activity|heat_carrier_forward_tc1)$/, 'mqtt');
       return id === undefined ? undefined : (id.match(/^sensor\.(?:(.+)_)?boiler_/)[1] || '');
     },
-    entities: (p, i) => {
+    entities: (p, i, ctx) => {
       const x = p ? `${p}_` : '';
       const b = (...ks) => ks.flatMap((k) => [`binary_sensor.${x}boiler_${k}`, `sensor.${x}boiler_${k}`]);
+      // "Long names" format (#257): the hot-water tank has an internal and an external sensor; with both, the external one is the lower.
+      const dhwIntern = `sensor.${x}boiler_dhw_current_intern_temperature`;
+      const dhwExtern = `sensor.${x}boiler_dhw_current_extern_temperature`;
       const sw = (...ks) => ks.map((k) => `switch.${x}boiler_${k}`);
       const s = (...ks) => ks.map((k) => `sensor.${x}${k}`);
       const hc = `hc${i.hc}`;
       return {
         mode: s('boiler_hpactivity', 'boiler_compressor_activity'),
-        compressor: b('hpcompon').concat(s('boiler_compressor_speed')),
-        valve: b('hp3way').concat(sw('3_way_valve')),
+        compressor: b('hpcompon', 'hp_compressor').concat(s('boiler_compressor_speed')),
+        valve: b('hp3way', 'dhw_3_way_valve_active').concat(sw('3_way_valve')),
         power: s('boiler_hpcurrpower', 'boiler_compressor_current_power'),
-        flow: s('boiler_hptc1', 'boiler_curflowtemp', 'boiler_current_flow_temperature'),
-        return: s('boiler_hptc0', 'boiler_rettemp', 'boiler_return_temperature'),
+        flow: s('boiler_hptc1', 'boiler_heat_carrier_forward_tc1', 'boiler_curflowtemp', 'boiler_current_flow_temperature'),
+        return: s('boiler_hptc0', 'boiler_heat_carrier_return_tc0', 'boiler_rettemp', 'boiler_return_temperature'),
         volume: s('boiler_pc0flow'),
-        source_in: s('boiler_hptl2', 'boiler_hpbrinein'),
+        source_in: s('boiler_hptl2', 'boiler_air_inlet_temperature_tl2', 'boiler_hpbrinein'),
         source_out: s('boiler_hpbrineout'),
-        heater: b('auxheaterstatus', 'aux_heater_status').concat(s('boiler_auxheaterlevel')),
+        heater: b('auxheaterstatus', 'aux_heater_status').concat(s('boiler_auxheaterlevel', 'boiler_aux_heater_level')),
         outdoor: s('boiler_outdoortemp', 'thermostat_outdoortemp', 'boiler_outside_temperature'),
-        dhw_top: s('boiler_dhw_curtemp', 'boiler_wwcurtemp', 'boiler_dhw_storagetemp1', 'boiler_dhw_current_extern_temperature'),
-        dhw_bottom: s('boiler_dhw_storagetemp2'),
-        dhw_target: s('boiler_dhw_seltemp', 'boiler_wwseltemp'),
+        dhw_top: s('boiler_dhw_curtemp', 'boiler_wwcurtemp', 'boiler_dhw_storagetemp1').concat(dhwIntern, dhwExtern),
+        dhw_bottom: s('boiler_dhw_storagetemp2').concat(ctx?.state(dhwIntern) !== undefined ? [dhwExtern] : []),
+        dhw_target: s('boiler_dhw_seltemp', 'boiler_wwseltemp').concat(`number.${x}boiler_dhw_selected_temperature`),
         circulation: b('dhw_circ', 'wwcirc').concat(sw('dhw_circulation_active')),
         hc_pump: [`binary_sensor.${x}mixer_${hc}_pumpstatus`, `sensor.${x}mixer_${hc}_pumpstatus`,
           ...(i.hc === 1 ? [`binary_sensor.${x}boiler_heating_pump`] : [])],
-        hc_flow: s(`mixer_${hc}_flowtemphc`, `thermostat_${hc}_targetflowtemp`),
+        hc_flow: s(`mixer_${hc}_flowtemphc`, `thermostat_${hc}_targetflowtemp`, `thermostat_${hc}_target_flow_temperature`),
         room: s(`thermostat_${hc}_currtemp`, `thermostat_${hc}_current_room_temperature`),
-        room_target: s(`thermostat_${hc}_seltemp`),
+        room_target: s(`thermostat_${hc}_seltemp`).concat(`number.${x}thermostat_${hc}_selected_room_temperature`),
         program: s(`thermostat_${hc}_modetype`),
         hours: s('boiler_uptimecomp', 'boiler_uptimetotal'),
-        starts_total: s('boiler_totalcompstarts'),
-        energy_total: s('boiler_nrgconstotal'),
+        starts_total: s('boiler_totalcompstarts', 'boiler_total_compressor_control_starts'),
+        energy_total: s('boiler_nrgconstotal', 'boiler_total_energy_consumption'),
         heat_total: s('boiler_nrgsupptotal'),
         compressor_speed: s('boiler_hpcompspd', 'boiler_compressor_speed'),
         evap_temp: s('boiler_hppl1'),
         cond_temp: s('boiler_hpph1'),
-        suction_temp: s('boiler_hptr5'),
-        hot_gas: s('boiler_hptr6'),
-        liquid_temp: s('boiler_hptr3'),
+        suction_temp: s('boiler_hptr5', 'boiler_compressor_inlet_temperature_tr5'),
+        hot_gas: s('boiler_hptr6', 'boiler_compressor_outlet_temperature_tr6'),
+        liquid_temp: s('boiler_hptr3', 'boiler_refrigerant_temperature_liquid_side_condenser_output_tr3'),
       };
     },
     // EMS-ESP only reports totals; today, month … come from their long-term statistics.
@@ -1054,6 +1057,8 @@ const HFC_PRESETS = {
         hc_flow: c(`hc${i.hc}flowtemp`),
         hc_setpoint: c(`hc${i.hc}actualflowtempdesired`),
         hc_pump: c(`hc${i.hc}pumpstatus`),
+        // Mixer movement of a mixed circuit, signed: above 0 opening, below 0 closing (VR 71, #1).
+        hc_mixer_opening: c(`hc${i.hc}mixermovement`),
         // One system pressure: only for the first circuit, the further ones would copy it as hc2_pressure …
         hc_pressure: i.hc === 1 ? [h('flowpressure'), c('waterpressure')] : undefined,
         room: c(`z${i.hc}roomtemp`),
@@ -1319,6 +1324,7 @@ const HFC_I18N = {
       suction_temp: 'Nasávaný plyn', hot_gas: 'Horký plyn', liquid_temp: 'Kapalinové potrubí', low_pressure: 'Nízký tlak', high_pressure: 'Vysoký tlak',
       eev: 'Expanzní ventil', superheat: 'Přehřátí', subcooling: 'Podchlazení',
     },
+    boiler: 'Bojler', boiler_off: 'Bojler vypnutý', mixer: 'Směšovač', mixer_opening: 'směšovač se otevírá', mixer_closing: 'směšovač se zavírá',
     source_flow: 'Zdroj', target: 'Cíl', curve_offset: 'křivka', curve_shift: 'posun', return_short: 'RL', error: 'Chyba', circulation: 'Cirk.', valve_dhw: 'TUV', solar: 'Solár',
     brine_pressure: 'Tlak nemrznoucí směsi', hc_pressure: 'Tlak vytápění', pressure_normal: 'normální', pressure_warning: 'varování', pressure_critical: 'kritický',
     timeline_title: 'Posledních {h} hodin', timeline_gap: 'Žádná data', timeline_aria: 'Provozní režim za posledních {h} hodin. Šipkami vyberte období.',
@@ -4217,8 +4223,11 @@ class HeatpumpFlowCard extends HTMLElement {
     const value = this._has(k('mixer')) ? this._n(k('mixer')) : NaN;
     const text = this._has(k('mixer')) ? (Number.isFinite(value) ? `${this._fmt(value, 0)} %` : '–') : '';
     this._txt(`t-hc-mix${s}`, text);
-    const opening = this._has(k('mixer_opening')) && this._on(k('mixer_opening'));
-    const closing = !opening && this._has(k('mixer_closing')) && this._on(k('mixer_closing'));
+    // The opening key may also carry a signed movement (ebusd: −100 … +100 %, above 0 opening, below 0 closing); a mapped
+    // closing key still decides for closing.
+    const move = this._has(k('mixer_opening')) ? parseFloat(this._s(k('mixer_opening'))) : NaN;
+    const opening = this._has(k('mixer_opening')) && (Number.isFinite(move) ? move > 0 : this._on(k('mixer_opening')));
+    const closing = !opening && (this._has(k('mixer_closing')) ? this._on(k('mixer_closing')) : Number.isFinite(move) && move < 0);
     // The arrow stands right of the bypass: up while the motor opens, down while it closes, nothing at rest.
     const dir = this._$(`hc-mix-dir${s}`);
     if (dir) {
@@ -5632,7 +5641,7 @@ HeatpumpFlowCard.styles = `
   .src.grid.on .ico-l { stroke: ${hfcVar('grid')}; }
   .valve { fill: var(--card-background-color, #fff); stroke: var(--hfc-muted); stroke-width: 3; }
   .mix-body { stroke-width: 2; }
-  .mix-label { font-size: 13px; font-weight: 600; fill: var(--primary-text-color, #212121); paint-order: stroke; stroke: var(--card-background-color, #fff); stroke-width: 4px; }
+  .mix-label { font-size: calc(13px * var(--k2, 1)); font-weight: 600; fill: var(--primary-text-color, #212121); paint-order: stroke; stroke: var(--card-background-color, #fff); stroke-width: 4px; }
   .mix-dir { fill: none; stroke: var(--primary-text-color, #212121); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   .valve-arrow { fill: none; stroke: var(--primary-text-color); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
   .tank { stroke: var(--divider-color, rgba(127,127,127,.4)); stroke-width: 2; }
@@ -5826,7 +5835,7 @@ HeatpumpFlowCard.styles = `
   /* narrow schematic (phones, narrow columns): larger type, secondary labels hidden */
   .stage { container-type: inline-size; }
   @container (max-width: 640px) { #svg { --k: 1.2; --ku: 1.1; --kp: 1; --k2: 1; --ks: 1.2; --kt: 1.15; } }
-  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .vol-label, .tank-sub, .pre, #t-valve, #t-circ, #t-dhw-mode { display: none; } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values [id^="t-hc-rl"] { display: block; } }
+  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .vol-label, .tank-sub, .pre, #t-valve, #t-circ, #t-dhw-mode { display: none; } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values [id^="t-hc-rl"] { display: block; font-size: calc(13px * var(--k2, 1)); } }
   /* layout: compact – tighter spacing for narrow dashboard columns */
   ha-card.layout-compact { padding: 6px 6px 4px; }
   .layout-compact .head { margin: 0 2px 2px; }

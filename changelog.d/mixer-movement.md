@@ -1,0 +1,2 @@
+- Mixer: `hc_mixer_opening` also accepts a signed movement (above 0 opening, below 0 closing) instead of two on/off outputs, and the ebusd preset maps the controller's `hcNmixermovement` of a mixed circuit (Vaillant VR 71). Suggested by buliwyf42 (#1).
+- Czech card texts for the boiler and the mixer, by Havinko1991 (#191).
