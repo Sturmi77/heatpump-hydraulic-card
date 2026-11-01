@@ -48,7 +48,7 @@ It shows electricity flowing from **PV, battery and grid** into the heat pump, t
 
 ## Current status
 
-The current release is **[0.17.0](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.17.0)**: a guided mapping assistant for unsupported heat pumps, a separate manually configured boiler/second heat generator, a compact room overview for up to six circuits, smoother flow animations, Dutch, additional confirmed presets and the accumulated 0.16 display and compatibility improvements. What changed in each release is in the [release notes](https://github.com/Sturmi77/heatpump-hydraulic-card/releases) and the [changelog](CHANGELOG.md), the plan for the next releases in the [development plan](docs/ROADMAP.md). Reports from real installations are the most useful help right now, above all for the presets marked *untested*; please use the [tester issue](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) or the [preset feedback form](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/new?template=preset_feedback.yml).
+The current release is **[0.17.0](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.17.0)**: a guided mapping assistant for unsupported heat pumps, a separate manually configured boiler/second heat generator, a compact room overview for up to six circuits, a three-way mixer for mixed circuits, smoother flow animations, Dutch, the remaining Slovak and Czech editor texts, additional confirmed presets and the accumulated 0.16 display and compatibility improvements. What changed in each release is in the [release notes](https://github.com/Sturmi77/heatpump-hydraulic-card/releases) and the [changelog](CHANGELOG.md), the plan for the next releases in the [development plan](docs/ROADMAP.md). Reports from real installations are the most useful help right now, above all for the presets marked *untested*; please use the [tester issue](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) or the [preset feedback form](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/new?template=preset_feedback.yml).
 
 ## Features
 
@@ -56,13 +56,13 @@ The current release is **[0.17.0](https://github.com/Sturmi77/heatpump-hydraulic
 - **Heat pump:** mode and status, electrical power, heat output and live COP; the fan and pumps follow the compressor modulation, defrost shows a snowflake. A simplified, logo-free outdoor-unit drawing for 11 brand families (`unit_style`).
 - **Heat source:** air, ground (brine loop) or groundwater (`source_type`), with source temperatures, flow rate and pressure thresholds.
 - **Diverter valve and tanks:** hot water or heating, colour-coded tanks with up to three sensors, heater rods, an optional second heat generator in series, a series buffer, a combined storage (`storage`) and fresh-water stations or tank in tank (`dhw_type`).
-- **Heating circuits:** up to six (`hc_count`) with underfloor, panel or column radiators, flow and target, room temperatures and the house.
+- **Heating circuits:** up to six (`hc_count`) with underfloor, panel or column radiators, flow and target, an optional three-way mixer with its bypass (`hc_mixer`), and the house with the room temperature and target of every circuit.
 - **Statistics and timeline:** tiles from a catalog of more than 40 values per period (today to total, from the long-term statistics where needed), cost with fixed or dynamic prices, and a 24-hour timeline of the operating mode.
 - **Details and controls:** a details drawer with operating hours, counters and the refrigerant circuit; quick controls for switches, buttons, selects and numbers on the card.
-- **Editor:** detects the integration, fills in the preset, shows the most important fields first and checks every mapping (wrong unit, wrong field, disabled entities). A local **diagnostic report** for support; nothing is uploaded.
-- **Layouts and look:** default, compact, wide and wall display, full screen, card themes, and every colour as a CSS variable (`--hfc-*`).
+- **Editor:** detects the integration, fills in the preset, shows the most important fields first and checks every mapping (wrong unit, wrong field, disabled entities). Without a supported preset it proposes mappings from the heat pump's device ([Any other heat pump](#any-other-heat-pump)). A local **diagnostic report** for support; nothing is uploaded.
+- **Layouts and look:** default, compact, wide and wall display, full screen, card themes, secondary values kept on phones (`narrow_values`), equally weighted buffer temperatures (`buffer_values: equal`), and every colour as a CSS variable (`--hfc-*`).
 - **Accessible:** keyboard operation with a visible focus frame, screen-reader labels, and `prefers-reduced-motion` is respected.
-- **Languages:** English, German, Slovak and Czech built in; your own texts or languages with `texts`.
+- **Languages:** English, German, Dutch, Slovak and Czech built in (a text not yet translated shows in English); your own texts or languages with `texts`.
 - **Only what you have:** parts without entities (buffer, tank, power sources, house) are simply not drawn.
 
 | Viessmann preset, radiators | Vaillant preset, DHW run | Lambda zero-config, DHW run |
@@ -556,14 +556,14 @@ npm run dev
 
 ## Deutsch (Kurzfassung)
 
-Animiertes Hydraulikschema für Wärmepumpen mit Luft, Erdreich (Sole) oder Grundwasser als Quelle: Strom aus PV, Akku und Netz (aus dem Energie-Dashboard oder eigenen Sensoren) → Wärmepumpe → Umschaltventil → Warmwasser oder Puffer → bis zu sechs Heizkreise. Dazu Kacheln mit über 40 Kennzahlen je Zeitraum, Kosten, Zeitleiste, Detailbereich, Schnellbedienung, Kombispeicher und Frischwasserstation, logofreie Zeichnungen der Außengeräte für 11 Markenfamilien, Tastaturbedienung und Wanddisplay-Layout. Editor und Karte sprechen Deutsch, Englisch, Slowakisch und Tschechisch.
+Animiertes Hydraulikschema für Wärmepumpen mit Luft, Erdreich (Sole) oder Grundwasser als Quelle: Strom aus PV, Akku und Netz (aus dem Energie-Dashboard oder eigenen Sensoren) → Wärmepumpe → Umschaltventil → Warmwasser oder Puffer → bis zu sechs Heizkreise. Dazu Kacheln mit über 40 Kennzahlen je Zeitraum, Kosten, Zeitleiste, Detailbereich, Schnellbedienung, Kombispeicher und Frischwasserstation, Heizkessel als zweiter Wärmeerzeuger, Mischer für gemischte Heizkreise, Raumübersicht aller Heizkreise im Haus, logofreie Zeichnungen der Außengeräte für 11 Markenfamilien, Tastaturbedienung und Wanddisplay-Layout. Editor und Karte sprechen Deutsch, Englisch, Niederländisch, Slowakisch und Tschechisch.
 
-Voreinstellungen erkennen die Entitäten automatisch für Lambda, Viessmann (ViCare, Open3E), Vaillant und verwandte Marken (myPyllant, ebusd), Bosch/Buderus und verwandte Marken (EMS-ESP, Home Comfort), Panasonic (HeishaMon), Samsung, Wolf, Kronoterm, Luxtronik-Regler (Alpha Innotec, Novelan, Roth …) sowie Stiebel Eltron und Tecalor; welche davon auf echten Anlagen bestätigt sind, zeigt die Tabelle [Supported heat pumps](#supported-heat-pumps). Andere Wärmepumpen werden über `entities` und `mode_map` angebunden.
+Voreinstellungen erkennen die Entitäten automatisch für Lambda, Viessmann (ViCare, Open3E), Vaillant und verwandte Marken (myPyllant, ebusd), Bosch/Buderus und verwandte Marken (EMS-ESP, Home Comfort), Panasonic (HeishaMon), Samsung, Wolf, Kronoterm, Luxtronik-Regler (Alpha Innotec, Novelan, Roth …) sowie Stiebel Eltron und Tecalor; welche davon auf echten Anlagen bestätigt sind, zeigt die Tabelle [Supported heat pumps](#supported-heat-pumps). Andere Wärmepumpen werden über den Zuordnungsassistenten im Editor oder über `entities` und `mode_map` angebunden.
 
 **Erste Schritte:**
 1. Über HACS **Heat Pump Hydraulic Card** suchen, herunterladen, Browser neu laden.
 2. Dashboard bearbeiten, *Karte hinzufügen*, **Heat Pump Hydraulic Card** wählen; die Karte sucht eine unterstützte Integration und trägt die Voreinstellung ein.
-3. Im Karten-Editor prüfen, ob die Voreinstellung *Erkannt* meldet; sonst die passende Voreinstellung wählen oder die Entitäten selbst zuordnen.
+3. Im Karten-Editor prüfen, ob die Voreinstellung *Erkannt* meldet; sonst die passende Voreinstellung wählen. Wird keine unterstützte Voreinstellung erkannt, schlägt der Zuordnungsassistent nach Auswahl des Wärmepumpen-Geräts Entitäten vor; übernommen wird nur, was du auswählst. Alles Weitere lässt sich selbst zuordnen.
 4. Was der Editor meldet beheben: *Diese Felder prüfen* (Entität passt nicht zum Feld), *Fehlt in der Karte* und deaktivierte Entitäten. Die wichtigsten Felder stehen oben, der Rest unter *Weitere Felder*.
 5. Stimmt etwas nicht: Symptom in der Tabelle [Troubleshooting](#troubleshooting) suchen; sonst den Diagnosebericht (Dokument-Knopf) auf private Namen prüfen und im [Preset-Formular](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/new?template=preset_feedback.yml) posten.
 
