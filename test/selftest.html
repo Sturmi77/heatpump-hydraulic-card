@@ -196,6 +196,20 @@
     const explicit = C._resolve({ preset: 'ebusd', prefix: 'ebus_arotherm' }, hassOf(multi, multiReg));
     check(explicit.prefix === 'ebus_arotherm' && ['mode', 'flow', 'return'].every((key) => explicit.entities[key]?.startsWith('sensor.ebus_arotherm_'))
       && explicit.entities.power === undefined, 'a full ebusd prefix selects one instance explicitly without falling back to another');
+    const suffixStates = toStates({
+      'sensor.ebus_arotherm_hmu_rundatastatuscode': 'standby',
+      'sensor.other_ebus_arotherm_hmu_rundatastatuscode': 'heat_compressor_active',
+      'sensor.other_ebus_arotherm_hmu_rundataflowtemp': ['35', '°C'],
+      'sensor.other_ebus_arotherm_hmu_rundatareturntemp': ['30', '°C'],
+    });
+    const suffixReg = Object.fromEntries(Object.keys(suffixStates).map((id) => [id, { platform: 'mqtt' }]));
+    const exact = C._resolve({ preset: 'ebusd', prefix: 'ebus_arotherm' }, hassOf(suffixStates, suffixReg));
+    check(exact.prefix === 'ebus_arotherm' && exact.entities.mode === 'sensor.ebus_arotherm_hmu_rundatastatuscode' && exact.entities.flow === undefined,
+      `a full exact ebusd prefix wins over a more complete suffix match (${exact.prefix})`);
+    const deviceReg = Object.fromEntries(Object.keys(multi).map((id) => [id, { platform: 'mqtt', device_id: id.startsWith('sensor.ebus_arotherm_') ? 'device-a' : 'device-b' }]));
+    const onDevice = C._resolve({ preset: 'ebusd', device: 'device-a' }, hassOf(multi, deviceReg));
+    check(onDevice.prefix === 'ebus_arotherm' && onDevice.entities.mode === 'sensor.ebus_arotherm_hmu_rundatastatuscode'
+      && onDevice.entities.flow === 'sensor.ebus_arotherm_hmu_rundataflowtemp', `ebusd candidate scoring respects the selected device (${onDevice.prefix})`);
     const tiedStates = toStates({
       'sensor.alpha_arotherm_hmu_rundatastatuscode': 'standby', 'sensor.alpha_arotherm_hmu_rundataflowtemp': ['31', '°C'],
       'sensor.beta_arotherm_hmu_rundatastatuscode': 'standby', 'sensor.beta_arotherm_hmu_rundataflowtemp': ['32', '°C'],
@@ -661,6 +675,18 @@
     card.remove(); ed.remove();
   }
   {
+    const prefs = { energy_sources: [
+      { type: 'solar', stat_energy_from: 'sensor.pv_energy' },
+      { type: 'battery', stat_energy_from: 'sensor.battery_energy' },
+      { type: 'grid', stat_energy_from: 'sensor.grid_energy' },
+    ] };
+    const card = mount({ entities: { power: 'sensor.hp' } }, hassOf(toStates({ 'sensor.hp': ['1200', 'W'] }), {}, prefs));
+    await wait(20);
+    check(card._powerMode() === '' && /no power sensor for (PV|solar).*battery.*grid/i.test(card.shadowRoot.textContent),
+      'the card explains when every automatic Energy-dashboard source lacks a power sensor');
+    card.remove();
+  }
+  {
     // #210: scaled power units are live power; energy units remain counters and cannot drive a live flow.
     const attrs = (unit, device_class) => ({ state: '1', attributes: { unit_of_measurement: unit, device_class, state_class: 'measurement' } });
     const prefs = { energy_sources: [{ type: 'battery', stat_rate: 'sensor.source' }] };
@@ -1069,6 +1095,11 @@
     check(mod.isConnected && card.shadowRoot.getElementById('card-mod-regression') === mod, 'setConfig keeps a card-mod style in the shadow root');
     check(getComputedStyle(rebuilt).stroke === 'rgb(4, 5, 6)', `card-mod variables still apply after the rebuild (${getComputedStyle(rebuilt).stroke})`);
     card.remove();
+
+    const detached = document.createElement('heatpump-flow-card');
+    detached.setConfig(s.config); detached.hass = hass; detached.hass = hass;
+    check(detached.shadowRoot.querySelectorAll('[data-hfc-root]').length === 1,
+      're-rendering a detached card reuses its owned render root');
 
     // layouts
     for (const l of ['default', 'compact', 'wide']) {
@@ -2174,6 +2205,14 @@
     c._a11y(true);
     check(q(c, 'house-row2').getAttribute('role') === 'button' && /Attic: Room 19\.4 °C, Target 20\.0 °C; below target/.test(q(c, 'house-row2').getAttribute('aria-label') || ''),
       'room row has a complete accessible label');
+    const longName = 'Very long upstairs heating circuit name';
+    c.setConfig({ ...cfg, hc2_name: longName }); c.hass = hassOf(toStates(states)); await wait(20); c._a11y(true);
+    const nameClip = c.shadowRoot.getElementById('house-row-name-clip').querySelector('rect');
+    const clippedName = q(c, 'house-row2').querySelector('.house-row-name'); const roomValue = q(c, 't-house-room2').getBBox();
+    check(clippedName.getAttribute('clip-path') === 'url(#house-row-name-clip)'
+      && +nameClip.getAttribute('x') + +nameClip.getAttribute('width') < roomValue.x
+      && (q(c, 'house-row2').getAttribute('aria-label') || '').startsWith(longName),
+    'long room names are visually constrained before the temperatures and remain complete for assistive technology');
     let ev = []; c.addEventListener('hass-more-info', (e) => ev.push(e.detail.entityId)); tap(c, 't-house-room2');
     check(ev.join() === 'sensor.attic', 'a tap on the overview row opens the room sensor');
     states['sensor.attic'] = { ...states['sensor.attic'], state: 'unavailable' }; c.hass = hassOf(toStates(states));

@@ -74,11 +74,14 @@ function hfcEbusdInstances(ctx, requested) {
   // Besides finding candidates below, record the platform/pattern for the editor and diagnostic detection explanation.
   ctx.match(/^sensor\..+_hmu_rundatastatuscode$/, 'mqtt');
   const mqtt = (id) => !ctx.registry[id] || ctx.registry[id].platform === 'mqtt';
-  const stems = [...new Set(ctx.ids.filter((id) => id.startsWith('sensor.') && id.endsWith('_hmu_rundatastatuscode') && mqtt(id))
+  const own = (id) => !ctx.device || ctx.registry[id]?.device_id === ctx.device;
+  const ids = ctx.ids.filter(own);
+  const stems = [...new Set(ids.filter((id) => id.startsWith('sensor.') && id.endsWith('_hmu_rundatastatuscode') && mqtt(id))
     .map((id) => id.slice('sensor.'.length, -'_hmu_rundatastatuscode'.length)))];
   const want = String(requested || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-  const eligible = want ? stems.filter((stem) => stem === want || stem.endsWith(`_${want}`)) : stems;
-  const score = (stem) => ctx.ids.filter((id) => mqtt(id)
+  const exact = want && stems.includes(want);
+  const eligible = want ? (exact ? [want] : stems.filter((stem) => stem.endsWith(`_${want}`))) : stems;
+  const score = (stem) => ids.filter((id) => mqtt(id)
     && new RegExp(`^(?:sensor|binary_sensor|number|select|switch)\\.${stem}_(?:hmu|vwzio|broadcast|ctl[sv]\\d)_`).test(id)).length;
   return eligible.map((stem) => ({ stem, score: score(stem) }))
     .sort((a, b) => b.score - a.score || a.stem.localeCompare(b.stem));
@@ -2871,7 +2874,7 @@ class HeatpumpFlowCard extends HTMLElement {
   // keeping those nodes out of our render target prevents a later setConfig/rebuild from deleting their CSS variables (#164).
   _renderRoot() {
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
-    if (!this._ownedRoot?.isConnected) {
+    if (this._ownedRoot?.parentNode !== this.shadowRoot) {
       this._ownedRoot = document.createElement('div');
       this._ownedRoot.setAttribute('data-hfc-root', '');
       this.shadowRoot.prepend(this._ownedRoot);
@@ -3223,7 +3226,8 @@ class HeatpumpFlowCard extends HTMLElement {
     const fullscreenIcon = this._fullscreenOpen
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>'
       : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>';
-    const energyHint = this._powerMode() === 'energy' && this._energyMissing?.length
+    const automaticEnergy = this._config.power_sources !== 'manual' && !['pv', 'battery', 'grid'].some((key) => this._has(key));
+    const energyHint = automaticEnergy && this._energyMissing?.length
       ? i.energy_missing.replace('{sources}', this._energyMissing.map((type) => ({ solar: i.pv, battery: i.battery, grid: i.grid }[type])).join(', ')) : '';
     const de = (k) => (e[k] ? `data-entity="${this._esc(e[k])}"` : '');
     const pipePair = (id, d, show = true) => (show
@@ -3272,6 +3276,7 @@ class HeatpumpFlowCard extends HTMLElement {
             <linearGradient id="g-dhw" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-dhw-top"/>${this._has('dhw_middle') ? '<stop offset="50%" id="g-dhw-middle"/>' : ''}<stop offset="100%" id="g-dhw-bottom"/></linearGradient>
             <linearGradient id="g-buf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-buf-top"/>${this._has('buffer_middle') ? '<stop offset="50%" id="g-buf-middle"/>' : ''}<stop offset="100%" id="g-buf-bottom"/></linearGradient>
             ${P.combined ? `<linearGradient id="g-cs" x1="0" y1="0" x2="0" y2="1">${this._combinedSensors().map(([k, y]) => `<stop offset="${(((y - 40) / 480) * 100).toFixed(1)}%" id="g-cs-${k}"/>`).join('') || `<stop offset="0%" stop-color="${this._tankColor(NaN)}"/>`}</linearGradient>` : ''}
+            <clipPath id="house-row-name-clip"><rect x="746" y="98" width="80" height="137"/></clipPath>
             <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
           </defs>
 
@@ -3947,8 +3952,9 @@ class HeatpumpFlowCard extends HTMLElement {
       const name = this._config[n === 1 ? 'hc_name' : `hc${n}_name`] || `${i.heating_circuit} ${n}`;
       const y = 118 + x * 21.5;
       return `<g class="tap house-row" id="house-row${s}" ${de(entityKey)} data-name="${this._esc(name)}">
+        <title>${this._esc(name)}</title>
         <circle class="house-comfort unknown" id="house-comfort${s}" cx="734" cy="${y - 4}" r="5"/>
-        <text class="house-row-name" x="746" y="${y}">${this._esc(name)}</text>
+        <text class="house-row-name" x="746" y="${y}" clip-path="url(#house-row-name-clip)">${this._esc(name)}</text>
         <text class="house-row-value" id="t-house-room${s}" x="950" y="${y}" text-anchor="end"></text>
       </g>`;
     }).join('');
