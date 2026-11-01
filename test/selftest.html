@@ -159,6 +159,56 @@
     check(!card.shadowRoot.getElementById('start-hint') && /preset/i.test(card.shadowRoot.querySelector('.hint')?.textContent || ''), 'an explicit preset that finds nothing keeps its own hint');
     card.remove();
   }
+
+  // 5-0a. No-preset mapping assistant (#149): exact names on one selected device, explicit confirmation, no guesses
+  {
+    const other = setups.find((s) => s.name === 'Any other heat pump');
+    const states = toStates({ ...other.states('heat'),
+      'binary_sensor.wp_verdichter': 'on', 'sensor.wp_umschaltventil': 'Heating',
+      'sensor.wp_room_temperature': ['21.5', '°C'], 'sensor.wp_heat_output': ['6200', 'W'],
+      'sensor.second_vorlauf': ['33', '°C'] });
+    const registry = Object.fromEntries(Object.keys(states).map((id) => [id, { device_id: id === 'sensor.second_vorlauf' ? 'device-second' : 'device-any' }]));
+    const h = hassOf(states, registry);
+    const proposals = C._assistantProposals(h, 'device-any', {});
+    const proposed = Object.fromEntries(proposals.map((p) => [p.key, p.id]));
+    check(Object.keys(proposed).sort().join() === ['compressor', 'dhw_top', 'flow', 'mode', 'outdoor', 'power', 'return', 'valve'].sort().join()
+      && proposed.flow === 'sensor.wp_vorlauf' && proposed.return === 'sensor.wp_ruecklauf'
+      && proposed.power === 'sensor.wp_leistung' && proposed.mode === 'sensor.wp_betriebsart'
+      && proposed.compressor === 'binary_sensor.wp_verdichter' && proposed.valve === 'sensor.wp_umschaltventil'
+      && proposed.dhw_top === 'sensor.ww_temperatur' && proposed.outdoor === 'sensor.aussen',
+      `assistant proposes the eight exact demo mappings and no distractor (${JSON.stringify(proposed)})`);
+    check(!Object.values(proposed).includes('sensor.wp_room_temperature') && !Object.values(proposed).includes('sensor.wp_heat_output')
+      && !Object.values(proposed).includes('sensor.second_vorlauf'), 'assistant ignores other fields and entities on another device');
+    const ambiguousStates = { ...states, 'sensor.wp_supply_temperature': { entity_id: 'sensor.wp_supply_temperature', state: '34', attributes: { unit_of_measurement: '°C' } } };
+    const ambiguousRegistry = { ...registry, 'sensor.wp_supply_temperature': { device_id: 'device-any' } };
+    check(!C._assistantProposals(hassOf(ambiguousStates, ambiguousRegistry), 'device-any', {}).some((p) => p.key === 'flow'),
+      'assistant omits an ambiguous field instead of choosing one flow sensor');
+
+    let changed = 0; let out;
+    const ed = document.createElement('heatpump-flow-card-editor');
+    ed.addEventListener('config-changed', (ev) => { changed++; out = ev.detail.config; });
+    ed.setConfig({}); ed.hass = h; await wait(20);
+    check(ed._form.schema.some((f) => f.name === 'assistant_device'), 'editor shows the assistant device selector without a detected preset');
+    ed._changed({ ...ed._form.data, assistant_device: 'device-any' }); await wait(10);
+    const boxes = [...ed.querySelectorAll('input[data-hfc-assistant]')];
+    check(changed === 0 && boxes.length === 8 && boxes.every((box) => !box.checked) && !ed._config.entities,
+      'choosing a device only shows unchecked proposals and writes no configuration');
+    boxes.forEach((box) => { box.checked = true; });
+    ed._assistant.dispatchEvent(new Event('change', { bubbles: true }));
+    const apply = ed.querySelector('[data-hfc-assistant-apply]');
+    check(apply && !apply.disabled, 'selecting proposals enables their confirmation');
+    apply.click(); await wait(10);
+    check(changed === 1 && JSON.stringify(out.entities) === JSON.stringify(proposed), `only confirmed proposals are written (${JSON.stringify(out?.entities)})`);
+    let roundTrip = true; try { const card = document.createElement('heatpump-flow-card'); card.setConfig(out); card.hass = h; } catch (err) { roundTrip = false; }
+    check(roundTrip, 'assistant configuration survives the card configuration round trip');
+    ed.remove();
+
+    const lambda = setups.find((s) => s.config.preset === 'lambda');
+    const supported = document.createElement('heatpump-flow-card-editor'); supported.setConfig({});
+    supported.hass = hassOf(toStates(lambda.states('heat')), lambda.registry || {}); await wait(20);
+    check(!supported._form.schema.some((f) => f.name === 'assistant_device'), 'a detected preset keeps priority and suppresses the assistant');
+    supported.remove();
+  }
   const stub = (states, registry) => C.getStubConfig(hassOf(toStates(states), registry));
   const expect = { 0: 'lambda', 1: 'lambda', 2: 'vicare', 3: 'vaillant', 4: 'emsesp', 5: 'heishamon', 6: 'emsesp', 8: 'wolf', 9: 'kronoterm', 10: 'ebusd', 11: 'samsung', 12: 'luxtronik', 15: 'stiebel_isg' };
   for (const [i, p] of Object.entries(expect)) {
