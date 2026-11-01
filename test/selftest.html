@@ -237,6 +237,35 @@
   const detects = (preset, states, registry) => HFC_PRESETS[preset].detect(C._ctx(hassOf(toStates(states), registry), undefined, { hp: 1, dhw: 1, buffer: 1, hc: 1 })) !== undefined;
   check(HFC_PRESETS.emsesp.tested === true, 'EMS-ESP preset is marked real-installation tested on a Buderus WLW186i (#220)');
   check(!detects('emsesp', { 'sensor.boiler_curflowtemp': '45', 'sensor.boiler_outdoortemp': '5' }, { 'sensor.boiler_curflowtemp': { platform: 'mqtt' } }), 'EMS-ESP gas boiler is not a heat pump');
+  {
+    // #225: EMS-ESP can publish descriptive Home Assistant object ids instead of its short MQTT keys.
+    const states = toStates({
+      'sensor.boiler_compressor_activity': 'Heizen', 'sensor.boiler_compressor_speed': ['67', '%'],
+      'sensor.boiler_compressor_current_power': ['3020', 'W'], 'sensor.boiler_current_flow_temperature': ['30.2', '°C'],
+      'sensor.boiler_return_temperature': ['27.9', '°C'], 'sensor.boiler_outside_temperature': ['3.5', '°C'],
+      'switch.boiler_3_way_valve': 'off', 'sensor.boiler_dhw_current_extern_temperature': ['51.7', '°C'],
+      'switch.boiler_dhw_circulation_active': 'off', 'sensor.boiler_aux_heater_status': 'aus',
+      'binary_sensor.boiler_heating_pump': 'on', 'sensor.thermostat_hc1_current_room_temperature': ['21.5', '°C'],
+    });
+    const registry = Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'mqtt' }]));
+    const hass = hassOf(states, registry); const r = C._resolve({ preset: 'emsesp' }, hass);
+    check(C.getStubConfig(hass).preset === 'emsesp' && r.ready && r.entities.mode === 'sensor.boiler_compressor_activity',
+      `EMS-ESP descriptive ids detect the heat pump (${JSON.stringify(C.getStubConfig(hass))})`);
+    check(r.entities.compressor === 'sensor.boiler_compressor_speed' && r.entities.power === 'sensor.boiler_compressor_current_power'
+      && r.entities.flow === 'sensor.boiler_current_flow_temperature' && r.entities.return === 'sensor.boiler_return_temperature'
+      && r.entities.outdoor === 'sensor.boiler_outside_temperature', 'EMS-ESP descriptive ids map the heat-pump core values');
+    check(r.entities.valve === 'switch.boiler_3_way_valve' && r.entities.dhw_top === 'sensor.boiler_dhw_current_extern_temperature'
+      && r.entities.circulation === 'switch.boiler_dhw_circulation_active' && r.entities.heater === 'sensor.boiler_aux_heater_status'
+      && r.entities.hc_pump === 'binary_sensor.boiler_heating_pump' && r.entities.room === 'sensor.thermostat_hc1_current_room_temperature',
+    'EMS-ESP descriptive ids map the reported valve, hot water, heater, pump and room values');
+    const twoCircuits = C._resolve({ preset: 'emsesp', hc_count: 2 }, hass);
+    check(twoCircuits.entities.hc_pump === 'binary_sensor.boiler_heating_pump'
+      && twoCircuits.entities.hc2_pump !== 'binary_sensor.boiler_heating_pump' && !hass.states[twoCircuits.entities.hc2_pump],
+      'the EMS-ESP boiler pump belongs only to the direct first circuit');
+    check(r.entities.heat === undefined, 'EMS-ESP compressor current power is electrical input, not heat output');
+    check(!detects('emsesp', { 'sensor.boiler_current_flow_temperature': '45', 'sensor.boiler_outside_temperature': '5' }, registry),
+      'descriptive EMS-ESP flow and outdoor names alone still do not detect a gas boiler');
+  }
   check(!detects('vicare', { 'sensor.vitodens_outside_temperature': '5', 'sensor.vitodens_boiler_temperature': '60' },
     { 'sensor.vitodens_outside_temperature': { platform: 'vicare', translation_key: 'outside_temperature' } }), 'ViCare gas boiler is not a heat pump');
   check(!detects('lambda', { 'sensor.other_hp1_operating_state': 'x' }, { 'sensor.other_hp1_operating_state': { platform: 'something_else' } }), 'foreign hp1_operating_state is not Lambda');

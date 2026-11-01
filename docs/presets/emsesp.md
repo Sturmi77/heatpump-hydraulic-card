@@ -10,11 +10,11 @@ Confirmed on a real Buderus Logatherm WLW186i-5 TP70 installation with an EMS-ES
 type: custom:heatpump-flow-card
 preset: emsesp
 ```
-For heat pumps on the EMS bus via the [EMS-ESP](https://github.com/emsesp/EMS-ESP32) gateway with Home Assistant MQTT discovery. The entity ids come from the EMS-ESP short names (`boiler_hpactivity`, `boiler_hptc1`, …), so the EMS-ESP language does not matter for the ids. An instance prefix from the "multiple instances" entity format (e.g. `sensor.ems_esp_boiler_…`) is detected automatically. Compressor activity texts are understood in English and German.
+For heat pumps on the EMS bus via the [EMS-ESP](https://github.com/emsesp/EMS-ESP32) gateway with Home Assistant MQTT discovery. The preset accepts both the established EMS-ESP short ids (`boiler_hpactivity`, `boiler_hptc1`, …) and the descriptive Home Assistant object ids used by newer/entity-format configurations (`boiler_compressor_activity`, `boiler_current_flow_temperature`, …). An instance prefix from the "multiple instances" entity format (e.g. `sensor.ems_esp_boiler_…`) is detected automatically. Compressor activity texts are understood in English and German.
 
 What you get:
 - compressor activity (heating, hot water, cooling, defrost) as the mode
-- compressor running, 3-way valve, current compressor power
+- compressor running, 3-way valve, current electrical compressor power
 - heat carrier flow and return (TC1/TC0, falling back to the boiler flow and return)
 - flow rate PC0
 - air inlet (TL2), or brine inlet and outlet for ground source heat pumps (`source_type: brine`)
