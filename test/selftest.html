@@ -2707,6 +2707,17 @@
     check(v.y >= nw.y + nw.height - 1 && q(vol, 't-hc-vol').textContent === '900 l/h', 'the flow rate moves below the flow temperature');
     check(/\+ 0,5 K|\+ 0\.5 K/.test(q(vol, 't-hc').textContent), `decimal shift (${q(vol, 't-hc').textContent})`);
     vol.remove();
+    // Next to a buffer the label starts right of the tank in two lines instead of running under it.
+    const bufStates = toStates({ 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.t': ['36', '°C'], 'sensor.shift': ['2', 'K'], 'sensor.bt': ['40', '°C'], 'sensor.bb': ['30', '°C'] });
+    for (const [language, storage] of [['de', undefined], ['en', undefined], ['de', 'combined']]) {
+      const c = mount({ language, ...(storage ? { storage } : {}), entities: { flow: 'sensor.f', return: 'sensor.r', hc_flow: 'sensor.f', hc_setpoint: 'sensor.t', hc_curve_offset: 'sensor.shift',
+        buffer_top: 'sensor.bt', buffer_bottom: 'sensor.bb' } }, hassOf(bufStates)); await wait(20);
+      const t = q(c, 't-hc'); const b = t.getBBox(); const [top, sub] = t.querySelectorAll('tspan');
+      check(t.dataset.lines === '2' && /^(Soll|Target) 36 °C$/.test(top?.textContent) && /^\((Kurve|curve) 34 °C \+ 2 K( (Verschiebung|shift))?\)$/.test(sub?.textContent)
+        && b.x >= 641 && b.x + b.width <= 801 && b.y + b.height <= 344,
+      `${language}${storage ? ' combined' : ''}: next to the tank the target and the curve stand in two lines right of it (${top?.textContent} | ${sub?.textContent}, x ${b.x.toFixed(0)}–${(b.x + b.width).toFixed(0)})`);
+      c.remove();
+    }
     const none = mount({ preset: 'heishamon', entities: { hc_curve_offset: null } }, hassOf(st())); await wait(20);
     check(!q(none, 't-hc-now') && /^36,8 °C · Soll 36,0$|^36\.8 °C · Target 36\.0$/.test(q(none, 't-hc').textContent), `without the shift the label stays as before (${q(none, 't-hc').textContent})`);
     none.remove();
@@ -3906,6 +3917,49 @@
       check(steps.every((d) => Math.abs(d) < 0.01), `a new flow rate does not move the dashes (offset changes ${steps.join(', ')})`);
     }
     card.remove();
+  }
+
+  // #214: three-way mixer of a mixed circuit; the share is shown as reported, opening/closing are motor pulses
+  {
+    const ents = { flow: 'sensor.f', return: 'sensor.r', buffer_top: 'sensor.bt', buffer_bottom: 'sensor.bb', hc_flow: 'sensor.hf', hc_return: 'sensor.hr', hc_pump: 'binary_sensor.hp',
+      hc_mixer: 'sensor.mix', hc_mixer_opening: 'binary_sensor.open', hc_mixer_closing: 'binary_sensor.close' };
+    const st = (share, open, close, pump = 'on') => toStates({ 'sensor.f': ['40', '°C'], 'sensor.r': ['33', '°C'], 'sensor.bt': ['42', '°C'], 'sensor.bb': ['30', '°C'],
+      'sensor.hf': ['34', '°C'], 'sensor.hr': ['29', '°C'], 'binary_sensor.hp': pump, 'sensor.mix': share === null ? 'unavailable' : [String(share), '%'],
+      'binary_sensor.open': open ? 'on' : 'off', 'binary_sensor.close': close ? 'on' : 'off' });
+    const card = mount({ entities: ents }, hassOf(st(68, false, false))); await wait(20);
+    const q = (id) => card.shadowRoot.getElementById(id);
+    check(!!q('mixer') && !!q('p-hc-mix') && q('t-hc-mix').textContent === '68 %' && q('hc-mix-dir').getAttribute('d') === '' && q('p-hc-mix').classList.contains('on'),
+      `mixer: valve, bypass and the share as reported (${q('t-hc-mix')?.textContent})`);
+    card.hass = hassOf(st(68, true, false)); await wait(10);
+    check(/^M771 434 V420/.test(q('hc-mix-dir').getAttribute('d')) && q('hc-mix-dir').classList.contains('on') && /opening/.test(q('mixer').dataset.a11y),
+      `mixer opening: arrow up and accessible state (${q('mixer').dataset.a11y})`);
+    card.hass = hassOf(st(68, false, true)); await wait(10);
+    check(/^M771 420 V434/.test(q('hc-mix-dir').getAttribute('d')) && /closing/.test(q('mixer').dataset.a11y), 'mixer closing: arrow down');
+    card.hass = hassOf(st(null, false, false, 'off')); await wait(10);
+    check(q('t-hc-mix').textContent === '–' && !q('p-hc-mix').classList.contains('on'), 'mixer share unavailable shows a dash; the bypass rests with the circuit');
+    card.remove();
+
+    const { hc_mixer: _m, hc_mixer_opening: _o, hc_mixer_closing: _c, ...noMixer } = ents;
+    const plain = mount({ entities: noMixer }, hassOf(st(68, false, false))); await wait(10);
+    check(!plain.shadowRoot.getElementById('mixer') && !plain.shadowRoot.getElementById('p-hc-mix') && JSON.parse(plain._layoutSignature()).mixers === '0',
+      'without mixer keys nothing is drawn');
+    plain.remove();
+    const pulsesOnly = mount({ entities: { ...noMixer, hc_mixer_opening: 'binary_sensor.open' } }, hassOf(st(68, true, false))); await wait(10);
+    check(!!pulsesOnly.shadowRoot.getElementById('mixer') && pulsesOnly.shadowRoot.getElementById('t-hc-mix').textContent === ''
+      && pulsesOnly.shadowRoot.getElementById('hc-mix-dir').classList.contains('on'), 'a motor output alone draws the mixer without a value');
+    pulsesOnly.remove();
+
+    const two = mount({ hc_count: 2, entities: { ...noMixer, hc2_flow: 'sensor.hf', hc2_return: 'sensor.hr', hc2_pump: 'binary_sensor.hp', hc2_mixer: 'sensor.mix' } }, hassOf(st(40, false, false))); await wait(10);
+    check(!two.shadowRoot.getElementById('mixer') && !!two.shadowRoot.getElementById('mixer2') && two.shadowRoot.getElementById('t-hc-mix2').textContent === '40 %'
+      && JSON.parse(two._layoutSignature()).mixers === '01', 'circuit 2 carries its own mixer');
+    two.remove();
+
+    const sec2 = C._formSchema({ hc_count: 2 }).schema.find((g) => g.type === 'expandable' && g.title === HFC_EDITOR.en.sec_hc2);
+    const names = JSON.stringify(sec2?.schema || []);
+    check(['hc2_mixer', 'hc2_mixer_opening', 'hc2_mixer_closing'].every((k) => names.includes(`"${k}"`))
+      && ['hc_mixer', 'hc_mixer_opening', 'hc_mixer_closing'].every((k) => HFC_DIAGNOSTIC_KEYS.includes(k)), 'editor and diagnostics list the mixer keys of every circuit');
+    check(hfcKindOf('hc3_mixer') === 'percent' && hfcKindOf('hc_mixer_opening') === 'onoff'
+      && C._fit('percent', 'sensor.t', { state: '40', attributes: { unit_of_measurement: '°C' } }).verdict === 'bad', 'mixer keys are checked as a percentage and as on/off');
   }
 
   // #51: a manually configured boiler is a separate heat generator in the common flow before the existing diverter valve
