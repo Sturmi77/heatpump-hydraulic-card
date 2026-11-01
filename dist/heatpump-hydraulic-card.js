@@ -76,9 +76,13 @@ function hfcEbusdInstances(ctx, requested) {
   const mqtt = (id) => !ctx.registry[id] || ctx.registry[id].platform === 'mqtt';
   const own = (id) => !ctx.device || ctx.registry[id]?.device_id === ctx.device;
   const ids = ctx.ids.filter(own);
-  const stems = [...new Set(ids.filter((id) => id.startsWith('sensor.') && id.endsWith('_hmu_rundatastatuscode') && mqtt(id))
-    .map((id) => id.slice('sensor.'.length, -'_hmu_rundatastatuscode'.length)))];
   const want = String(requested || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const statusStems = [...new Set(ids.filter((id) => id.startsWith('sensor.') && id.endsWith('_hmu_rundatastatuscode') && mqtt(id))
+    .map((id) => id.slice('sensor.'.length, -'_hmu_rundatastatuscode'.length)))];
+  // A prefix set by hand still finds its group when the status-code entity is missing (not yet published or disabled): the
+  // stems then come from any heat pump, hydraulic station or controller entity. Detection without a prefix keeps the status code.
+  const stems = statusStems.length || !want ? statusStems : [...new Set(ids.filter(mqtt)
+    .map((id) => id.match(/^(?:sensor|binary_sensor|number|select|switch)\.(.+?)_(?:hmu|vwzio|ctl[sv]\d)_/)?.[1]).filter(Boolean))];
   const exact = want && stems.includes(want);
   const eligible = want ? (exact ? [want] : stems.filter((stem) => stem.endsWith(`_${want}`))) : stems;
   const score = (stem) => ids.filter((id) => mqtt(id)
@@ -86,6 +90,9 @@ function hfcEbusdInstances(ctx, requested) {
   return eligible.map((stem) => ({ stem, score: score(stem) }))
     .sort((a, b) => b.score - a.score || a.stem.localeCompare(b.stem));
 }
+// Entity-id stem for the ebusd regexes: always one concrete group, so the fields never mix daemons; the prefix itself only when
+// no entity of any group exists.
+const hfcEbusdStem = (ctx, p) => hfcEbusdInstances(ctx, p)[0]?.stem || String(p || '').replace(/[^a-z0-9_]/g, '');
 const HFC_PRESETS = {
   bosch_buderus_heating: {
     name: 'Bosch/Buderus Home Comfort (PointT cloud)',
@@ -1020,7 +1027,7 @@ const HFC_PRESETS = {
     detect: (ctx) => hfcEbusdInstances(ctx)[0]?.stem,
     instances: (ctx, requested) => hfcEbusdInstances(ctx, requested),
     entities: (p, i, ctx) => {
-      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      const x = hfcEbusdStem(ctx, p);
       const e = (circuit, name) => ctx.match(new RegExp(`^sensor\\.${x}_${circuit}_${name}$`), 'mqtt');
       const h = (n) => e('hmu', n); const c = (n) => e('ctl[sv]\\d', n); const w = (n) => e('vwzio', n);
       return {
@@ -1062,7 +1069,7 @@ const HFC_PRESETS = {
     },
     // Lifetime counters per mode; today, month … come from their long-term statistics.
     tiles: (p, i, ctx) => {
-      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      const x = hfcEbusdStem(ctx, p);
       const t = (name) => ({ total: ctx.match(new RegExp(`^sensor\\.${x}_hmu_${name}$`), 'mqtt') });
       return {
         energy: t('statelectricenergysum'), energy_heating: t('statelectricenergysumhc'), energy_dhw: t('statelectricenergysumhwc'),
@@ -1071,7 +1078,7 @@ const HFC_PRESETS = {
       };
     },
     errors: (p, i, ctx) => {
-      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      const x = hfcEbusdStem(ctx, p);
       return [ctx.match(new RegExp(`^sensor\\.${x}_hmu_currenterror_error$`), 'mqtt')].filter(Boolean);
     },
     // Pre-run, overrun and shutdown keep the mode of their phase; the compressor speed tells whether it runs.
@@ -1930,7 +1937,7 @@ const HFC_TANK_HEATERS = ['dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', '
 const HFC_KINDS = {
   temperature: { units: ['°c', '°f', 'k'], device_class: 'temperature', domains: ['sensor', 'number', 'input_number', 'climate', 'water_heater'], numeric: true, label: '°C' },
   offset: { units: ['k', '°c', '°f'], domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'K' },
-  power: { units: ['w', 'kw', 'mw'], device_class: 'power', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'W' },
+  power: { units: ['w', 'kw', 'mw', 'gw', 'tw', 'btu/h'], device_class: 'power', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'W' },
   energy: { units: ['wh', 'kwh', 'mwh'], device_class: 'energy', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'kWh' },
   pressure: { units: ['bar', 'mbar', 'pa', 'hpa', 'kpa', 'mpa', 'psi'], device_class: 'pressure', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'bar' },
   flowrate: { units: ['l/h', 'l/min', 'l/s', 'm³/h', 'm3/h'], device_class: 'volume_flow_rate', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'l/h' },
@@ -2043,8 +2050,15 @@ const HFC_COLORS = {
   'flow-dash': 'rgba(255,255,255,.9)', anthracite: '#3b4148', casing: '#e6e9ec',
 };
 const hfcVar = (name) => `var(--hfc-${name}, ${HFC_COLORS[name]})`;
-// Home Assistant's power units normalized to watts. Keep the case so MW (megawatt) and mW (milliwatt) stay distinct.
-const hfcPowerFactor = (unit) => ({ W: 1, kW: 1000, MW: 1000000, mW: 0.001 }[String(unit || '').trim()]);
+// Home Assistant's power units normalized to watts. The exact spelling decides first, so MW (megawatt) and mW (milliwatt) stay
+// distinct; other spellings (kw, KW, w, as 0.15 accepted them) are read case-insensitively. A lower-case "mw" is ambiguous and
+// is not read. The editor checks use the same table, so a unit the card cannot read is named there.
+const HFC_POWER_FACTORS = { W: 1, kW: 1000, MW: 1000000, GW: 1e9, TW: 1e12, mW: 0.001, 'BTU/h': 0.29307107 };
+const HFC_POWER_FACTORS_ANY_CASE = { w: 1, kw: 1000, gw: 1e9, tw: 1e12, 'btu/h': 0.29307107 };
+const hfcPowerFactor = (unit) => {
+  const u = String(unit || '').trim();
+  return Object.hasOwn(HFC_POWER_FACTORS, u) ? HFC_POWER_FACTORS[u] : HFC_POWER_FACTORS_ANY_CASE[u.toLowerCase()];
+};
 const hfcPowerW = (st, unitlessFactor = 1) => {
   const value = parseFloat(st?.state); const unit = String(st?.attributes?.unit_of_measurement || '').trim();
   if (!Number.isFinite(value)) return NaN;
@@ -2654,7 +2668,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const cls = st.attributes?.device_class;
     if (!kind.domains.includes(domain)) return { verdict: 'bad', code: 'domain', domain };
     if (kind.units) {
-      if (unit && !kind.units.includes(unit)) return { verdict: 'bad', code: 'unit', unit: st.attributes.unit_of_measurement };
+      // Power: exactly the units the card converts (hfcPowerFactor), so the check and the card agree.
+      const known = kindName === 'power' ? hfcPowerFactor(st.attributes?.unit_of_measurement) !== undefined : kind.units.includes(unit);
+      if (unit && !known) return { verdict: 'bad', code: 'unit', unit: st.attributes.unit_of_measurement };
       if (kind.numeric && !['climate', 'water_heater'].includes(domain) && !['unknown', 'unavailable', '', 'none'].includes(String(st.state ?? '').toLowerCase())
         && !Number.isFinite(parseFloat(st.state))) return { verdict: 'bad', code: 'state', state: st.state };
       return (unit || (kind.device_class && cls === kind.device_class) || (kindName === 'temperature' && ['climate', 'water_heater'].includes(domain)))
