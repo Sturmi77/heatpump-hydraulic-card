@@ -3906,6 +3906,38 @@
     const boilerGroup = C._formSchema({}).schema.find((g) => g.type === 'expandable' && g.title === HFC_EDITOR.en.sec_boiler);
     check(boilerGroup?.schema.map((f) => f.name).join() === 'boiler_state,boiler_power,boiler_flow'
       && ['boiler_state', 'boiler_power', 'boiler_flow'].every((key) => HFC_DIAGNOSTIC_KEYS.includes(key)), 'editor and diagnostics expose the three manual boiler fields');
+
+    // Review of #229: boiler-only operation supplies the common flow to circuits without their own sensor
+    const { hc_flow: _hcFlow, ...noHcFlow } = ids;
+    const direct = mount({ ...cfg, entities: noHcFlow }, hassOf(state(false, true))); await wait(10);
+    const pc = (id) => direct.shadowRoot.getElementById(id)?.style.getPropertyValue('--pc');
+    check(pc('p-hc-vl') === direct._vlColor(52) && pc('p-hc-vl') !== direct._vlColor(36), `boiler-only: a circuit without a flow sensor takes the boiler flow temperature (${pc('p-hc-vl')})`);
+    direct.hass = hassOf(state(true, false)); await wait(10);
+    check(pc('p-hc-vl') === direct._vlColor(36), 'heat-pump-only: the circuit keeps the heat pump flow temperature');
+    direct.remove();
+
+    // Review of #229: without a drawn tank, a valve on DHW keeps the boiler's water out of the heating side
+    const { dhw_top: _dhwTop, ...noTank } = ids;
+    const tankless = mount({ ...cfg, entities: noTank }, hassOf(state(false, true, 'Tank'))); await wait(10);
+    const tf = tankless._flowModel();
+    check(tf.boilerRunning && !tf.toHeat && !tf.flowHeat && !tankless.shadowRoot.getElementById('f-vl-buf')?.classList.contains('on'),
+      'boiler-only with the valve on DHW and no tank: the heating side stays still');
+    tankless.hass = hassOf(state(false, true)); await wait(10);
+    check(tankless._flowModel().toHeat, 'boiler-only with the valve on heating and no tank: the heating side flows');
+    tankless.remove();
+
+    // Review of #229: a running boiler can charge the tank while the heat pump reports standby, so it excludes standby-loss windows
+    const lc = mount(cfg, hassOf(state(false, false))); await wait(10);
+    const lossIds = lc._lossIds();
+    check(lossIds?.extra.includes('binary_sensor.boiler') && lossIds.extra.includes('sensor.boiler_power'), `boiler state and power are standby-loss exclusions (${lossIds?.extra.join()})`);
+    const H = 3600000; const end = Date.now(); const start = end - 48 * H;
+    const tank = []; for (let h = 48; h >= 0; h -= 0.2) tank.push({ t: end - h * H, s: (55 - 0.4 * (48 - h)).toFixed(1) });
+    const lossHist = (boiler) => ({ 'sensor.mode': [{ t: start, s: 'Standby' }], 'sensor.dhw': tank,
+      'binary_sensor.boiler': [{ t: start, s: boiler ? 'on' : 'off' }], 'sensor.boiler_power': [{ t: start, s: boiler ? '8000' : '0' }] });
+    const idle = lc._dhwLoss(lossHist(false), lossIds, start, end);
+    check(idle && Math.abs(idle.rate - 0.4) < 0.03, `boiler off: the standby slope is measured (${JSON.stringify(idle)})`);
+    check(lc._dhwLoss(lossHist(true), lossIds, start, end) === null, 'boiler running all the time: no window counts as standby');
+    lc.remove();
   }
 
   log.push(`${checks} checks, ${fails.length} failed`);
