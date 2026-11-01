@@ -4374,7 +4374,9 @@ class HeatpumpFlowCard extends HTMLElement {
     if (pumps.length < circuits.length) return null;
     // Every rod in the hot-water tank heats it; in a combined storage the rods of the heating zone heat the same tank.
     const rods = HFC_TANK_HEATERS.filter((k) => combined || k.startsWith('dhw_'));
-    return { temps, run, extra: [...rods, 'solar_pump', ...pumps].filter((k) => this._has(k)).map((k) => this._e[k]) };
+    // A boiler (#51) can charge the tank while the heat pump reports standby, and the operating-mode history does not show it:
+    // every window in which its state or its power is not clearly off is left out.
+    return { temps, run, extra: [...rods, 'solar_pump', 'boiler_state', 'boiler_power', ...pumps].filter((k) => this._has(k)).map((k) => this._e[k]) };
   }
 
   // Loss over the last HFC_LOSS.hours from the recorder history, cached like the other recorder queries.
@@ -4958,8 +4960,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const dhwActive = P.dhw && (hp === 'dhw' || ['dhw', 'legionella'].includes(dhwMode) || valveDhw);
     const toDhw = dhwActive && (generatorRunning || dhwMode === 'trailing' || hp === 'dhw');
     // The manually configured boiler feeds the same common flow as the heat pump. The existing valve remains the only routing
-    // decision: boiler-only operation therefore goes to DHW when the valve says DHW, otherwise to the heating side.
-    const toHeat = !toDhw && (boilerRunning || ['heating', 'defrost', 'cooling'].includes(hp) || ['heating', 'cooling'].includes(bufMode));
+    // decision: boiler-only operation therefore goes to DHW when the valve says DHW, otherwise to the heating side. Without a drawn
+    // tank a valve on DHW still closes the heating side, so the boiler does not move water through the circuits then.
+    const toHeat = !toDhw && ((boilerRunning && !valveDhw) || ['heating', 'defrost', 'cooling'].includes(hp) || ['heating', 'cooling'].includes(bufMode));
     const loop = toDhw || toHeat;
     // The primary pump also runs without heating or hot water (Panasonic "sniffing", run-on): the water then circulates
     // slowly along the valve path (flow dashes 2000 / l/h seconds, 6 to 30 s). It only moves the water, so mode chip, valve text, spread and heat stay idle.
@@ -5096,13 +5099,13 @@ class HeatpumpFlowCard extends HTMLElement {
 
     if (P.hc || this._hcCount > 1) {
       const pick = (...v) => v.find((x) => Number.isFinite(x)) ?? NaN;
-      // The shared trunk carries the water before it splits: the buffer or heat pump temperatures.
-      stroke('hc-trunk-vl', this._vlColor(pick(this._n('buffer_top'), tFlow))); stroke('hc-trunk-rl', this._rlColor(pick(this._n('buffer_bottom'), tRet)));
+      // The shared trunk carries the water before it splits: the buffer or common-flow temperatures (after a running boiler).
+      stroke('hc-trunk-vl', this._vlColor(pick(this._n('buffer_top'), tCommonFlow))); stroke('hc-trunk-rl', this._rlColor(pick(this._n('buffer_bottom'), tRet)));
       for (const { n, mode: cMode, on: hcOn, pump: hcPump } of F.circuits) {
         const k = (key) => this._hk(n, key);
         const s = n === 1 ? '' : String(n);
         // Without circuit sensors fall back to the buffer / main loop temperatures.
-        const tHc = pick(this._n(k('flow')), this._n('buffer_top'), tFlow);
+        const tHc = pick(this._n(k('flow')), this._n('buffer_top'), tCommonFlow);
         const tHcR = pick(this._n(k('return')), this._n('buffer_bottom'), tRet);
         const cHc = cMode === 'cooling' ? hfcVar('defrost') : this._vlColor(tHc);
         stroke(`hc-vl${s}`, cHc); stroke(`hc-body${s}`, cHc); stroke(`hc-rl${s}`, this._rlColor(tHcR));
