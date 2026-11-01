@@ -1183,7 +1183,7 @@ const HFC_I18N = {
       suction_temp: 'Suction gas', hot_gas: 'Hot gas', liquid_temp: 'Liquid line', low_pressure: 'Low pressure', high_pressure: 'High pressure',
       eev: 'Expansion valve', superheat: 'Superheat', subcooling: 'Subcooling',
     },
-    source_flow: 'Source', target: 'Target', curve_offset: 'curve', curve_shift: 'shift', return_short: 'RL', error: 'Error', circulation: 'Circ.', valve_dhw: 'DHW', solar: 'Solar',
+    source_flow: 'Source', target: 'Target', curve_offset: 'curve', curve_shift: 'shift', mixer: 'Mixer', mixer_opening: 'opening', mixer_closing: 'closing', return_short: 'RL', error: 'Error', circulation: 'Circ.', valve_dhw: 'DHW', solar: 'Solar',
     brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', pressure_normal: 'normal', pressure_warning: 'warning', pressure_critical: 'critical',
     timeline_title: 'Last {h} hours', timeline_gap: 'No data', timeline_aria: 'Operating mode of the last {h} hours. Arrow keys select a period.',
     programs: { eco: 'Eco', night: 'Night', party: 'Party', holiday: 'Holiday' },
@@ -1224,7 +1224,7 @@ const HFC_I18N = {
       suction_temp: 'Sauggas', hot_gas: 'Heißgas', liquid_temp: 'Flüssigkeitsleitung', low_pressure: 'Niederdruck', high_pressure: 'Hochdruck',
       eev: 'Expansionsventil', superheat: 'Überhitzung', subcooling: 'Unterkühlung',
     },
-    source_flow: 'Quelle', target: 'Soll', curve_offset: 'Kurve', curve_shift: 'Verschiebung', return_short: 'RL', error: 'Fehler', circulation: 'Zirk.', valve_dhw: 'WW', solar: 'Solar',
+    source_flow: 'Quelle', target: 'Soll', curve_offset: 'Kurve', curve_shift: 'Verschiebung', mixer: 'Mischer', mixer_opening: 'öffnet', mixer_closing: 'schließt', return_short: 'RL', error: 'Fehler', circulation: 'Zirk.', valve_dhw: 'WW', solar: 'Solar',
     brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', pressure_normal: 'normal', pressure_warning: 'Warnung', pressure_critical: 'kritisch',
     timeline_title: 'Letzte {h} Stunden', timeline_gap: 'Keine Daten', timeline_aria: 'Betriebsart der letzten {h} Stunden. Mit den Pfeiltasten einen Zeitraum wählen.',
     programs: { eco: 'Eco', night: 'Nacht', party: 'Party', holiday: 'Urlaub' },
@@ -1473,7 +1473,7 @@ const HFC_EDITOR = {
     dhw_top: 'DHW tank top (°C)', dhw_middle: 'DHW tank middle (°C)', dhw_bottom: 'DHW tank bottom (°C)', dhw_target: 'DHW target (°C)', dhw_mode: 'DHW mode (state text)',
     circulation: 'Circulation pump running (on/off)', dhw_loss_sensor: 'DHW standby-loss measurement (°C)', buffer_top: 'Buffer top (°C)', buffer_middle: 'Buffer middle (°C)', buffer_bottom: 'Buffer bottom (°C)', buffer_mode: 'Buffer mode (state text)',
     hc_flow: 'Circuit flow temperature (°C)', hc_return: 'Circuit return temperature (°C)', hc_setpoint: 'Circuit flow target (°C)',
-    hc_mode: 'Circuit mode (state text)', hc_pump: 'Circuit pump running (on/off)', hc_volume: 'Flow rate of the heating circuit (l/h or l/min, circuit pump)', hc_curve_offset: 'Heating curve shift (K)', hc_pressure: 'Heating circuit pressure (bar)', brine_pressure: 'Brine circuit pressure (bar)',
+    hc_mode: 'Circuit mode (state text)', hc_pump: 'Circuit pump running (on/off)', hc_volume: 'Flow rate of the heating circuit (l/h or l/min, circuit pump)', hc_curve_offset: 'Heating curve shift (K)', hc_mixer: 'Mixer position or share (%, shown as reported)', hc_mixer_opening: 'Mixer motor opening (on/off)', hc_mixer_closing: 'Mixer motor closing (on/off)', hc_pressure: 'Heating circuit pressure (bar)', brine_pressure: 'Brine circuit pressure (bar)',
     cutout_high_pressure: 'High-pressure cut-outs (count of events, not a pressure)', cutout_low_pressure: 'Low-pressure cut-outs (count of events, not a pressure)', cutout_temperature: 'Temperature cut-outs (count of events, not a temperature)',
     room: 'Room temperature (°C)', room_target: 'Room target (°C)',
     env_energy: 'Environmental energy total (kWh)', pv: 'Power from PV (W)', battery: 'Power from battery (W)', grid: 'Power from grid (W)',
@@ -1564,7 +1564,7 @@ const HFC_EDITOR = {
     dhw_top: 'WW-Speicher oben (°C)', dhw_middle: 'WW-Speicher Mitte (°C)', dhw_bottom: 'WW-Speicher unten (°C)', dhw_target: 'WW-Soll (°C)', dhw_mode: 'WW-Betriebsart (Statustext)',
     circulation: 'Zirkulationspumpe läuft (ein/aus)', dhw_loss_sensor: 'Messsensor WW-Standbyverlust (°C)', buffer_top: 'Puffer oben (°C)', buffer_middle: 'Puffer Mitte (°C)', buffer_bottom: 'Puffer unten (°C)', buffer_mode: 'Puffer-Betriebsart (Statustext)',
     hc_flow: 'Heizkreis-Vorlauf (°C)', hc_return: 'Heizkreis-Rücklauf (°C)', hc_setpoint: 'Heizkreis-Vorlauf-Soll (°C)',
-    hc_mode: 'Heizkreis-Betriebsart (Statustext)', hc_pump: 'Heizkreispumpe läuft (ein/aus)', hc_volume: 'Volumenstrom Heizkreis (l/h oder l/min, Heizkreispumpe)', hc_curve_offset: 'Heizkurven-Verschiebung (K)', hc_pressure: 'Heizkreis-Druck (bar)', brine_pressure: 'Solekreis-Druck (bar)',
+    hc_mode: 'Heizkreis-Betriebsart (Statustext)', hc_pump: 'Heizkreispumpe läuft (ein/aus)', hc_volume: 'Volumenstrom Heizkreis (l/h oder l/min, Heizkreispumpe)', hc_curve_offset: 'Heizkurven-Verschiebung (K)', hc_mixer: 'Mischer-Stellung oder -Anteil (%, wird angezeigt wie gemeldet)', hc_mixer_opening: 'Mischermotor öffnet (ein/aus)', hc_mixer_closing: 'Mischermotor schließt (ein/aus)', hc_pressure: 'Heizkreis-Druck (bar)', brine_pressure: 'Solekreis-Druck (bar)',
     cutout_high_pressure: 'Hochdruck-Abschaltungen (Anzahl der Ereignisse, kein Druck)', cutout_low_pressure: 'Niederdruck-Abschaltungen (Anzahl der Ereignisse, kein Druck)', cutout_temperature: 'Temperatur-Abschaltungen (Anzahl der Ereignisse, keine Temperatur)',
     room: 'Raumtemperatur (°C)', room_target: 'Raum-Soll (°C)',
     env_energy: 'Umweltenergie gesamt (kWh)', pv: 'Strom aus PV (W)', battery: 'Strom aus Akku (W)', grid: 'Strom aus Netz (W)',
@@ -1839,13 +1839,13 @@ const HFC_ENTITY_GROUPS = {
   sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost'],
   sec_boiler: ['boiler_state', 'boiler_power', 'boiler_flow'],
   sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'dhw_loss_sensor', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
-  sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_pressure', 'room', 'room_target', 'program'],
+  sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_mixer', 'hc_mixer_opening', 'hc_mixer_closing', 'hc_pressure', 'room', 'room_target', 'program'],
   // The room of circuit 1 uses room/room_target; circuits 2 to 6 use their numbered keys in the shared house overview.
-  sec_hc2: ['hc2_flow', 'hc2_return', 'hc2_setpoint', 'hc2_mode', 'hc2_pump', 'hc2_volume', 'hc2_curve_offset', 'hc2_room', 'hc2_room_target'],
-  sec_hc3: ['hc3_flow', 'hc3_return', 'hc3_setpoint', 'hc3_mode', 'hc3_pump', 'hc3_volume', 'hc3_curve_offset', 'hc3_room', 'hc3_room_target'],
-  sec_hc4: ['hc4_flow', 'hc4_return', 'hc4_setpoint', 'hc4_mode', 'hc4_pump', 'hc4_volume', 'hc4_curve_offset', 'hc4_room', 'hc4_room_target'],
-  sec_hc5: ['hc5_flow', 'hc5_return', 'hc5_setpoint', 'hc5_mode', 'hc5_pump', 'hc5_volume', 'hc5_curve_offset', 'hc5_room', 'hc5_room_target'],
-  sec_hc6: ['hc6_flow', 'hc6_return', 'hc6_setpoint', 'hc6_mode', 'hc6_pump', 'hc6_volume', 'hc6_curve_offset', 'hc6_room', 'hc6_room_target'],
+  sec_hc2: ['hc2_flow', 'hc2_return', 'hc2_setpoint', 'hc2_mode', 'hc2_pump', 'hc2_volume', 'hc2_curve_offset', 'hc2_mixer', 'hc2_mixer_opening', 'hc2_mixer_closing', 'hc2_room', 'hc2_room_target'],
+  sec_hc3: ['hc3_flow', 'hc3_return', 'hc3_setpoint', 'hc3_mode', 'hc3_pump', 'hc3_volume', 'hc3_curve_offset', 'hc3_mixer', 'hc3_mixer_opening', 'hc3_mixer_closing', 'hc3_room', 'hc3_room_target'],
+  sec_hc4: ['hc4_flow', 'hc4_return', 'hc4_setpoint', 'hc4_mode', 'hc4_pump', 'hc4_volume', 'hc4_curve_offset', 'hc4_mixer', 'hc4_mixer_opening', 'hc4_mixer_closing', 'hc4_room', 'hc4_room_target'],
+  sec_hc5: ['hc5_flow', 'hc5_return', 'hc5_setpoint', 'hc5_mode', 'hc5_pump', 'hc5_volume', 'hc5_curve_offset', 'hc5_mixer', 'hc5_mixer_opening', 'hc5_mixer_closing', 'hc5_room', 'hc5_room_target'],
+  sec_hc6: ['hc6_flow', 'hc6_return', 'hc6_setpoint', 'hc6_mode', 'hc6_pump', 'hc6_volume', 'hc6_curve_offset', 'hc6_mixer', 'hc6_mixer_opening', 'hc6_mixer_closing', 'hc6_room', 'hc6_room_target'],
   sec_power: ['pv', 'battery', 'grid'],
   sec_details: ['hours', 'starts_total', 'aux_hours', 'energy_total', 'env_energy', 'heat_total'],
   sec_refrigerant: ['compressor_speed', 'evap_temp', 'cond_temp', 'suction_temp', 'hot_gas', 'liquid_temp', 'low_pressure', 'high_pressure', 'eev', 'superheat', 'subcooling'],
@@ -1894,11 +1894,11 @@ const HFC_KEY_KINDS = Object.fromEntries(Object.entries({
   pressure: ['brine_pressure', 'hc_pressure', 'low_pressure', 'high_pressure'],
   flowrate: ['volume', 'source_volume', 'hc_volume'],
   hours: ['hours', 'aux_hours'],
-  percent: ['pv_share_today'],
+  percent: ['pv_share_today', 'hc_mixer'],
   counter: ['starts_total', 'starts_today', 'cutout_high_pressure', 'cutout_low_pressure', 'cutout_temperature'],
   ratio: ['cop_heating_today', 'cop_dhw_today'],
   speed: ['compressor', 'fan_speed', 'compressor_speed'],
-  onoff: ['defrost', 'circulation', 'hc_pump', 'solar_pump', 'bypass_valve'],
+  onoff: ['defrost', 'circulation', 'hc_pump', 'hc_mixer_opening', 'hc_mixer_closing', 'solar_pump', 'bypass_valve'],
   onoff_power: ['heater', 'boiler_state', ...HFC_TANK_HEATERS, 'pv_boost'],
   valve: ['valve'],
   text: ['mode', 'status', 'dhw_mode', 'buffer_mode', 'hc_mode', 'program'],
@@ -3223,6 +3223,7 @@ class HeatpumpFlowCard extends HTMLElement {
       hcPump: this._has('hc_pump'),
       hcType: this._hcType,
       hcs: this._hcCount > 1 ? this._hcTypes.slice(0, this._hcCount).join() : '',
+      mixers: Array.from({ length: this._hcCount }, (_, n) => (this._hasMixer(n + 1) ? 1 : 0)).join(''),
       src: this._sourceType,
       unit: this._unitKey(),
       boiler: ['boiler_state', 'boiler_power', 'boiler_flow'].some((k) => this._has(k)),
@@ -4059,6 +4060,7 @@ class HeatpumpFlowCard extends HTMLElement {
       <defs><linearGradient id="g-rad${s}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" id="g-rad${s}-top"/><stop offset="100%" id="g-rad${s}-bottom"/></linearGradient>
       <linearGradient id="g-hcb${s}" gradientUnits="userSpaceOnUse" x1="0" y1="${gy[0]}" x2="0" y2="${gy[1]}"><stop offset="0" id="g-hcb${s}-a"/><stop offset="0.5" id="g-hcb${s}-m"/><stop offset="1" id="g-hcb${s}-b"/></linearGradient></defs>
       ${em.art.split('__S__').join(s)}${pp(`hc-vl${s}`, vl)}${pp(`hc-body${s}`, em.body)}${pp(`hc-rl${s}`, rl)}
+      ${this._mixerSvg(n)}
       ${e[k('curve_offset')]
     // With a heating curve shift the target and its parts stand above the pump, ending at the pump; the flow temperature goes below it.
     ? `<g class="tap" ${de(k('curve_offset'))}><text class="pipe-label" id="t-hc${s}" x="736" y="334" text-anchor="end"></text></g>
@@ -4082,6 +4084,46 @@ class HeatpumpFlowCard extends HTMLElement {
   // The heat pump has its own primary pump (`primary_pump`, default from the preset). It is drawn on the flow pipe next to the
   // heat pump block, centred between the flow temperature and the flow rate. A single direct circuit without its own pump sensor then has no pump of its own.
   _primaryPump() { return this._config.primary_pump ?? !!this._preset?.primary_pump; }
+  // Three-way mixer of circuit n (#214): drawn as soon as one of its keys is mapped. Most controllers drive a three-point motor
+  // without position feedback, so opening and closing are motor pulses and hc_mixer is shown as reported, not read as a position.
+  _hasMixer(n) { return ['mixer', 'mixer_opening', 'mixer_closing'].some((key) => this._has(this._hk(n, key))); }
+  _mixerSvg(n) {
+    if (!this._hasMixer(n)) return '';
+    const s = n === 1 ? '' : String(n);
+    const k = (key) => this._hk(n, key);
+    const key = ['mixer', 'mixer_opening', 'mixer_closing'].map(k).find((x) => this._has(x));
+    // Bypass from the circuit return up into the bottom port of the valve, which sits on the flow between pump and emitter.
+    return `<path class="pipe mix-bypass" id="p-hc-mix${s}" d="M760 495 V374"/>
+      <g class="tap mixer" id="mixer${s}" data-entity="${this._esc(this._e[key])}">
+        <path class="valve mix-body" d="M748 352 L760 360 L748 368 Z M772 352 L760 360 L772 368 Z M752 374 L760 360 L768 374 Z"/>
+        <text class="mix-label" id="t-hc-mix${s}" x="752" y="432" text-anchor="end"></text>
+        <path class="mix-dir" id="hc-mix-dir${s}" d=""/>
+      </g>`;
+  }
+
+  _updateMixer(n, on, cRet) {
+    const s = n === 1 ? '' : String(n);
+    const k = (key) => this._hk(n, key);
+    const bypass = this._$(`p-hc-mix${s}`);
+    if (bypass) { bypass.style.setProperty('--pc', cRet); bypass.classList.toggle('on', !!on); }
+    const value = this._has(k('mixer')) ? this._n(k('mixer')) : NaN;
+    const text = this._has(k('mixer')) ? (Number.isFinite(value) ? `${this._fmt(value, 0)} %` : '–') : '';
+    this._txt(`t-hc-mix${s}`, text);
+    const opening = this._has(k('mixer_opening')) && this._on(k('mixer_opening'));
+    const closing = !opening && this._has(k('mixer_closing')) && this._on(k('mixer_closing'));
+    // The arrow stands right of the bypass: up while the motor opens, down while it closes, nothing at rest.
+    const dir = this._$(`hc-mix-dir${s}`);
+    if (dir) {
+      dir.setAttribute('d', opening ? 'M771 434 V420 M765 426 L771 420 L777 426' : closing ? 'M771 420 V434 M765 428 L771 434 L777 428' : '');
+      dir.classList.toggle('on', opening || closing);
+    }
+    const group = this._$(`mixer${s}`);
+    if (group) {
+      const i = this._i;
+      group.dataset.a11y = [i.mixer, text, opening ? i.mixer_opening : closing ? i.mixer_closing : ''].filter(Boolean).join(', ');
+    }
+  }
+
   _circuitPump(n) { return !(n === 1 && this._hcCount === 1 && this._primaryPump() && !this._parts.buffer && !this._e.hc_pump); }
 
   // Drawing of the outdoor unit inside the heat pump block (air source only; brine and water keep the loop symbol).
@@ -5110,6 +5152,7 @@ class HeatpumpFlowCard extends HTMLElement {
         const cHc = cMode === 'cooling' ? hfcVar('defrost') : this._vlColor(tHc);
         stroke(`hc-vl${s}`, cHc); stroke(`hc-body${s}`, cHc); stroke(`hc-rl${s}`, this._rlColor(tHcR));
         if (n > 1) { stroke(`hc-up${s}`, cHc); stroke(`hc-down${s}`, this._rlColor(tHcR)); }
+        if (this._hasMixer(n)) this._updateMixer(n, hcOn, this._rlColor(tHcR));
         const rt = this._$(`g-rad${s}-top`); const rb = this._$(`g-rad${s}-bottom`);
         if (rt) { rt.setAttribute('stop-color', hcOn ? cHc : 'var(--disabled-text-color, #9e9e9e)'); rb.setAttribute('stop-color', hcOn ? this._rlColor(tHcR) : 'var(--disabled-text-color, #9e9e9e)'); }
         // The heating surface fades from the flow colour to the return colour; one colour when the temperatures do not differ.
@@ -5479,6 +5522,9 @@ HeatpumpFlowCard.styles = `
   .src.bat.on .ico { fill: ${hfcVar('battery')}; } .src.bat.on .ico-o { stroke: ${hfcVar('battery')}; }
   .src.grid.on .ico-l { stroke: ${hfcVar('grid')}; }
   .valve { fill: var(--card-background-color, #fff); stroke: var(--hfc-muted); stroke-width: 3; }
+  .mix-body { stroke-width: 2; }
+  .mix-label { font-size: 13px; font-weight: 600; fill: var(--primary-text-color, #212121); paint-order: stroke; stroke: var(--card-background-color, #fff); stroke-width: 4px; }
+  .mix-dir { fill: none; stroke: var(--primary-text-color, #212121); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
   .valve-arrow { fill: none; stroke: var(--primary-text-color); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
   .tank { stroke: var(--divider-color, rgba(127,127,127,.4)); stroke-width: 2; }
   .tank-temp { font-size: calc(26px * var(--kt, 1)); font-weight: 700; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.45); stroke-width: 4px; stroke-linejoin: round; }
