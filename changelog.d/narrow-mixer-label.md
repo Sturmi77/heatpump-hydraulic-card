@@ -1,1 +1,0 @@
-- Narrow cards: the mixer value and the circuit return label kept by `narrow_values` grow with the other secondary labels instead of staying at 13 px. Reported by dev-chris13 (#214).

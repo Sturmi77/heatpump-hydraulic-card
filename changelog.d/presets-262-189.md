@@ -1,2 +1,0 @@
-- ViCare preset: `compressor_starts` is the lifetime counter and now fills `starts_total` instead of `starts_today`, which showed the total as today's starts (#262).
-- ebusd preset: further fallbacks seen on an aroTHERM plus with several daemons: power from `rundataelectricpowerconsumption`, compressor from `currentcompressorutil`, fan speed `rundatafan1speed`, outdoor from the controller's `outsidetemp`, the hot-water target as a number and the hot-water mode from the `hwcopmode` select (#189).
