@@ -76,9 +76,13 @@ function hfcEbusdInstances(ctx, requested) {
   const mqtt = (id) => !ctx.registry[id] || ctx.registry[id].platform === 'mqtt';
   const own = (id) => !ctx.device || ctx.registry[id]?.device_id === ctx.device;
   const ids = ctx.ids.filter(own);
-  const stems = [...new Set(ids.filter((id) => id.startsWith('sensor.') && id.endsWith('_hmu_rundatastatuscode') && mqtt(id))
-    .map((id) => id.slice('sensor.'.length, -'_hmu_rundatastatuscode'.length)))];
   const want = String(requested || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const statusStems = [...new Set(ids.filter((id) => id.startsWith('sensor.') && id.endsWith('_hmu_rundatastatuscode') && mqtt(id))
+    .map((id) => id.slice('sensor.'.length, -'_hmu_rundatastatuscode'.length)))];
+  // A prefix set by hand still finds its group when the status-code entity is missing (not yet published or disabled): the
+  // stems then come from any heat pump, hydraulic station or controller entity. Detection without a prefix keeps the status code.
+  const stems = statusStems.length || !want ? statusStems : [...new Set(ids.filter(mqtt)
+    .map((id) => id.match(/^(?:sensor|binary_sensor|number|select|switch)\.(.+?)_(?:hmu|vwzio|ctl[sv]\d)_/)?.[1]).filter(Boolean))];
   const exact = want && stems.includes(want);
   const eligible = want ? (exact ? [want] : stems.filter((stem) => stem.endsWith(`_${want}`))) : stems;
   const score = (stem) => ids.filter((id) => mqtt(id)
@@ -86,10 +90,9 @@ function hfcEbusdInstances(ctx, requested) {
   return eligible.map((stem) => ({ stem, score: score(stem) }))
     .sort((a, b) => b.score - a.score || a.stem.localeCompare(b.stem));
 }
-// Entity-id stem for the ebusd regexes: the selected group, else the configured prefix with any leading part, as before 0.16. The
-// fallback matters when the group cannot be found because the status-code entity is missing (not yet published or disabled):
-// a prefix set by hand still finds the other entities.
-const hfcEbusdStem = (ctx, p) => hfcEbusdInstances(ctx, p)[0]?.stem || `(?:.+_)?${String(p || '').replace(/[^a-z0-9_]/g, '')}`;
+// Entity-id stem for the ebusd regexes: always one concrete group, so the fields never mix daemons; the prefix itself only when
+// no entity of any group exists.
+const hfcEbusdStem = (ctx, p) => hfcEbusdInstances(ctx, p)[0]?.stem || String(p || '').replace(/[^a-z0-9_]/g, '');
 const HFC_PRESETS = {
   bosch_buderus_heating: {
     name: 'Bosch/Buderus Home Comfort (PointT cloud)',

@@ -269,6 +269,18 @@
     check(short.entities.flow === 'sensor.ebus_arotherm_hmu_rundataflowtemp' && short.entities.return === 'sensor.ebus_arotherm_hmu_rundatareturntemp'
       && short.entities.compressor === 'sensor.ebus_arotherm_hmu_rundatacompressorspeed',
     `a short ebusd prefix still maps the entities when the status-code entity is missing (${JSON.stringify([short.entities.flow, short.entities.compressor])})`);
+    // Review of #232: without the status code the fields still come from one group, and an exact full prefix wins.
+    const mixed = toStates({
+      'sensor.other_ebus_arotherm_hmu_rundataflowtemp': ['35', '°C'], 'sensor.ebus_arotherm_hmu_rundataflowtemp': ['31', '°C'],
+      'sensor.ebus_arotherm_hmu_rundatareturntemp': ['27', '°C'],
+    });
+    const mixedReg = Object.fromEntries(Object.keys(mixed).map((id) => [id, { platform: 'mqtt' }]));
+    const full = C._resolve({ preset: 'ebusd', prefix: 'ebus_arotherm' }, hassOf(mixed, mixedReg));
+    check(full.entities.flow === 'sensor.ebus_arotherm_hmu_rundataflowtemp' && full.entities.return === 'sensor.ebus_arotherm_hmu_rundatareturntemp',
+      `without the status code an exact ebusd prefix keeps every field in its group (${JSON.stringify([full.entities.flow, full.entities.return])})`);
+    const shortMixed = C._resolve({ preset: 'ebusd', prefix: 'arotherm' }, hassOf(mixed, mixedReg));
+    check(shortMixed.entities.flow === 'sensor.ebus_arotherm_hmu_rundataflowtemp' && shortMixed.entities.return === 'sensor.ebus_arotherm_hmu_rundatareturntemp',
+      `without the status code a short ebusd prefix takes the most complete group for every field (${JSON.stringify([shortMixed.entities.flow, shortMixed.entities.return])})`);
     const deviceReg = Object.fromEntries(Object.keys(multi).map((id) => [id, { platform: 'mqtt', device_id: id.startsWith('sensor.ebus_arotherm_') ? 'device-a' : 'device-b' }]));
     const onDevice = C._resolve({ preset: 'ebusd', device: 'device-a' }, hassOf(multi, deviceReg));
     check(onDevice.prefix === 'ebus_arotherm' && onDevice.entities.mode === 'sensor.ebus_arotherm_hmu_rundatastatuscode'
