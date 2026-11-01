@@ -1,9 +1,8 @@
 {
   "preset": "samsung",
   "reviewed": {
-    "date": "2026-10-26",
-    "version": null,
-    "note": "Baseline: changes before this date were not tracked."
+    "date": "2026-11-01",
+    "version": "2026.10.0"
   },
   "sources": [
     {

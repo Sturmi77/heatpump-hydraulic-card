@@ -1,9 +1,8 @@
 {
   "preset": "bosch_buderus_heating",
   "reviewed": {
-    "date": "2026-10-26",
-    "version": "0.8.2-beta.7",
-    "note": "Source review at fbe84bfb46383722d1a2757e7e778463db67f6f0. The automatic preset has not yet been tested on an installation."
+    "date": "2026-11-01",
+    "version": "v0.8.2"
   },
   "sources": [
     {

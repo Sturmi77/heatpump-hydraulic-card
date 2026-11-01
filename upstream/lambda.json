@@ -1,9 +1,9 @@
 {
   "preset": "lambda",
   "reviewed": {
-    "date": "2026-10-26",
-    "version": null,
-    "note": "Baseline: changes before this date were not tracked."
+    "date": "2026-11-01",
+    "version": "V3.6.1",
+    "note": "Entity names now live in lambda_modbus/*.py (const_base/const_sensor/const_mapping removed upstream in July); watched paths updated, all preset names still present."
   },
   "sources": [
     {
@@ -11,9 +11,13 @@
       "branch": "main",
       "paths": [
         "custom_components/lambda_heat_pumps/const.py",
-        "custom_components/lambda_heat_pumps/const_base.py",
-        "custom_components/lambda_heat_pumps/const_sensor.py",
-        "custom_components/lambda_heat_pumps/const_mapping.py",
+        "custom_components/lambda_heat_pumps/lambda_modbus/heat_pump.py",
+        "custom_components/lambda_heat_pumps/lambda_modbus/boiler.py",
+        "custom_components/lambda_heat_pumps/lambda_modbus/buffer.py",
+        "custom_components/lambda_heat_pumps/lambda_modbus/heating_circuit.py",
+        "custom_components/lambda_heat_pumps/lambda_modbus/general.py",
+        "custom_components/lambda_heat_pumps/lambda_modbus/solar.py",
+        "custom_components/lambda_heat_pumps/lambda_modbus/enums.py",
         "custom_components/lambda_heat_pumps/sensor.py",
         "custom_components/lambda_heat_pumps/climate.py",
         "custom_components/lambda_heat_pumps/translations/en.json"
