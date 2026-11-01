@@ -825,4 +825,32 @@ setups.push({
   states: combinedStates, config: { ...combinedSetup.config, dhw_type: 'fresh_water', hc_type: 'underfloor' },
 });
 
+// Hybrid installation (#51): the generic scenarios deliberately cover HP-only, simultaneous, boiler-only and idle operation.
+const hybridStates = (s) => ({
+  'sensor.hybrid_mode': { heat: 'Heating', dhw: 'DHW', defrost: 'Standby', idle: 'Standby' }[s],
+  'binary_sensor.hybrid_compressor': ['heat', 'dhw'].includes(s) ? 'on' : 'off',
+  'sensor.hybrid_power': [['heat', 'dhw'].includes(s) ? '1300' : '0', 'W'],
+  'sensor.hybrid_flow': [{ heat: '36', dhw: '50', defrost: '29', idle: '28' }[s], '°C'],
+  'sensor.hybrid_return': [{ heat: '30', dhw: '44', defrost: '28', idle: '28' }[s], '°C'],
+  'sensor.hybrid_volume': [s === 'idle' ? '0' : '850', 'L/h'],
+  'sensor.hybrid_valve': s === 'dhw' ? 'Tank' : 'Room',
+  'binary_sensor.hybrid_boiler': ['dhw', 'defrost'].includes(s) ? 'on' : 'off',
+  'sensor.hybrid_boiler_power': [['dhw', 'defrost'].includes(s) ? '8000' : '0', 'W'],
+  'sensor.hybrid_boiler_flow': [{ heat: '35', dhw: '58', defrost: '52', idle: '28' }[s], '°C'],
+  'sensor.hybrid_dhw': ['48', '°C'], 'sensor.hybrid_hc_flow': ['35', '°C'], 'binary_sensor.hybrid_hc_pump': s === 'idle' ? 'off' : 'on',
+});
+setups.push({
+  name: 'Hybrid heat pump and boiler', sub: 'manual mapping: HP-only, both generators, boiler-only and idle; boiler in the common flow',
+  states: hybridStates,
+  config: {
+    title: 'Hybrid heating', hc_type: 'radiator',
+    entities: {
+      mode: 'sensor.hybrid_mode', compressor: 'binary_sensor.hybrid_compressor', power: 'sensor.hybrid_power', flow: 'sensor.hybrid_flow', return: 'sensor.hybrid_return', volume: 'sensor.hybrid_volume',
+      valve: 'sensor.hybrid_valve', boiler_state: 'binary_sensor.hybrid_boiler', boiler_power: 'sensor.hybrid_boiler_power', boiler_flow: 'sensor.hybrid_boiler_flow',
+      dhw_top: 'sensor.hybrid_dhw', hc_flow: 'sensor.hybrid_hc_flow', hc_pump: 'binary_sensor.hybrid_hc_pump',
+    },
+    mode_map: { Heating: 'heating', DHW: 'dhw', Standby: 'idle' },
+  },
+});
+
 const scenarios = [['heat', 'Heating'], ['dhw', 'Hot water'], ['defrost', 'Defrost'], ['idle', 'Standby + error']];
