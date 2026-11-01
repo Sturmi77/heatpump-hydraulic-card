@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.17.1 – 2026-11-01
+- EMS-ESP "long names" entity format: heat pump flow and return from TC1/TC0, the compressor and 3-way valve binary sensors, the air inlet (TL2), the internal and external hot-water sensors as tank top and bottom, the hot-water and room targets, compressor starts, total energy and the refrigerant temperatures TR3/TR5/TR6. Entity list by sebastiaan001 (#257).
+- Mixer: `hc_mixer_opening` also accepts a signed movement (above 0 opening, below 0 closing) instead of two on/off outputs, and the ebusd preset maps the controller's `hcNmixermovement` of a mixed circuit (Vaillant VR 71). Suggested by buliwyf42 (#1).
+- Czech card texts for the boiler and the mixer, by Havinko1991 (#191).
+- Narrow cards: the mixer value and the circuit return label kept by `narrow_values` grow with the other secondary labels instead of staying at 13 px. Reported by dev-chris13 (#214).
+- ViCare preset: `compressor_starts` is the lifetime counter and now fills `starts_total` instead of `starts_today`, which showed the total as today's starts (#262).
+- ebusd preset: further fallbacks seen on an aroTHERM plus with several daemons: power from `rundataelectricpowerconsumption`, compressor from `currentcompressorutil`, fan speed `rundatafan1speed`, outdoor from the controller's `outsidetemp`, the hot-water target as a number and the hot-water mode from the `hwcopmode` select (#189).
+- Upstream review of 1 November 2026: Stiebel Eltron ISG finds the operation mode and hot-water target of THZ/LWZ units (`operation_mode_thz`, `comfort_water_temperature_target_thz`) as program and quick controls; Luxtronik uses the controller's current hot-water target (firmware x.90.1) where the target number is missing (#237–#247).
+
 ## 0.17.0 – 2026-11-01
 - The editor can propose a conservative entity mapping for an unsupported heat pump after the user selects its Home Assistant device. Exact English/German names, units and device classes identify flow, return, electrical power, operating mode, compressor, diverter valve, hot-water temperature and outdoor temperature; ambiguous matches are omitted and only individually selected proposals are saved (#149).
 - EMS-ESP 3.7.3 installations using descriptive Home Assistant entity ids such as `boiler_compressor_activity` are detected and mapped alongside the established short ids (#225).
