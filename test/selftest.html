@@ -259,6 +259,28 @@
     const exact = C._resolve({ preset: 'ebusd', prefix: 'ebus_arotherm' }, hassOf(suffixStates, suffixReg));
     check(exact.prefix === 'ebus_arotherm' && exact.entities.mode === 'sensor.ebus_arotherm_hmu_rundatastatuscode' && exact.entities.flow === undefined,
       `a full exact ebusd prefix wins over a more complete suffix match (${exact.prefix})`);
+    // Without the status-code entity no group is found; a prefix set by hand still finds the other entities, as in 0.15.
+    const noStatus = toStates({
+      'sensor.ebus_arotherm_hmu_rundataflowtemp': ['31', '°C'], 'sensor.ebus_arotherm_hmu_rundatareturntemp': ['27', '°C'],
+      'sensor.ebus_arotherm_hmu_rundatacompressorspeed': ['0', 'Hz'],
+    });
+    const noStatusReg = Object.fromEntries(Object.keys(noStatus).map((id) => [id, { platform: 'mqtt' }]));
+    const short = C._resolve({ preset: 'ebusd', prefix: 'arotherm' }, hassOf(noStatus, noStatusReg));
+    check(short.entities.flow === 'sensor.ebus_arotherm_hmu_rundataflowtemp' && short.entities.return === 'sensor.ebus_arotherm_hmu_rundatareturntemp'
+      && short.entities.compressor === 'sensor.ebus_arotherm_hmu_rundatacompressorspeed',
+    `a short ebusd prefix still maps the entities when the status-code entity is missing (${JSON.stringify([short.entities.flow, short.entities.compressor])})`);
+    // Review of #232: without the status code the fields still come from one group, and an exact full prefix wins.
+    const mixed = toStates({
+      'sensor.other_ebus_arotherm_hmu_rundataflowtemp': ['35', '°C'], 'sensor.ebus_arotherm_hmu_rundataflowtemp': ['31', '°C'],
+      'sensor.ebus_arotherm_hmu_rundatareturntemp': ['27', '°C'],
+    });
+    const mixedReg = Object.fromEntries(Object.keys(mixed).map((id) => [id, { platform: 'mqtt' }]));
+    const full = C._resolve({ preset: 'ebusd', prefix: 'ebus_arotherm' }, hassOf(mixed, mixedReg));
+    check(full.entities.flow === 'sensor.ebus_arotherm_hmu_rundataflowtemp' && full.entities.return === 'sensor.ebus_arotherm_hmu_rundatareturntemp',
+      `without the status code an exact ebusd prefix keeps every field in its group (${JSON.stringify([full.entities.flow, full.entities.return])})`);
+    const shortMixed = C._resolve({ preset: 'ebusd', prefix: 'arotherm' }, hassOf(mixed, mixedReg));
+    check(shortMixed.entities.flow === 'sensor.ebus_arotherm_hmu_rundataflowtemp' && shortMixed.entities.return === 'sensor.ebus_arotherm_hmu_rundatareturntemp',
+      `without the status code a short ebusd prefix takes the most complete group for every field (${JSON.stringify([shortMixed.entities.flow, shortMixed.entities.return])})`);
     const deviceReg = Object.fromEntries(Object.keys(multi).map((id) => [id, { platform: 'mqtt', device_id: id.startsWith('sensor.ebus_arotherm_') ? 'device-a' : 'device-b' }]));
     const onDevice = C._resolve({ preset: 'ebusd', device: 'device-a' }, hassOf(multi, deviceReg));
     check(onDevice.prefix === 'ebus_arotherm' && onDevice.entities.mode === 'sensor.ebus_arotherm_hmu_rundatastatuscode'
@@ -785,6 +807,22 @@
       const hass = hassOf(toStates({ 'sensor.source': attrs(unit, 'energy') }), {}, prefs);
       const info = C._energyInfo(prefs, hass);
       check(info.missing.includes('battery') && !info.energy.battery.length, `${unit} stays an energy counter, not live power`);
+    }
+    // Other spellings that 0.15 read (kw, KW, w) stay readable, for the heat pump power and the heat output alike; the editor check
+    // and the card agree on every unit, and the ambiguous lower-case "mw" is named instead of read.
+    for (const [unit, value, watts] of [['kw', '1.5', 1500], ['KW', '1.5', 1500], ['w', '1500', 1500], ['GW', '0.0000015', 1500]]) {
+      const hass = hassOf(toStates({ 'sensor.hp': [value, unit], 'sensor.heat': [value, unit] }));
+      const card = mount({ entities: { power: 'sensor.hp', heat: 'sensor.heat' } }, hass); await wait(10);
+      check(Math.abs(card._w('power') - watts) < 1e-6 && Math.abs(card._kw('heat') - watts / 1000) < 1e-9
+        && C._fit('power', 'sensor.hp', hass.states['sensor.hp']).verdict === 'ok', `power unit ${unit} reads as ${watts} W (${card._w('power')})`);
+      card.remove();
+    }
+    {
+      const hass = hassOf(toStates({ 'sensor.hp': ['1', 'mw'] }));
+      const card = mount({ entities: { power: 'sensor.hp' } }, hass); await wait(10);
+      check(Number.isNaN(card._w('power')) && C._fit('power', 'sensor.hp', hass.states['sensor.hp']).verdict === 'bad',
+        'the ambiguous unit mw is not read, and the editor check names it');
+      card.remove();
     }
     // A manually mapped source switches the card to manual sources and must not leave an unrelated Energy-dashboard warning behind.
     const manualHass = hassOf(toStates({ 'sensor.hp': ['1200', 'W'], 'sensor.battery': { ...attrs('kW', 'power'), state: '0.012' } }), {},
@@ -3906,6 +3944,38 @@
     const boilerGroup = C._formSchema({}).schema.find((g) => g.type === 'expandable' && g.title === HFC_EDITOR.en.sec_boiler);
     check(boilerGroup?.schema.map((f) => f.name).join() === 'boiler_state,boiler_power,boiler_flow'
       && ['boiler_state', 'boiler_power', 'boiler_flow'].every((key) => HFC_DIAGNOSTIC_KEYS.includes(key)), 'editor and diagnostics expose the three manual boiler fields');
+
+    // Review of #229: boiler-only operation supplies the common flow to circuits without their own sensor
+    const { hc_flow: _hcFlow, ...noHcFlow } = ids;
+    const direct = mount({ ...cfg, entities: noHcFlow }, hassOf(state(false, true))); await wait(10);
+    const pc = (id) => direct.shadowRoot.getElementById(id)?.style.getPropertyValue('--pc');
+    check(pc('p-hc-vl') === direct._vlColor(52) && pc('p-hc-vl') !== direct._vlColor(36), `boiler-only: a circuit without a flow sensor takes the boiler flow temperature (${pc('p-hc-vl')})`);
+    direct.hass = hassOf(state(true, false)); await wait(10);
+    check(pc('p-hc-vl') === direct._vlColor(36), 'heat-pump-only: the circuit keeps the heat pump flow temperature');
+    direct.remove();
+
+    // Review of #229: without a drawn tank, a valve on DHW keeps the boiler's water out of the heating side
+    const { dhw_top: _dhwTop, ...noTank } = ids;
+    const tankless = mount({ ...cfg, entities: noTank }, hassOf(state(false, true, 'Tank'))); await wait(10);
+    const tf = tankless._flowModel();
+    check(tf.boilerRunning && !tf.toHeat && !tf.flowHeat && !tankless.shadowRoot.getElementById('f-vl-buf')?.classList.contains('on'),
+      'boiler-only with the valve on DHW and no tank: the heating side stays still');
+    tankless.hass = hassOf(state(false, true)); await wait(10);
+    check(tankless._flowModel().toHeat, 'boiler-only with the valve on heating and no tank: the heating side flows');
+    tankless.remove();
+
+    // Review of #229: a running boiler can charge the tank while the heat pump reports standby, so it excludes standby-loss windows
+    const lc = mount(cfg, hassOf(state(false, false))); await wait(10);
+    const lossIds = lc._lossIds();
+    check(lossIds?.extra.includes('binary_sensor.boiler') && lossIds.extra.includes('sensor.boiler_power'), `boiler state and power are standby-loss exclusions (${lossIds?.extra.join()})`);
+    const H = 3600000; const end = Date.now(); const start = end - 48 * H;
+    const tank = []; for (let h = 48; h >= 0; h -= 0.2) tank.push({ t: end - h * H, s: (55 - 0.4 * (48 - h)).toFixed(1) });
+    const lossHist = (boiler) => ({ 'sensor.mode': [{ t: start, s: 'Standby' }], 'sensor.dhw': tank,
+      'binary_sensor.boiler': [{ t: start, s: boiler ? 'on' : 'off' }], 'sensor.boiler_power': [{ t: start, s: boiler ? '8000' : '0' }] });
+    const idle = lc._dhwLoss(lossHist(false), lossIds, start, end);
+    check(idle && Math.abs(idle.rate - 0.4) < 0.03, `boiler off: the standby slope is measured (${JSON.stringify(idle)})`);
+    check(lc._dhwLoss(lossHist(true), lossIds, start, end) === null, 'boiler running all the time: no window counts as standby');
+    lc.remove();
   }
 
   log.push(`${checks} checks, ${fails.length} failed`);

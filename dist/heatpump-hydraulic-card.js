@@ -76,9 +76,13 @@ function hfcEbusdInstances(ctx, requested) {
   const mqtt = (id) => !ctx.registry[id] || ctx.registry[id].platform === 'mqtt';
   const own = (id) => !ctx.device || ctx.registry[id]?.device_id === ctx.device;
   const ids = ctx.ids.filter(own);
-  const stems = [...new Set(ids.filter((id) => id.startsWith('sensor.') && id.endsWith('_hmu_rundatastatuscode') && mqtt(id))
-    .map((id) => id.slice('sensor.'.length, -'_hmu_rundatastatuscode'.length)))];
   const want = String(requested || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const statusStems = [...new Set(ids.filter((id) => id.startsWith('sensor.') && id.endsWith('_hmu_rundatastatuscode') && mqtt(id))
+    .map((id) => id.slice('sensor.'.length, -'_hmu_rundatastatuscode'.length)))];
+  // A prefix set by hand still finds its group when the status-code entity is missing (not yet published or disabled): the
+  // stems then come from any heat pump, hydraulic station or controller entity. Detection without a prefix keeps the status code.
+  const stems = statusStems.length || !want ? statusStems : [...new Set(ids.filter(mqtt)
+    .map((id) => id.match(/^(?:sensor|binary_sensor|number|select|switch)\.(.+?)_(?:hmu|vwzio|ctl[sv]\d)_/)?.[1]).filter(Boolean))];
   const exact = want && stems.includes(want);
   const eligible = want ? (exact ? [want] : stems.filter((stem) => stem.endsWith(`_${want}`))) : stems;
   const score = (stem) => ids.filter((id) => mqtt(id)
@@ -86,6 +90,9 @@ function hfcEbusdInstances(ctx, requested) {
   return eligible.map((stem) => ({ stem, score: score(stem) }))
     .sort((a, b) => b.score - a.score || a.stem.localeCompare(b.stem));
 }
+// Entity-id stem for the ebusd regexes: always one concrete group, so the fields never mix daemons; the prefix itself only when
+// no entity of any group exists.
+const hfcEbusdStem = (ctx, p) => hfcEbusdInstances(ctx, p)[0]?.stem || String(p || '').replace(/[^a-z0-9_]/g, '');
 const HFC_PRESETS = {
   bosch_buderus_heating: {
     name: 'Bosch/Buderus Home Comfort (PointT cloud)',
@@ -1020,7 +1027,7 @@ const HFC_PRESETS = {
     detect: (ctx) => hfcEbusdInstances(ctx)[0]?.stem,
     instances: (ctx, requested) => hfcEbusdInstances(ctx, requested),
     entities: (p, i, ctx) => {
-      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      const x = hfcEbusdStem(ctx, p);
       const e = (circuit, name) => ctx.match(new RegExp(`^sensor\\.${x}_${circuit}_${name}$`), 'mqtt');
       const h = (n) => e('hmu', n); const c = (n) => e('ctl[sv]\\d', n); const w = (n) => e('vwzio', n);
       return {
@@ -1062,7 +1069,7 @@ const HFC_PRESETS = {
     },
     // Lifetime counters per mode; today, month … come from their long-term statistics.
     tiles: (p, i, ctx) => {
-      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      const x = hfcEbusdStem(ctx, p);
       const t = (name) => ({ total: ctx.match(new RegExp(`^sensor\\.${x}_hmu_${name}$`), 'mqtt') });
       return {
         energy: t('statelectricenergysum'), energy_heating: t('statelectricenergysumhc'), energy_dhw: t('statelectricenergysumhwc'),
@@ -1071,7 +1078,7 @@ const HFC_PRESETS = {
       };
     },
     errors: (p, i, ctx) => {
-      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      const x = hfcEbusdStem(ctx, p);
       return [ctx.match(new RegExp(`^sensor\\.${x}_hmu_currenterror_error$`), 'mqtt')].filter(Boolean);
     },
     // Pre-run, overrun and shutdown keep the mode of their phase; the compressor speed tells whether it runs.
@@ -1656,6 +1663,36 @@ const HFC_EDITOR = {
     buffer_heater_top: 'Vykurovacia tyč akumulačného zásobníka hore aktívna (zap/vyp, alebo W)',
     buffer_heater_middle: 'Vykurovacia tyč akumulačného zásobníka v strede aktívna (zap/vyp, alebo W)',
     buffer_heater_bottom: 'Vykurovacia tyč akumulačného zásobníka dole aktívna (zap/vyp, alebo W)',
+    // Field checks, pickers, "More fields", disabled entities and the Panasonic sizes, by Havinko1991 (#191).
+    size_pana_medium: '1 ventilátor (3 až 9 kW)',
+    size_pana_large: '2 ventilátory (T-CAP, 12 a 16 kW)',
+    more_fields: 'Ďalšie polia',
+    warn_disabled: 'Predvoľba by chcela použiť tieto entity, ale v Home Assistantovi sú zakázané: {list}. Povoľte ich v menu Nastavenia → Zariadenia a služby → Entity.',
+    checks_title: 'Skontrolujte tieto polia',
+    check_unit: '{field}: {entity} hlási jednotku {unit}, očakáva sa {expected}.',
+    check_domain: '{field}: {entity} je entita typu {domain}, očakáva sa {expected}.',
+    check_state: '{field}: {entity} hlási stav \"{state}\", očakáva sa {expected}.',
+    check_counter: '{field}: {entity} je počítadlo (hodnota iba rastie), očakáva sa {expected}.',
+    check_same: '{field}: {entity} sa používa aj pre {other}; tieto dve polia však merajú odlišné veličiny.',
+    check_air: '{field}: {entity} je nastavené, ale zdrojom tepla je vzduch. Karta nekreslí okruh nemrznúcej zmesi ani studne; vymažte toto pole alebo zmeňte zdroj tepla.',
+    check_today: '{field}: {entity} hlási hodnotu {value}, čo je viac, než dokáže priniesť jeden deň. Ide o celkové počítadlo?',
+    kind_temperature: 'teplota (°C)',
+    kind_offset: 'teplotný rozdiel (K)',
+    kind_power: 'výkon (W alebo kW)',
+    kind_energy: 'energia (kWh)',
+    kind_pressure: 'tlak (bar)',
+    kind_flowrate: 'prietok (l/h, l/min alebo m³/h)',
+    kind_hours: 'doba trvania (h)',
+    kind_percent: 'percento (%)',
+    kind_counter: 'počet bez jednotky',
+    kind_ratio: 'číslo bez jednotky',
+    kind_speed: 'zap/vyp, frekvencia alebo otáčky',
+    kind_onoff: 'zap/vyp',
+    kind_onoff_power: 'zap/vyp, stupeň alebo výkon (W)',
+    kind_valve: 'zap/vyp, alebo stav ako Nádrž/Miestnosť',
+    kind_text: 'text stavu',
+    all_entities: 'Zobraziť všetky entity vo výberoch',
+    all_entities_help: 'Vypnuté: polia meraní ponúkajú iba entity, ktorých jednotka alebo trieda zariadenia sedí (°C, W, kWh, bar, l/h). Zapnuté: každá entita, vhodné pre senzory bez jednotky.',
   },
   // Czech by Havinko1991 (#182): the editor labels; the card texts fall back to English.
   cs: {
@@ -1742,6 +1779,36 @@ const HFC_EDITOR = {
     buffer_heater_top: 'Topná tyč akumulačního zásobníku nahoře aktivní (zap/vyp, nebo W)',
     buffer_heater_middle: 'Topná tyč akumulačního zásobníku uprostřed aktivní (zap/vyp, nebo W)',
     buffer_heater_bottom: 'Topná tyč akumulačního zásobníku dole aktivní (zap/vyp, nebo W)',
+    // Field checks, pickers, "More fields", disabled entities and the Panasonic sizes, by Havinko1991 (#191).
+    size_pana_medium: '1 ventilátor (3 až 9 kW)',
+    size_pana_large: '2 ventilátory (T-CAP, 12 a 16 kW)',
+    more_fields: 'Další pole',
+    warn_disabled: 'Předvolba by chtěla použít tyto entity, ale v Home Assistantovi jsou zakázané: {list}. Povolte je v menu Nastavení → Zařízení a služby → Entity.',
+    checks_title: 'Zkontrolujte tato pole',
+    check_unit: '{field}: {entity} hlásí jednotku {unit}, očekává se {expected}.',
+    check_domain: '{field}: {entity} je entita typu {domain}, očekává se {expected}.',
+    check_state: '{field}: {entity} hlásí stav \"{state}\", očekává se {expected}.',
+    check_counter: '{field}: {entity} je počítadlo (hodnota pouze roste), očekává se {expected}.',
+    check_same: '{field}: {entity} se používá také pro {other}; tato dvě pole však měří odlišné veličiny.',
+    check_air: '{field}: {entity} je nastaveno, ale zdrojem tepla je vzduch. Karta nekreslí okruh nemrznoucí směsi ani studny; vymažte toto pole nebo změňte zdroj tepla.',
+    check_today: '{field}: {entity} hlásí hodnotu {value}, což je více, než dokáže přinést jeden den. Jedná se o celkové počítadlo?',
+    kind_temperature: 'teplota (°C)',
+    kind_offset: 'teplotní rozdíl (K)',
+    kind_power: 'výkon (W nebo kW)',
+    kind_energy: 'energie (kWh)',
+    kind_pressure: 'tlak (bar)',
+    kind_flowrate: 'průtok (l/h, l/min nebo m³/h)',
+    kind_hours: 'doba trvání (h)',
+    kind_percent: 'procento (%)',
+    kind_counter: 'počet bez jednotky',
+    kind_ratio: 'číslo bez jednotky',
+    kind_speed: 'zap/vyp, frekvence nebo otáčky',
+    kind_onoff: 'zap/vyp',
+    kind_onoff_power: 'zap/vyp, stupeň nebo výkon (W)',
+    kind_valve: 'zap/vyp, nebo stav jako Nádrž/Místnost',
+    kind_text: 'text stavu',
+    all_entities: 'Zobrazit všechny entity ve výběrech',
+    all_entities_help: 'Vypnuto: pole měření nabízejí pouze entity, jejichž jednotka nebo třída zařízení sedí (°C, W, kWh, bar, l/h). Zapnuto: každá entita, vhodné pro senzory bez jednotky.',
   },
   nl: {
     preset: 'Preset', prefix: 'Voorvoegsel (leeg = automatisch)', device: 'Apparaat (optioneel, beperkt de preset)',
@@ -1870,7 +1937,7 @@ const HFC_TANK_HEATERS = ['dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', '
 const HFC_KINDS = {
   temperature: { units: ['°c', '°f', 'k'], device_class: 'temperature', domains: ['sensor', 'number', 'input_number', 'climate', 'water_heater'], numeric: true, label: '°C' },
   offset: { units: ['k', '°c', '°f'], domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'K' },
-  power: { units: ['w', 'kw', 'mw'], device_class: 'power', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'W' },
+  power: { units: ['w', 'kw', 'mw', 'gw', 'tw', 'btu/h'], device_class: 'power', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'W' },
   energy: { units: ['wh', 'kwh', 'mwh'], device_class: 'energy', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'kWh' },
   pressure: { units: ['bar', 'mbar', 'pa', 'hpa', 'kpa', 'mpa', 'psi'], device_class: 'pressure', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'bar' },
   flowrate: { units: ['l/h', 'l/min', 'l/s', 'm³/h', 'm3/h'], device_class: 'volume_flow_rate', domains: ['sensor', 'number', 'input_number'], numeric: true, label: 'l/h' },
@@ -1983,8 +2050,15 @@ const HFC_COLORS = {
   'flow-dash': 'rgba(255,255,255,.9)', anthracite: '#3b4148', casing: '#e6e9ec',
 };
 const hfcVar = (name) => `var(--hfc-${name}, ${HFC_COLORS[name]})`;
-// Home Assistant's power units normalized to watts. Keep the case so MW (megawatt) and mW (milliwatt) stay distinct.
-const hfcPowerFactor = (unit) => ({ W: 1, kW: 1000, MW: 1000000, mW: 0.001 }[String(unit || '').trim()]);
+// Home Assistant's power units normalized to watts. The exact spelling decides first, so MW (megawatt) and mW (milliwatt) stay
+// distinct; other spellings (kw, KW, w, as 0.15 accepted them) are read case-insensitively. A lower-case "mw" is ambiguous and
+// is not read. The editor checks use the same table, so a unit the card cannot read is named there.
+const HFC_POWER_FACTORS = { W: 1, kW: 1000, MW: 1000000, GW: 1e9, TW: 1e12, mW: 0.001, 'BTU/h': 0.29307107 };
+const HFC_POWER_FACTORS_ANY_CASE = { w: 1, kw: 1000, gw: 1e9, tw: 1e12, 'btu/h': 0.29307107 };
+const hfcPowerFactor = (unit) => {
+  const u = String(unit || '').trim();
+  return Object.hasOwn(HFC_POWER_FACTORS, u) ? HFC_POWER_FACTORS[u] : HFC_POWER_FACTORS_ANY_CASE[u.toLowerCase()];
+};
 const hfcPowerW = (st, unitlessFactor = 1) => {
   const value = parseFloat(st?.state); const unit = String(st?.attributes?.unit_of_measurement || '').trim();
   if (!Number.isFinite(value)) return NaN;
@@ -2594,7 +2668,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const cls = st.attributes?.device_class;
     if (!kind.domains.includes(domain)) return { verdict: 'bad', code: 'domain', domain };
     if (kind.units) {
-      if (unit && !kind.units.includes(unit)) return { verdict: 'bad', code: 'unit', unit: st.attributes.unit_of_measurement };
+      // Power: exactly the units the card converts (hfcPowerFactor), so the check and the card agree.
+      const known = kindName === 'power' ? hfcPowerFactor(st.attributes?.unit_of_measurement) !== undefined : kind.units.includes(unit);
+      if (unit && !known) return { verdict: 'bad', code: 'unit', unit: st.attributes.unit_of_measurement };
       if (kind.numeric && !['climate', 'water_heater'].includes(domain) && !['unknown', 'unavailable', '', 'none'].includes(String(st.state ?? '').toLowerCase())
         && !Number.isFinite(parseFloat(st.state))) return { verdict: 'bad', code: 'state', state: st.state };
       return (unit || (kind.device_class && cls === kind.device_class) || (kindName === 'temperature' && ['climate', 'water_heater'].includes(domain)))
@@ -4374,7 +4450,9 @@ class HeatpumpFlowCard extends HTMLElement {
     if (pumps.length < circuits.length) return null;
     // Every rod in the hot-water tank heats it; in a combined storage the rods of the heating zone heat the same tank.
     const rods = HFC_TANK_HEATERS.filter((k) => combined || k.startsWith('dhw_'));
-    return { temps, run, extra: [...rods, 'solar_pump', ...pumps].filter((k) => this._has(k)).map((k) => this._e[k]) };
+    // A boiler (#51) can charge the tank while the heat pump reports standby, and the operating-mode history does not show it:
+    // every window in which its state or its power is not clearly off is left out.
+    return { temps, run, extra: [...rods, 'solar_pump', 'boiler_state', 'boiler_power', ...pumps].filter((k) => this._has(k)).map((k) => this._e[k]) };
   }
 
   // Loss over the last HFC_LOSS.hours from the recorder history, cached like the other recorder queries.
@@ -4958,8 +5036,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const dhwActive = P.dhw && (hp === 'dhw' || ['dhw', 'legionella'].includes(dhwMode) || valveDhw);
     const toDhw = dhwActive && (generatorRunning || dhwMode === 'trailing' || hp === 'dhw');
     // The manually configured boiler feeds the same common flow as the heat pump. The existing valve remains the only routing
-    // decision: boiler-only operation therefore goes to DHW when the valve says DHW, otherwise to the heating side.
-    const toHeat = !toDhw && (boilerRunning || ['heating', 'defrost', 'cooling'].includes(hp) || ['heating', 'cooling'].includes(bufMode));
+    // decision: boiler-only operation therefore goes to DHW when the valve says DHW, otherwise to the heating side. Without a drawn
+    // tank a valve on DHW still closes the heating side, so the boiler does not move water through the circuits then.
+    const toHeat = !toDhw && ((boilerRunning && !valveDhw) || ['heating', 'defrost', 'cooling'].includes(hp) || ['heating', 'cooling'].includes(bufMode));
     const loop = toDhw || toHeat;
     // The primary pump also runs without heating or hot water (Panasonic "sniffing", run-on): the water then circulates
     // slowly along the valve path (flow dashes 2000 / l/h seconds, 6 to 30 s). It only moves the water, so mode chip, valve text, spread and heat stay idle.
@@ -5096,13 +5175,13 @@ class HeatpumpFlowCard extends HTMLElement {
 
     if (P.hc || this._hcCount > 1) {
       const pick = (...v) => v.find((x) => Number.isFinite(x)) ?? NaN;
-      // The shared trunk carries the water before it splits: the buffer or heat pump temperatures.
-      stroke('hc-trunk-vl', this._vlColor(pick(this._n('buffer_top'), tFlow))); stroke('hc-trunk-rl', this._rlColor(pick(this._n('buffer_bottom'), tRet)));
+      // The shared trunk carries the water before it splits: the buffer or common-flow temperatures (after a running boiler).
+      stroke('hc-trunk-vl', this._vlColor(pick(this._n('buffer_top'), tCommonFlow))); stroke('hc-trunk-rl', this._rlColor(pick(this._n('buffer_bottom'), tRet)));
       for (const { n, mode: cMode, on: hcOn, pump: hcPump } of F.circuits) {
         const k = (key) => this._hk(n, key);
         const s = n === 1 ? '' : String(n);
         // Without circuit sensors fall back to the buffer / main loop temperatures.
-        const tHc = pick(this._n(k('flow')), this._n('buffer_top'), tFlow);
+        const tHc = pick(this._n(k('flow')), this._n('buffer_top'), tCommonFlow);
         const tHcR = pick(this._n(k('return')), this._n('buffer_bottom'), tRet);
         const cHc = cMode === 'cooling' ? hfcVar('defrost') : this._vlColor(tHc);
         stroke(`hc-vl${s}`, cHc); stroke(`hc-body${s}`, cHc); stroke(`hc-rl${s}`, this._rlColor(tHcR));
