@@ -1,1 +1,0 @@
-- With a heating curve shift (`hc_curve_offset`) and a buffer or combined storage, the target label no longer runs under the tank: it starts right of the tank in two lines, the target and then the curve and shift in smaller type, which drops the word for the shift and then itself where space runs out. Without a buffer the single line is unchanged.

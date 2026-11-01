@@ -2,9 +2,13 @@
 
 ## Unreleased
 
-## 0.17.0 – unreleased
-
-## 0.16.0 – unreleased
+## 0.17.0 – 2026-11-01
+- The editor can propose a conservative entity mapping for an unsupported heat pump after the user selects its Home Assistant device. Exact English/German names, units and device classes identify flow, return, electrical power, operating mode, compressor, diverter valve, hot-water temperature and outdoor temperature; ambiguous matches are omitted and only individually selected proposals are saved (#149).
+- EMS-ESP 3.7.3 installations using descriptive Home Assistant entity ids such as `boiler_compressor_activity` are detected and mapped alongside the established short ids (#225).
+- A manually configured boiler or second heat generator can now be drawn in series in the common flow before the diverter valve. `boiler_state`, optional `boiler_power` and optional `boiler_flow` distinguish heat-pump-only, boiler-only and simultaneous operation without changing the existing inline heater (#51).
+- Slovak and Czech: the editor texts added in 0.15 (field checks, "More fields", disabled entities, the entity-picker switch and the Panasonic sizes) are translated, by Havinko1991 (#191). The editor fields new in 0.16 and 0.17 still show in English.
+- Mixed heating circuits: `hc_mixer` (position or share in %, shown as reported), `hc_mixer_opening` and `hc_mixer_closing` (the motor outputs of a three-point mixer) draw a three-way mixer on the circuit flow with the bypass from the return, for every circuit (`hc2_` to `hc6_`). An arrow shows while the motor opens or closes. Without these keys nothing changes. Suggested with real Stiebel Eltron ISG data by dev-chris13 (#214, #209).
+- With a heating curve shift (`hc_curve_offset`) and a buffer or combined storage, the target label no longer runs under the tank: it starts right of the tank in two lines, the target and then the curve and shift in smaller type, which drops the word for the shift and then itself where space runs out. Without a buffer the single line is unchanged.
 - EMS-ESP is marked confirmed on a real Buderus Logatherm WLW186i-5 TP70 installation. Its preset guide now clarifies that whole-house PV, battery and grid sensors must not be mapped as the heat pump's source shares; automatic Energy-dashboard splitting is the appropriate mode for those sensors (#220).
 - Vaillant/myPyllant installations with several heating circuits bind each zone to the circuit number in its entity id and fill `hc2_room` / `hc2_room_target` through `hc6_…`; before, the first zone could be reused and only circuit 1 received room values (#223).
 - Flow dashes, fans and pumps no longer jump when their speed changes. A new flow rate, modulation or fan speed set a new animation duration, which moved the running animation to another point of its cycle; the card now changes the playback rate while preserving the current position (#218).
