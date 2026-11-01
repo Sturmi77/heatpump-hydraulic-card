@@ -375,6 +375,10 @@
     // Only the external sensor (#225): it stays the tank top and there is no bottom.
     const { 'sensor.boiler_dhw_current_intern_temperature': _intern, ...externOnly } = states;
     const ext = C._resolve({ preset: 'emsesp' }, hassOf(externOnly, registry)).entities;
+    // Review of #259: an internal sensor that is unavailable when the card builds stays the top; the external one is only the bottom.
+    const late = C._resolve({ preset: 'emsesp' }, hassOf({ ...states, ...toStates({ 'sensor.boiler_dhw_current_intern_temperature': 'unavailable' }) }, registry)).entities;
+    check(late.dhw_top === 'sensor.boiler_dhw_current_intern_temperature' && late.dhw_bottom === 'sensor.boiler_dhw_current_extern_temperature',
+      `EMS-ESP long names: an unavailable internal tank sensor does not move the external one to the top (${late.dhw_top} / ${late.dhw_bottom})`);
     check(ext.dhw_top === 'sensor.boiler_dhw_current_extern_temperature' && ext.dhw_bottom !== 'sensor.boiler_dhw_current_extern_temperature' && !externOnly[ext.dhw_bottom],
       `EMS-ESP long names with only the external tank sensor keep it as the top (${ext.dhw_top} / ${ext.dhw_bottom})`);
   }

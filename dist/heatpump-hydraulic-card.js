@@ -527,8 +527,10 @@ const HFC_PRESETS = {
       const x = p ? `${p}_` : '';
       const b = (...ks) => ks.flatMap((k) => [`binary_sensor.${x}boiler_${k}`, `sensor.${x}boiler_${k}`]);
       // "Long names" format (#257): the hot-water tank has an internal and an external sensor; with both, the external one is the lower.
+      // An existing internal sensor stays the top even while it is unavailable, so the external one never fills both positions.
       const dhwIntern = `sensor.${x}boiler_dhw_current_intern_temperature`;
       const dhwExtern = `sensor.${x}boiler_dhw_current_extern_temperature`;
+      const hasIntern = ctx?.state(dhwIntern) !== undefined;
       const sw = (...ks) => ks.map((k) => `switch.${x}boiler_${k}`);
       const s = (...ks) => ks.map((k) => `sensor.${x}${k}`);
       const hc = `hc${i.hc}`;
@@ -544,8 +546,8 @@ const HFC_PRESETS = {
         source_out: s('boiler_hpbrineout'),
         heater: b('auxheaterstatus', 'aux_heater_status').concat(s('boiler_auxheaterlevel', 'boiler_aux_heater_level')),
         outdoor: s('boiler_outdoortemp', 'thermostat_outdoortemp', 'boiler_outside_temperature'),
-        dhw_top: s('boiler_dhw_curtemp', 'boiler_wwcurtemp', 'boiler_dhw_storagetemp1').concat(dhwIntern, dhwExtern),
-        dhw_bottom: s('boiler_dhw_storagetemp2').concat(ctx?.state(dhwIntern) !== undefined ? [dhwExtern] : []),
+        dhw_top: s('boiler_dhw_curtemp', 'boiler_wwcurtemp', 'boiler_dhw_storagetemp1').concat(hasIntern ? dhwIntern : dhwExtern),
+        dhw_bottom: s('boiler_dhw_storagetemp2').concat(hasIntern ? [dhwExtern] : []),
         dhw_target: s('boiler_dhw_seltemp', 'boiler_wwseltemp').concat(`number.${x}boiler_dhw_selected_temperature`),
         circulation: b('dhw_circ', 'wwcirc').concat(sw('dhw_circulation_active')),
         hc_pump: [`binary_sensor.${x}mixer_${hc}_pumpstatus`, `sensor.${x}mixer_${hc}_pumpstatus`,
