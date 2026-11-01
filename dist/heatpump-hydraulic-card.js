@@ -3158,6 +3158,8 @@ class HeatpumpFlowCard extends HTMLElement {
   // Target of circuit n with the heating curve shift, e.g. "Target 36 °C (curve 34 °C + 2 K shift)": the target already contains the
   // shift, so the curve gives target − shift. The text ends at the pump and runs left over the circuit pipe; where it does not fit
   // (narrow schematics), the word for the shift and then the part in brackets are left out. A shift is a difference: °C shows as K.
+  // Next to a buffer the text starts right of the tank in two lines (data-lines="2"): the target, then the part in brackets in
+  // smaller type, which drops the word for the shift and then itself where it would reach the circuit title (x 800).
   _hcTarget(n, set, shift, unit) {
     const el = this._$(`t-hc${n === 1 ? '' : n}`); if (!el) return;
     const i = this._i;
@@ -3173,6 +3175,7 @@ class HeatpumpFlowCard extends HTMLElement {
     else if (part) texts = [`${i.curve_shift} ${part}`];
     const key = `${texts[0]}|${getComputedStyle(el).fontSize}`;
     if (el._k === key) return;
+    if (el.dataset.lines === '2') { el._k = this._hcTargetLines(el, texts) ? key : ''; return; }
     let measured = true;
     for (const t of texts) {
       el.textContent = t;
@@ -3183,6 +3186,27 @@ class HeatpumpFlowCard extends HTMLElement {
       if (w <= 736 - 400) break;
     }
     el._k = measured ? key : '';
+  }
+
+  // Two-line variant of _hcTarget: texts as there, the first is the full text "head (part)". Returns false while unmeasured.
+  _hcTargetLines(el, texts) {
+    const full = texts[0]; const cut = full.indexOf(' (');
+    const head = cut < 0 ? full : full.slice(0, cut);
+    const parts = cut < 0 ? [''] : [...texts.filter((t) => t.startsWith(`${head} (`)).map((t) => t.slice(head.length + 1)), ''];
+    const NS = 'http://www.w3.org/2000/svg';
+    el.textContent = '';
+    const top = document.createElementNS(NS, 'tspan'); top.textContent = head; el.append(top);
+    const sub = document.createElementNS(NS, 'tspan'); sub.setAttribute('class', 'curve-part'); sub.setAttribute('x', el.getAttribute('x')); sub.setAttribute('dy', '17');
+    el.append(sub);
+    for (const p of parts) {
+      sub.textContent = p;
+      if (!p) return true;
+      let w = 0;
+      try { w = sub.getComputedTextLength(); } catch (err) { w = 0; }
+      if (!(w > 0)) return false;
+      if (w <= 800 - 648) return true;
+    }
+    return true;
   }
 
   // Room keys of circuit n: circuit 1 uses the room and target of the house, circuits 2 to 6 their own.
@@ -4077,7 +4101,10 @@ class HeatpumpFlowCard extends HTMLElement {
       ${em.art.split('__S__').join(s)}${pp(`hc-vl${s}`, vl)}${pp(`hc-body${s}`, em.body)}${pp(`hc-rl${s}`, rl)}
       ${e[k('curve_offset')]
     // With a heating curve shift the target and its parts stand above the pump, ending at the pump; the flow temperature goes below it.
-    ? `<g class="tap" ${de(k('curve_offset'))}><text class="pipe-label" id="t-hc${s}" x="736" y="334" text-anchor="end"></text></g>
+    // Next to a buffer or combined storage (x 520–640) there is no room to the left: the label starts right of the tank in two lines.
+    ? `<g class="tap" ${de(k('curve_offset'))}>${this._parts.buffer
+      ? `<text class="pipe-label" id="t-hc${s}" x="648" y="316" text-anchor="start" data-lines="2"></text>`
+      : `<text class="pipe-label" id="t-hc${s}" x="736" y="334" text-anchor="end"></text>`}</g>
       <g class="tap" ${de(k('flow'))}><text class="pipe-label" id="t-hc-now${s}" x="720" y="396" text-anchor="middle"></text></g>`
     : `<g class="tap" ${de(k('flow'))}><text class="pipe-label" id="t-hc${s}" x="740" y="334" text-anchor="middle"></text></g>`}
       <g class="tap" ${de(k('volume'))}><text class="vol-label" id="t-hc-vol${s}" x="720" y="${e[k('curve_offset')] ? 414 : 394}" text-anchor="middle"></text></g>
@@ -5449,6 +5476,7 @@ HeatpumpFlowCard.styles = `
   .room-temp { font-weight: 600; fill: var(--primary-text-color); }
   .pipe-label { font-size: calc(15px * var(--kp, 1)); font-weight: 600; }
   .vol-label { font-size: 13px; fill: var(--hfc-muted); }
+  .curve-part { font-size: calc(13px * var(--kp, 1)); font-weight: 500; }
   .pressure-label { font-size: 13px; font-weight: 600; fill: var(--hfc-muted); paint-order: stroke; stroke: var(--card-background-color, #fff); stroke-width: 4px; }
   .pressure.warning .pressure-label { fill: ${hfcInk('pv')}; } .pressure.critical .pressure-label { fill: ${hfcInk('hot')}; }
   .unit { fill: var(--secondary-background-color, rgba(127,127,127,.12)); stroke: var(--divider-color, rgba(127,127,127,.35)); stroke-width: 2; transition: stroke .4s; }

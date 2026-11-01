@@ -2707,6 +2707,17 @@
     check(v.y >= nw.y + nw.height - 1 && q(vol, 't-hc-vol').textContent === '900 l/h', 'the flow rate moves below the flow temperature');
     check(/\+ 0,5 K|\+ 0\.5 K/.test(q(vol, 't-hc').textContent), `decimal shift (${q(vol, 't-hc').textContent})`);
     vol.remove();
+    // Next to a buffer the label starts right of the tank in two lines instead of running under it.
+    const bufStates = toStates({ 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.t': ['36', '°C'], 'sensor.shift': ['2', 'K'], 'sensor.bt': ['40', '°C'], 'sensor.bb': ['30', '°C'] });
+    for (const [language, storage] of [['de', undefined], ['en', undefined], ['de', 'combined']]) {
+      const c = mount({ language, ...(storage ? { storage } : {}), entities: { flow: 'sensor.f', return: 'sensor.r', hc_flow: 'sensor.f', hc_setpoint: 'sensor.t', hc_curve_offset: 'sensor.shift',
+        buffer_top: 'sensor.bt', buffer_bottom: 'sensor.bb' } }, hassOf(bufStates)); await wait(20);
+      const t = q(c, 't-hc'); const b = t.getBBox(); const [top, sub] = t.querySelectorAll('tspan');
+      check(t.dataset.lines === '2' && /^(Soll|Target) 36 °C$/.test(top?.textContent) && /^\((Kurve|curve) 34 °C \+ 2 K( (Verschiebung|shift))?\)$/.test(sub?.textContent)
+        && b.x >= 641 && b.x + b.width <= 801 && b.y + b.height <= 344,
+      `${language}${storage ? ' combined' : ''}: next to the tank the target and the curve stand in two lines right of it (${top?.textContent} | ${sub?.textContent}, x ${b.x.toFixed(0)}–${(b.x + b.width).toFixed(0)})`);
+      c.remove();
+    }
     const none = mount({ preset: 'heishamon', entities: { hc_curve_offset: null } }, hassOf(st())); await wait(20);
     check(!q(none, 't-hc-now') && /^36,8 °C · Soll 36,0$|^36\.8 °C · Target 36\.0$/.test(q(none, 't-hc').textContent), `without the shift the label stays as before (${q(none, 't-hc').textContent})`);
     none.remove();
