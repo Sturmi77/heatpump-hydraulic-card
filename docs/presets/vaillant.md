@@ -2,6 +2,10 @@
 
 Preset `vaillant`. Back to the [README](../../README.md#supported-heat-pumps).
 
+Confirmed on a real Vaillant aroTHERM plus installation with the myPyllant integration (#1, #211). Installation-specific PV, battery, grid and external electricity-meter entities remain optional manual overrides.
+
+With several heating circuits, myPyllant zones are matched through the circuit number in their entity id (`zone_1_circuit_0_…`, `zone_2_circuit_1_…`) ([#223](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/223)). Set `hc_count` to the number of circuits; each zone's actual and target room temperature then appears in its own row of the house overview.
+
 ## Setup
 
 ```yaml

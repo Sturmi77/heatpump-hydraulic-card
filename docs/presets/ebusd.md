@@ -9,7 +9,9 @@ type: custom:heatpump-flow-card
 preset: ebusd
 hc_count: 2
 ```
-For Vaillant aroTHERM and aroTHERM plus outdoor units (eBUS circuit `hmu`) read by [ebusd](https://github.com/john30/ebusd) with its Home Assistant MQTT discovery, together with the VWZ hydraulic station (`vwzio`) and a sensoCOMFORT or multiMATIC controller (`ctlv2`, `ctlv3`, `ctls2`). Entity ids follow `<topic prefix>_<circuit>_<message>`, for example `sensor.ebusd_hmu_rundatastatuscode`. Home Assistant may put the device name in front (`sensor.heating_ebusd_hmu_…`); both forms are found. A different topic prefix than `ebusd` is set with `prefix`.
+For Vaillant aroTHERM and aroTHERM plus outdoor units (eBUS circuit `hmu`) read by [ebusd](https://github.com/john30/ebusd) with its Home Assistant MQTT discovery, together with the VWZ hydraulic station (`vwzio`) and a sensoCOMFORT or multiMATIC controller (`ctlv2`, `ctlv3`, `ctls2`). Entity ids follow `<entity stem>_<circuit>_<message>`, for example `sensor.ebusd_hmu_rundatastatuscode` with the stem `ebusd`. Home Assistant may put a device name in front, for example the stem `heating_ebusd`.
+
+With several ebusd daemons, the preset groups entities by this complete stem and takes every mapping from one group, so it cannot combine temperatures from one daemon with counters from another. It automatically selects the group with the most matching entities. The diagnostic report lists the selected and competing groups. To select one explicitly, set its full stem, for example `prefix: ebus_arotherm`; the old short topic prefix remains accepted when it identifies one best group.
 
 What you get:
 - operating state from `RunDataStatuscode` (heating, hot water, cooling, defrost, blocked, frost protection; fault codes show as text)

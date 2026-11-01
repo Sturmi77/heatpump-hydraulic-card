@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.16.0 – unreleased
+- EMS-ESP is marked confirmed on a real Buderus Logatherm WLW186i-5 TP70 installation. Its preset guide now clarifies that whole-house PV, battery and grid sensors must not be mapped as the heat pump's source shares; automatic Energy-dashboard splitting is the appropriate mode for those sensors (#220).
+- Vaillant/myPyllant installations with several heating circuits bind each zone to the circuit number in its entity id and fill `hc2_room` / `hc2_room_target` through `hc6_…`; before, the first zone could be reused and only circuit 1 received room values (#223).
+- Flow dashes, fans and pumps no longer jump when their speed changes. A new flow rate, modulation or fan speed set a new animation duration, which moved the running animation to another point of its cycle; the card now changes the playback rate while preserving the current position (#218).
+- Return pipes are drawn under flow pipes at crossings, and the idle series-buffer bypass branch lies behind the active flow line, so inactive pipe ends no longer cover flowing pipes or their dashes (#217).
+- Dutch is built in for the card and the editor, including the 0.16 room-comfort and display options (#221).
+- With several heating circuits, the house contains a compact room overview: one accessible and tappable row per circuit with its name, actual and target temperature, plus a colour dot for below, within or above 0.5 K of the target. Circuit status lines now contain only the operating mode; a single circuit keeps the existing large room display (#140).
+- The ebusd preset groups mappings by their complete MQTT entity stem and selects one coherent, most-complete daemon instead of mixing fields from multiple legitimate ebusd instances. The diagnostic report lists competing groups, and `prefix` accepts a full stem for explicit selection (#197).
+- Luxtronik is marked confirmed on a real water-to-water installation with combined storage and a fresh-water station; air and brine installation reports remain welcome (#75, #208).
+- Vaillant/myPyllant is marked confirmed on a real aroTHERM plus installation; installation-specific power-source and external-meter entities remain manual overrides (#211).
+- New `narrow_values` option keeps buffer middle/bottom temperatures and configured heating-circuit return labels visible below 500 px while the other responsive collision protection remains active (#212).
+- New `buffer_values: equal` mode gives every configured buffer temperature the same visual weight and distributes one, two or three values evenly over the tank; the default top-emphasis layout is unchanged (#213).
+- A hot-water tank without `dhw_top` keeps its unmeasured upper zone neutral instead of colouring the whole tank from a cooler middle or bottom sensor; measured lower zones and existing tanks with a top sensor are unchanged (#215).
+- New `entities.dhw_loss_sensor` selects the plain temperature sensor used to fit the hot-water standby-loss slope, while all configured real tank sensors continue to detect draw-off and unexplained heating (#216).
+- card-mod colour variables survive the initial render and later card rebuilds because the card no longer replaces integration-owned styles in its shadow root (#164).
+- Manual and Energy-dashboard PV, battery and grid sources consistently accept W, kW and MW as live power, convert them to watts, and keep Wh, kWh and MWh classified as energy counters (#210).
+
 ## 0.15.0 – 2026-10-30
 - New card without a detected integration: the card picker no longer falls back to `preset: lambda`. The card starts without a preset and shows a short start hint with a link to the supported integrations instead of "No entities of this preset found" (#142). An explicit preset that finds nothing keeps its hint; a card with any own entity, error entity, badge or quick control draws as before.
 - New card with two heat pump integrations for the same unit (myPyllant and ebusd, ViCare and Open3E): the card picker now takes the preset that finds the most live core entities (mode, compressor, power, flow, return, hot water), not the first one in the list; on a tie the list order decides (#143).

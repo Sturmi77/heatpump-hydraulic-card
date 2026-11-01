@@ -6,7 +6,7 @@
  *
  * https://github.com/Sturmi77/heatpump-hydraulic-card · MIT License
  */
-const HFC_VERSION = '0.15.0';
+const HFC_VERSION = '0.16.0';
 // Address this file was loaded from: shows at once when a dashboard resource still points to an old file.
 const HFC_SCRIPT_URL = (() => {
   try {
@@ -66,6 +66,26 @@ function hfcPointT(ctx) {
 
 // Wolf: the prefix '' marks the wolf_smartset branch (sensors by translation key), a device slug the wolflink branch (entity ids).
 const hfcWolfSensor = (p, ctx) => (p === '' ? (tk) => ctx.key('wolf_smartset', 'sensor', tk) : (name) => `sensor.${p}_${name}`);
+
+// ebusd can publish several legitimate copies of the same messages. Keep one complete MQTT entity stem together instead of
+// resolving every field independently across daemons (#197). `prefix` may be the short topic prefix (`arotherm`) or the full
+// entity stem (`ebus_arotherm`); the latter selects one instance explicitly.
+function hfcEbusdInstances(ctx, requested) {
+  // Besides finding candidates below, record the platform/pattern for the editor and diagnostic detection explanation.
+  ctx.match(/^sensor\..+_hmu_rundatastatuscode$/, 'mqtt');
+  const mqtt = (id) => !ctx.registry[id] || ctx.registry[id].platform === 'mqtt';
+  const own = (id) => !ctx.device || ctx.registry[id]?.device_id === ctx.device;
+  const ids = ctx.ids.filter(own);
+  const stems = [...new Set(ids.filter((id) => id.startsWith('sensor.') && id.endsWith('_hmu_rundatastatuscode') && mqtt(id))
+    .map((id) => id.slice('sensor.'.length, -'_hmu_rundatastatuscode'.length)))];
+  const want = String(requested || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const exact = want && stems.includes(want);
+  const eligible = want ? (exact ? [want] : stems.filter((stem) => stem.endsWith(`_${want}`))) : stems;
+  const score = (stem) => ids.filter((id) => mqtt(id)
+    && new RegExp(`^(?:sensor|binary_sensor|number|select|switch)\\.${stem}_(?:hmu|vwzio|broadcast|ctl[sv]\\d)_`).test(id)).length;
+  return eligible.map((stem) => ({ stem, score: score(stem) }))
+    .sort((a, b) => b.score - a.score || a.stem.localeCompare(b.stem));
+}
 const HFC_PRESETS = {
   bosch_buderus_heating: {
     name: 'Bosch/Buderus Home Comfort (PointT cloud)',
@@ -405,6 +425,8 @@ const HFC_PRESETS = {
   // home name, so entity ids follow sensor.<home>_…; indices start at 0 (circuit_0, domestic_hot_water_0).
   vaillant: {
     name: 'Vaillant (myPyllant)',
+    tested: true,
+    circuit_rooms: true,
     index: { hc: 0, dhw: 0 },
     unit_style: 'vaillant',
     // Home Assistant adds a number (_2) to an entity id that was already taken: the home name stands before the name of
@@ -433,6 +455,12 @@ const HFC_PRESETS = {
         const exact = `sensor.${p}_${name}`;
         return ctx.state(exact) !== undefined ? exact : (m(new RegExp(`^sensor\\.${p}_${name}_\\d+$`)) || exact);
       };
+      // A myPyllant zone names the circuit it belongs to (`zone_2_circuit_1_…`). Bind every room to that circuit instead
+      // of taking the first zone of the home. Older integrations without the circuit part remain the fallback for circuit 0.
+      const zoneSensor = (suffix) => m(new RegExp(`^sensor\\.${p}_zone_.+_circuit_${i.hc}_${suffix}(?:_\\d+)?$`))
+        || (i.hc === 0 ? m(new RegExp(`^sensor\\.${p}_zone_.+_${suffix}(?:_\\d+)?$`)) : undefined);
+      const zoneClimate = m(new RegExp(`^climate\\.${p}_zone_.+_circuit_${i.hc}(?:_climate)?(?:_\\d+)?$`))
+        || (i.hc === 0 ? m(new RegExp(`^climate\\.${p}_zone_[^.]+$`)) : undefined);
       return {
         mode: e('energy_manager_state'),
         flow: e('system_flow_temperature'),
@@ -446,11 +474,10 @@ const HFC_PRESETS = {
         hc_flow: e(`circuit_${i.hc}_current_flow_temperature`),
         hc_setpoint: e(`circuit_${i.hc}_flow_temperature_setpoint`),
         hc_mode: e(`circuit_${i.hc}_state`),
-        // The room comes from the zone sensors; an installation with only the zone thermostat (climate) uses its
-        // current temperature and its target.
-        room: [m(new RegExp(`^sensor\\.${p}_zone_.+_current_temperature(?:_\\d+)?$`)), m(new RegExp(`^climate\\.${p}_zone_[^.]+$`))],
-        room_target: [m(new RegExp(`^sensor\\.${p}_zone_.+_desired_temperature(?:_\\d+)?$`)), m(new RegExp(`^climate\\.${p}_zone_[^.]+$`))],
-        program: m(new RegExp(`^sensor\\.${p}_zone_.+_current_special_function(?:_\\d+)?$`)),
+        // An installation with only the zone thermostat (climate) uses its current temperature and target.
+        room: [zoneSensor('current_temperature'), zoneClimate],
+        room_target: [zoneSensor('desired_temperature'), zoneClimate],
+        program: zoneSensor('current_special_function'),
         cop_heating_today: m(new RegExp(`^sensor\\.${p}.*_heating_energy_efficiency(?:_\\d+)?$`)),
         hc_pressure: e('system_water_pressure'),
         hours: counters.hours,
@@ -480,6 +507,7 @@ const HFC_PRESETS = {
   // the "multiple instances" entity format adds a prefix, which is detected. Enum texts follow the EMS-ESP language.
   emsesp: {
     name: 'EMS-ESP (Bosch, Buderus, Junkers, Nefit …)',
+    tested: true,
     unit_style: 'bosch',
     source_type: (e, hass) => (/hpbrinein$/.test(e.source_in || '') && hass.states[e.source_in] ? 'brine' : 'air'),
     detect: (ctx) => {
@@ -809,14 +837,15 @@ const HFC_PRESETS = {
   },
 
   // Heat pumps with a Luxtronik controller (Alpha Innotec, Novelan, Roth, Siemens, Elco, Buderus, Nibe, Wolf) through the
-  // "Luxtronik" integration (BenPru/luxtronik, HACS, domain luxtronik2). Built from the integration source, not tested on an
-  // installation: the SensorKey values are the translation keys, so entity ids and the HA language do not matter. Flow (Vorlauf,
+  // "Luxtronik" integration (BenPru/luxtronik, HACS, domain luxtronik2). Confirmed on a water-to-water installation (#75, #208).
+  // The SensorKey values are the translation keys, so entity ids and the HA language do not matter. Flow (Vorlauf,
   // TVL) is flow_in_temperature and return (Rücklauf, TRL) is flow_out_temperature, "in" and "out" as seen from the heating system.
   // The mixing circuits 1 to 3 are circuits 1 to 3 of the card, but only where they report a flow and a target; without a mixing
   // circuit the card draws the heat pump flow as the circuit flow. The last error (error_reason) stays after a reset and the
   // buffer is not exposed, so neither is mapped.
   luxtronik: {
     name: 'Luxtronik (Alpha Innotec, Novelan, Roth …)',
+    tested: true,
     // Alpha Innotec Hybrox for air units; Novelan, Roth and the other brands share the controller, not the casing (#158).
     unit_style: 'alpha_innotec',
     // A mixing circuit counts when its sensors report: the card looks again every minute for circuits that report late.
@@ -985,13 +1014,11 @@ const HFC_PRESETS = {
     unit_style: 'vaillant',
     // The controller reports all its circuits, inactive ones included, so the editor stub cannot count them.
     auto_circuits: false,
-    detect: (ctx) => {
-      const id = ctx.match(/^sensor\.(?:.+_)?[a-z0-9]+_hmu_rundatastatuscode$/, 'mqtt');
-      return id === undefined ? undefined : id.match(/([a-z0-9]+)_hmu_rundatastatuscode$/)[1];
-    },
+    detect: (ctx) => hfcEbusdInstances(ctx)[0]?.stem,
+    instances: (ctx, requested) => hfcEbusdInstances(ctx, requested),
     entities: (p, i, ctx) => {
-      const x = p.replace(/[^a-z0-9_]/g, '');
-      const e = (circuit, name) => ctx.match(new RegExp(`^sensor\\.(?:.+_)?${x}_${circuit}_${name}$`), 'mqtt');
+      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      const e = (circuit, name) => ctx.match(new RegExp(`^sensor\\.${x}_${circuit}_${name}$`), 'mqtt');
       const h = (n) => e('hmu', n); const c = (n) => e('ctl[sv]\\d', n); const w = (n) => e('vwzio', n);
       return {
         mode: h('rundatastatuscode'),
@@ -1032,15 +1059,18 @@ const HFC_PRESETS = {
     },
     // Lifetime counters per mode; today, month … come from their long-term statistics.
     tiles: (p, i, ctx) => {
-      const x = p.replace(/[^a-z0-9_]/g, '');
-      const t = (name) => ({ total: ctx.match(new RegExp(`^sensor\\.(?:.+_)?${x}_hmu_${name}$`), 'mqtt') });
+      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      const t = (name) => ({ total: ctx.match(new RegExp(`^sensor\\.${x}_hmu_${name}$`), 'mqtt') });
       return {
         energy: t('statelectricenergysum'), energy_heating: t('statelectricenergysumhc'), energy_dhw: t('statelectricenergysumhwc'),
         energy_cooling: t('statelectricenergysumcool'), env_energy: t('statenvironmentenergysum'),
         starts: t('runstatscompressorstarts'), hours: t('runstatscompressorhours'),
       };
     },
-    errors: (p, i, ctx) => [ctx.match(new RegExp(`^sensor\\.(?:.+_)?${p.replace(/[^a-z0-9_]/g, '')}_hmu_currenterror_error$`), 'mqtt')].filter(Boolean),
+    errors: (p, i, ctx) => {
+      const x = hfcEbusdInstances(ctx, p)[0]?.stem || p.replace(/[^a-z0-9_]/g, '');
+      return [ctx.match(new RegExp(`^sensor\\.${x}_hmu_currenterror_error$`), 'mqtt')].filter(Boolean);
+    },
     // Pre-run, overrun and shutdown keep the mode of their phase; the compressor speed tells whether it runs.
     // Fault codes (fan1_blocked, building_circuit_flow_too_low …) stay unmapped and show as text.
     mode_map: {
@@ -1137,7 +1167,7 @@ const HFC_I18N = {
     not_found: 'No entities of this preset found. Check the integration and the prefix, or open the card editor.',
     start: 'No supported heat pump integration found. Open the card editor to pick a preset or to map your entities.', start_link: 'Supported integrations',
     title: 'Heat pump', heat_pump: 'Heat pump', dhw: 'Hot water', buffer: 'Buffer', series_tank: 'Series buffer', combined_tank: 'Combined storage', heating_zone: 'Heating', fresh_water_station: 'Fresh-water station', heating_circuit: 'Heating circuit',
-    house: 'Rooms', room: 'Room', room_target: 'Room target', running: 'running', compressor_off: 'Compressor off', source_in: 'Air inlet', outdoor: 'Outdoor',
+    house: 'Rooms', room: 'Room', room_target: 'Room target', comfort_below: 'below target', comfort_on: 'at target', comfort_above: 'above target', running: 'running', compressor_off: 'Compressor off', source_in: 'Air inlet', outdoor: 'Outdoor',
     energy_missing: 'Energy dashboard: no power sensor for {sources}; energy counters alone cannot show live flow.',
     brine_in: 'Brine in', brine_out: 'Brine out', well_in: 'Well in', well_out: 'Well out',
     details: 'Details', sec_operation: 'Operation', sec_hydraulic: 'Hydraulic pressures', sec_refrigerant: 'Refrigerant circuit', sec_cutouts: 'Cut-outs (number of events)', sec_more: 'More',
@@ -1178,7 +1208,7 @@ const HFC_I18N = {
     not_found: 'Keine Entitäten dieser Voreinstellung gefunden. Integration und Präfix prüfen oder den Karteneditor öffnen.',
     start: 'Keine unterstützte Wärmepumpen-Integration gefunden. Im Karteneditor eine Voreinstellung wählen oder die Entitäten selbst zuordnen.', start_link: 'Unterstützte Integrationen',
     title: 'Wärmepumpe', heat_pump: 'Wärmepumpe', dhw: 'Warmwasser', buffer: 'Puffer', series_tank: 'Reihenpuffer', combined_tank: 'Kombispeicher', heating_zone: 'Heizung', fresh_water_station: 'Frischwasserstation', heating_circuit: 'Heizkreis',
-    house: 'Wohnräume', room: 'Raum', room_target: 'Raum-Soll', running: 'läuft', compressor_off: 'Verdichter aus', source_in: 'Luft-Eintritt', outdoor: 'Außen',
+    house: 'Wohnräume', room: 'Raum', room_target: 'Raum-Soll', comfort_below: 'unter Soll', comfort_on: 'im Soll', comfort_above: 'über Soll', running: 'läuft', compressor_off: 'Verdichter aus', source_in: 'Luft-Eintritt', outdoor: 'Außen',
     energy_missing: 'Energie-Dashboard: kein Leistungssensor für {sources}; Energiezähler allein zeigen keinen aktuellen Fluss.',
     brine_in: 'Sole ein', brine_out: 'Sole aus', well_in: 'Brunnen ein', well_out: 'Brunnen aus',
     details: 'Details', sec_operation: 'Betrieb', sec_hydraulic: 'Hydraulikdrücke', sec_refrigerant: 'Kältekreis', sec_cutouts: 'Abschaltungen (Anzahl der Ereignisse)', sec_more: 'Weitere',
@@ -1220,7 +1250,7 @@ const HFC_I18N = {
     not_found: 'Nenašli sa žiadne entity tejto predvoľby. Skontrolujte integráciu a predponu, alebo otvorte editor karty.',
     start: 'Nenašla sa žiadna podporovaná integrácia tepelného čerpadla. Otvorte editor karty a vyberte predvoľbu alebo priraďte svoje entity.', start_link: 'Podporované integrácie',
     title: 'Tepelné čerpadlo', heat_pump: 'Tepelné čerpadlo', dhw: 'Teplá voda', buffer: 'Akumulačný zásobník', series_tank: 'Sériový akumulačný zásobník', combined_tank: 'Kombinovaný zásobník', heating_zone: 'Vykurovanie', fresh_water_station: 'Čerstvá voda (stanica)', heating_circuit: 'Vykurovací okruh',
-    house: 'Miestnosti', room: 'Miestnosť', room_target: 'Cieľová teplota', running: 'beží', compressor_off: 'Kompresor vypnutý', source_in: 'Prívod vzduchu', outdoor: 'Vonku',
+    house: 'Miestnosti', room: 'Miestnosť', room_target: 'Cieľová teplota', comfort_below: 'pod cieľom', comfort_on: 'na cieli', comfort_above: 'nad cieľom', running: 'beží', compressor_off: 'Kompresor vypnutý', source_in: 'Prívod vzduchu', outdoor: 'Vonku',
     energy_missing: 'Energetický panel: chýba senzor výkonu pre {sources}; samotné merače energie nedokážu zobraziť aktuálny prietok.',
     brine_in: 'Vstup nemrznúcej zmesi', brine_out: 'Výstup nemrznúcej zmesi', well_in: 'Vstup zo studne', well_out: 'Výstup do studne',
     details: 'Podrobnosti', sec_operation: 'Prevádzka', sec_hydraulic: 'Hydraulické tlaky', sec_refrigerant: 'Chladiaci okruh', sec_cutouts: 'Vypnutia (počet udalostí)', sec_more: 'Viac',
@@ -1261,7 +1291,7 @@ const HFC_I18N = {
     not_found: 'Nenalezeny žádné entity této předvolby. Zkontrolujte integraci a předponu, nebo otevřete editor karty.',
     start: 'Nenalezena žádná podporovaná integrace tepelného čerpadla. Otevřete editor karty a vyberte předvolbu nebo přiřaďte své entity.', start_link: 'Podporované integrace',
     title: 'Tepelné čerpadlo', heat_pump: 'Tepelné čerpadlo', dhw: 'Teplá voda', buffer: 'Akumulační zásobník', series_tank: 'Sériový akumulační zásobník', combined_tank: 'Kombinovaný zásobník', heating_zone: 'Vytápění', fresh_water_station: 'Čerstvá voda (stanice)', heating_circuit: 'Topný okruh',
-    house: 'Místnosti', room: 'Místnost', room_target: 'Cílová teplota', running: 'běží', compressor_off: 'Kompresor vypnutý', source_in: 'Přívod vzduchu', outdoor: 'Venku',
+    house: 'Místnosti', room: 'Místnost', room_target: 'Cílová teplota', comfort_below: 'pod cílem', comfort_on: 'na cíli', comfort_above: 'nad cílem', running: 'běží', compressor_off: 'Kompresor vypnutý', source_in: 'Přívod vzduchu', outdoor: 'Venku',
     energy_missing: 'Energetický panel: chybí senzor výkonu pro {sources}; samotné měřiče energie nedokážou zobrazit aktuální průtok.',
     brine_in: 'Vstup nemrznoucí směsi', brine_out: 'Výstup nemrznoucí směsi', well_in: 'Vstup ze studny', well_out: 'Výstup do studny',
     details: 'Podrobnosti', sec_operation: 'Provoz', sec_hydraulic: 'Hydraulické tlaky', sec_refrigerant: 'Chladicí okruh', sec_cutouts: 'Vypnutí (počet událostí)', sec_more: 'Více',
@@ -1302,7 +1332,7 @@ const HFC_I18N = {
     not_found: 'Geen entiteiten van deze preset gevonden. Controleer de integratie en het voorvoegsel, of open de kaarteditor.',
     start: 'Geen ondersteunde warmtepompintegratie gevonden. Open de kaarteditor om een preset te kiezen of je entiteiten te koppelen.', start_link: 'Ondersteunde integraties',
     title: 'Warmtepomp', heat_pump: 'Warmtepomp', dhw: 'Warm water', buffer: 'Buffervat', series_tank: 'Seriebuffer', combined_tank: 'Combivat', heating_zone: 'Verwarming', fresh_water_station: 'Verswaterstation', heating_circuit: 'Verwarmingsgroep',
-    house: 'Woning', room: 'Kamer', room_target: 'Kamerdoel', running: 'actief', compressor_off: 'Compressor uit', source_in: 'Luchtinlaat', outdoor: 'Buiten',
+    house: 'Woning', room: 'Kamer', room_target: 'Kamerdoel', comfort_below: 'onder doelwaarde', comfort_on: 'op doelwaarde', comfort_above: 'boven doelwaarde', running: 'actief', compressor_off: 'Compressor uit', source_in: 'Luchtinlaat', outdoor: 'Buiten',
     energy_missing: 'Energiedashboard: geen vermogenssensor voor {sources}; met alleen energietellers is geen live stroom te tonen.',
     brine_in: 'Bron in', brine_out: 'Bron uit', well_in: 'Put in', well_out: 'Put uit',
     details: 'Details', sec_operation: 'Bedrijf', sec_hydraulic: 'Hydraulische druk', sec_refrigerant: 'Koudemiddelcircuit', sec_cutouts: 'Uitschakelingen (aantal keer)', sec_more: 'Meer',
@@ -1370,7 +1400,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animation speed', source_spread: 'Show source spread',
     theme: 'Card theme', theme_auto: 'Automatic (dashboard)', theme_night: 'Night', theme_contrast: 'High contrast', fullscreen: 'Full-screen button',
     wall_timeout: 'Hide controls after (seconds, 0 = never)',
-    hc_return_label: 'Show circuit return temperature', storage: 'Storage', storage_separate: 'Separate hot-water tank and buffer', storage_combined: 'Combined storage (one tank, hot-water zone on top)', dhw_type: 'Hot-water preparation', dhw_type_coil: 'Tank with heat-exchanger coil', dhw_type_fresh_water: 'Fresh-water station (on the buffer or the combined storage)', dhw_type_tank_in_tank: 'Tank in tank (combined storage)', series_buffer: 'Series buffer in the return', series_bypass: 'Series buffer with bypass valve (off: the circuits run in defrost)', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
+    hc_return_label: 'Show circuit return temperature', narrow_values: 'Keep buffer sub-values and circuit return on narrow cards', buffer_values: 'Buffer temperature emphasis', buffer_values_default: 'Top value prominent (default)', buffer_values_equal: 'All configured values equal', storage: 'Storage', storage_separate: 'Separate hot-water tank and buffer', storage_combined: 'Combined storage (one tank, hot-water zone on top)', dhw_type: 'Hot-water preparation', dhw_type_coil: 'Tank with heat-exchanger coil', dhw_type_fresh_water: 'Fresh-water station (on the buffer or the combined storage)', dhw_type_tank_in_tank: 'Tank in tank (combined storage)', series_buffer: 'Series buffer in the return', series_bypass: 'Series buffer with bypass valve (off: the circuits run in defrost)', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
     sec_hc2: 'Heating circuit 2', sec_hc3: 'Heating circuit 3', sec_hc4: 'Heating circuit 4', sec_hc5: 'Heating circuit 5', sec_hc6: 'Heating circuit 6', sec_details: 'Details: operation', sec_refrigerant: 'Details: refrigerant circuit', sec_cutouts: 'Details: cut-out counters',
     controls: 'Quick controls (switch, button, select, number …)', details_open: 'Details open by default',
     from_preset: 'Found by the preset', more_fields: 'More fields',
@@ -1431,7 +1461,7 @@ const HFC_EDITOR = {
     valve: 'Diverter valve towards hot water (on/off, or a state like Tank/Room)', bypass_valve: 'Series buffer bypass valve (on = bypass; default: defrost)',
     pv_boost: 'PV surplus mode (on, or a power above 0)',
     dhw_top: 'DHW tank top (°C)', dhw_middle: 'DHW tank middle (°C)', dhw_bottom: 'DHW tank bottom (°C)', dhw_target: 'DHW target (°C)', dhw_mode: 'DHW mode (state text)',
-    circulation: 'Circulation pump running (on/off)', buffer_top: 'Buffer top (°C)', buffer_middle: 'Buffer middle (°C)', buffer_bottom: 'Buffer bottom (°C)', buffer_mode: 'Buffer mode (state text)',
+    circulation: 'Circulation pump running (on/off)', dhw_loss_sensor: 'DHW standby-loss measurement (°C)', buffer_top: 'Buffer top (°C)', buffer_middle: 'Buffer middle (°C)', buffer_bottom: 'Buffer bottom (°C)', buffer_mode: 'Buffer mode (state text)',
     hc_flow: 'Circuit flow temperature (°C)', hc_return: 'Circuit return temperature (°C)', hc_setpoint: 'Circuit flow target (°C)',
     hc_mode: 'Circuit mode (state text)', hc_pump: 'Circuit pump running (on/off)', hc_volume: 'Flow rate of the heating circuit (l/h or l/min, circuit pump)', hc_curve_offset: 'Heating curve shift (K)', hc_pressure: 'Heating circuit pressure (bar)', brine_pressure: 'Brine circuit pressure (bar)',
     cutout_high_pressure: 'High-pressure cut-outs (count of events, not a pressure)', cutout_low_pressure: 'Low-pressure cut-outs (count of events, not a pressure)', cutout_temperature: 'Temperature cut-outs (count of events, not a temperature)',
@@ -1454,7 +1484,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animationsgeschwindigkeit', source_spread: 'Quellenspreizung anzeigen',
     theme: 'Kartendarstellung', theme_auto: 'Automatisch (Dashboard)', theme_night: 'Nacht', theme_contrast: 'Hoher Kontrast', fullscreen: 'Vollbild-Schaltfläche',
     wall_timeout: 'Bedienelemente ausblenden nach (Sekunden, 0 = nie)',
-    hc_return_label: 'Heizkreis-Rücklauf anzeigen', storage: 'Speicher', storage_separate: 'Getrennter Warmwasserspeicher und Puffer', storage_combined: 'Kombispeicher (ein Speicher, Warmwasserzone oben)', dhw_type: 'Warmwasserbereitung', dhw_type_coil: 'Speicher mit Wärmetauscher-Wendel', dhw_type_fresh_water: 'Frischwasserstation (am Puffer oder Kombispeicher)', dhw_type_tank_in_tank: 'Tank im Tank (Kombispeicher)', series_buffer: 'Reihenpuffer im Rücklauf', series_bypass: 'Reihenpuffer mit Bypass-Ventil (aus: die Heizkreise laufen beim Abtauen)', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
+    hc_return_label: 'Heizkreis-Rücklauf anzeigen', narrow_values: 'Puffer-Unterwerte und Heizkreis-Rücklauf auf schmalen Karten zeigen', buffer_values: 'Gewichtung der Puffertemperaturen', buffer_values_default: 'Oberen Wert hervorheben (Standard)', buffer_values_equal: 'Alle vorhandenen Werte gleich', storage: 'Speicher', storage_separate: 'Getrennter Warmwasserspeicher und Puffer', storage_combined: 'Kombispeicher (ein Speicher, Warmwasserzone oben)', dhw_type: 'Warmwasserbereitung', dhw_type_coil: 'Speicher mit Wärmetauscher-Wendel', dhw_type_fresh_water: 'Frischwasserstation (am Puffer oder Kombispeicher)', dhw_type_tank_in_tank: 'Tank im Tank (Kombispeicher)', series_buffer: 'Reihenpuffer im Rücklauf', series_bypass: 'Reihenpuffer mit Bypass-Ventil (aus: die Heizkreise laufen beim Abtauen)', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
     sec_hc2: 'Heizkreis 2', sec_hc3: 'Heizkreis 3', sec_hc4: 'Heizkreis 4', sec_hc5: 'Heizkreis 5', sec_hc6: 'Heizkreis 6', sec_details: 'Details: Betrieb', sec_refrigerant: 'Details: Kältekreis', sec_cutouts: 'Details: Abschaltzähler',
     controls: 'Schnellbedienung (Schalter, Taste, Auswahl, Zahl …)', details_open: 'Details standardmäßig offen',
     from_preset: 'Von der Voreinstellung gefunden', more_fields: 'Weitere Felder',
@@ -1515,7 +1545,7 @@ const HFC_EDITOR = {
     valve: 'Umschaltventil auf Warmwasser (ein/aus, oder Zustand wie Tank/Room)', bypass_valve: 'Bypass-Ventil Reihenpuffer (ein = Bypass; Standard: Abtauen)',
     pv_boost: 'PV-Überschussbetrieb (ein, oder Leistung über 0)',
     dhw_top: 'WW-Speicher oben (°C)', dhw_middle: 'WW-Speicher Mitte (°C)', dhw_bottom: 'WW-Speicher unten (°C)', dhw_target: 'WW-Soll (°C)', dhw_mode: 'WW-Betriebsart (Statustext)',
-    circulation: 'Zirkulationspumpe läuft (ein/aus)', buffer_top: 'Puffer oben (°C)', buffer_middle: 'Puffer Mitte (°C)', buffer_bottom: 'Puffer unten (°C)', buffer_mode: 'Puffer-Betriebsart (Statustext)',
+    circulation: 'Zirkulationspumpe läuft (ein/aus)', dhw_loss_sensor: 'Messsensor WW-Standbyverlust (°C)', buffer_top: 'Puffer oben (°C)', buffer_middle: 'Puffer Mitte (°C)', buffer_bottom: 'Puffer unten (°C)', buffer_mode: 'Puffer-Betriebsart (Statustext)',
     hc_flow: 'Heizkreis-Vorlauf (°C)', hc_return: 'Heizkreis-Rücklauf (°C)', hc_setpoint: 'Heizkreis-Vorlauf-Soll (°C)',
     hc_mode: 'Heizkreis-Betriebsart (Statustext)', hc_pump: 'Heizkreispumpe läuft (ein/aus)', hc_volume: 'Volumenstrom Heizkreis (l/h oder l/min, Heizkreispumpe)', hc_curve_offset: 'Heizkurven-Verschiebung (K)', hc_pressure: 'Heizkreis-Druck (bar)', brine_pressure: 'Solekreis-Druck (bar)',
     cutout_high_pressure: 'Hochdruck-Abschaltungen (Anzahl der Ereignisse, kein Druck)', cutout_low_pressure: 'Niederdruck-Abschaltungen (Anzahl der Ereignisse, kein Druck)', cutout_temperature: 'Temperatur-Abschaltungen (Anzahl der Ereignisse, keine Temperatur)',
@@ -1710,7 +1740,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animatiesnelheid', source_spread: 'ΔT van de bron tonen',
     theme: 'Kaartthema', theme_auto: 'Automatisch (dashboard)', theme_night: 'Nacht', theme_contrast: 'Hoog contrast', fullscreen: 'Knop volledig scherm',
     wall_timeout: 'Bediening verbergen na (seconden, 0 = nooit)',
-    hc_return_label: 'Retourtemperatuur per groep tonen', storage: 'Opslag', storage_separate: 'Apart warmwatervat en buffervat', storage_combined: 'Combivat (één vat, warmwaterzone bovenin)', dhw_type: 'Warmwaterbereiding', dhw_type_coil: 'Vat met warmtewisselaarspiraal', dhw_type_fresh_water: 'Verswaterstation (op het buffervat of het combivat)', dhw_type_tank_in_tank: 'Tank in tank (combivat)', series_buffer: 'Seriebuffer in de retour', series_bypass: 'Seriebuffer met bypassklep (uit: de groepen draaien door bij ontdooien)', primary_pump: 'Primaire pomp', hc_name: 'Naam groep 1', hc2_name: 'Naam groep 2', hc3_name: 'Naam groep 3', hc4_name: 'Naam groep 4', hc5_name: 'Naam groep 5', hc6_name: 'Naam groep 6',
+    hc_return_label: 'Retourtemperatuur per groep tonen', narrow_values: 'Buffer-subwaarden en groepsretour op smalle kaarten tonen', buffer_values: 'Nadruk buffertemperaturen', buffer_values_default: 'Bovenste waarde prominent (standaard)', buffer_values_equal: 'Alle ingestelde waarden gelijk', storage: 'Opslag', storage_separate: 'Apart warmwatervat en buffervat', storage_combined: 'Combivat (één vat, warmwaterzone bovenin)', dhw_type: 'Warmwaterbereiding', dhw_type_coil: 'Vat met warmtewisselaarspiraal', dhw_type_fresh_water: 'Verswaterstation (op het buffervat of het combivat)', dhw_type_tank_in_tank: 'Tank in tank (combivat)', series_buffer: 'Seriebuffer in de retour', series_bypass: 'Seriebuffer met bypassklep (uit: de groepen draaien door bij ontdooien)', primary_pump: 'Primaire pomp', hc_name: 'Naam groep 1', hc2_name: 'Naam groep 2', hc3_name: 'Naam groep 3', hc4_name: 'Naam groep 4', hc5_name: 'Naam groep 5', hc6_name: 'Naam groep 6',
     sec_hc2: 'Verwarmingsgroep 2', sec_hc3: 'Verwarmingsgroep 3', sec_hc4: 'Verwarmingsgroep 4', sec_hc5: 'Verwarmingsgroep 5', sec_hc6: 'Verwarmingsgroep 6', sec_details: 'Details: bedrijf', sec_refrigerant: 'Details: koudemiddelcircuit', sec_cutouts: 'Details: uitschakeltellers',
     controls: 'Snelbediening (schakelaar, knop, keuzelijst, getal …)', details_open: 'Details standaard open',
     from_preset: 'Gevonden door de preset', more_fields: 'Meer velden',
@@ -1771,7 +1801,7 @@ const HFC_EDITOR = {
     valve: 'Driewegklep naar warm water (aan/uit, of een stand zoals Tank/Room)', bypass_valve: 'Bypassklep seriebuffer (aan = bypass; standaard: ontdooien)',
     pv_boost: 'PV-overschotstand (aan, of een vermogen boven 0)',
     dhw_top: 'Warmwatervat boven (°C)', dhw_middle: 'Warmwatervat midden (°C)', dhw_bottom: 'Warmwatervat onder (°C)', dhw_target: 'Warmwaterdoel (°C)', dhw_mode: 'Warmwaterstand (statustekst)',
-    circulation: 'Circulatiepomp actief (aan/uit)', buffer_top: 'Buffervat boven (°C)', buffer_middle: 'Buffervat midden (°C)', buffer_bottom: 'Buffervat onder (°C)', buffer_mode: 'Bufferstand (statustekst)',
+    circulation: 'Circulatiepomp actief (aan/uit)', dhw_loss_sensor: 'Meetsensor stilstandsverlies warm water (°C)', buffer_top: 'Buffervat boven (°C)', buffer_middle: 'Buffervat midden (°C)', buffer_bottom: 'Buffervat onder (°C)', buffer_mode: 'Bufferstand (statustekst)',
     hc_flow: 'Aanvoertemperatuur groep (°C)', hc_return: 'Retourtemperatuur groep (°C)', hc_setpoint: 'Aanvoerdoel groep (°C)',
     hc_mode: 'Stand groep (statustekst)', hc_pump: 'Groepspomp actief (aan/uit)', hc_volume: 'Debiet van de verwarmingsgroep (l/h of l/min, groepspomp)', hc_curve_offset: 'Verschuiving stooklijn (K)', hc_pressure: 'Druk verwarmingsgroep (bar)', brine_pressure: 'Druk broncircuit (bar)',
     cutout_high_pressure: 'Hogedrukuitschakelingen (aantal keer, geen druk)', cutout_low_pressure: 'Lagedrukuitschakelingen (aantal keer, geen druk)', cutout_temperature: 'Temperatuuruitschakelingen (aantal keer, geen temperatuur)',
@@ -1790,9 +1820,9 @@ const hfcHcCount = (config) => Math.min(Math.max(Math.round(+config?.hc_count) |
 
 const HFC_ENTITY_GROUPS = {
   sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost'],
-  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
+  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'dhw_loss_sensor', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
   sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_pressure', 'room', 'room_target', 'program'],
-  // The room of circuit 1 is the house (room, room_target); circuits 2 to 6 show theirs in their status line.
+  // The room of circuit 1 uses room/room_target; circuits 2 to 6 use their numbered keys in the shared house overview.
   sec_hc2: ['hc2_flow', 'hc2_return', 'hc2_setpoint', 'hc2_mode', 'hc2_pump', 'hc2_volume', 'hc2_curve_offset', 'hc2_room', 'hc2_room_target'],
   sec_hc3: ['hc3_flow', 'hc3_return', 'hc3_setpoint', 'hc3_mode', 'hc3_pump', 'hc3_volume', 'hc3_curve_offset', 'hc3_room', 'hc3_room_target'],
   sec_hc4: ['hc4_flow', 'hc4_return', 'hc4_setpoint', 'hc4_mode', 'hc4_pump', 'hc4_volume', 'hc4_curve_offset', 'hc4_room', 'hc4_room_target'],
@@ -1838,7 +1868,7 @@ const HFC_KINDS = {
 };
 // Keys of circuits 2 to 6 use the kind of circuit 1 (hc2_flow → hc_flow, hc2_room → room); keys not listed are not checked.
 const HFC_KEY_KINDS = Object.fromEntries(Object.entries({
-  temperature: ['flow', 'return', 'source_in', 'source_out', 'outdoor', 'dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'buffer_top', 'buffer_middle',
+  temperature: ['flow', 'return', 'source_in', 'source_out', 'outdoor', 'dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_loss_sensor', 'buffer_top', 'buffer_middle',
     'buffer_bottom', 'solar_collector', 'hc_flow', 'hc_return', 'hc_setpoint', 'room', 'room_target', 'evap_temp', 'cond_temp', 'suction_temp', 'hot_gas', 'liquid_temp'],
   offset: ['hc_curve_offset', 'superheat', 'subcooling'],
   power: ['power', 'heat', 'pv', 'battery', 'grid'],
@@ -1874,6 +1904,7 @@ const HFC_STAT_PERIODS = { today: ['day', 0], yesterday: ['day', -1], week: ['we
 // Home Assistant actions a tile can carry (more-info, navigate, url, toggle, perform-action …).
 const HFC_ACTIONS = ['tap_action', 'hold_action', 'double_tap_action'];
 const HFC_LAYOUTS = ['default', 'compact', 'wide', 'wall'];
+const HFC_BUFFER_VALUES = ['default', 'equal'];
 const HFC_ANIMATIONS = ['auto', 'always', 'off'];
 const HFC_THEMES = ['auto', 'night', 'contrast'];
 // Storage: a hot-water tank and a buffer, or one combined (layered) tank with the hot-water zone on top (docs/TOPOLOGY.md, phase 1).
@@ -1914,6 +1945,15 @@ const HFC_COLORS = {
   'flow-dash': 'rgba(255,255,255,.9)', anthracite: '#3b4148', casing: '#e6e9ec',
 };
 const hfcVar = (name) => `var(--hfc-${name}, ${HFC_COLORS[name]})`;
+// Home Assistant's power units normalized to watts. Keep the case so MW (megawatt) and mW (milliwatt) stay distinct.
+const hfcPowerFactor = (unit) => ({ W: 1, kW: 1000, MW: 1000000, mW: 0.001 }[String(unit || '').trim()]);
+const hfcPowerW = (st, unitlessFactor = 1) => {
+  const value = parseFloat(st?.state); const unit = String(st?.attributes?.unit_of_measurement || '').trim();
+  if (!Number.isFinite(value)) return NaN;
+  if (!unit) return value * unitlessFactor; // Preserve the field's historical default (W for power, kW for heat).
+  const factor = hfcPowerFactor(unit);
+  return factor === undefined ? NaN : value * factor;
+};
 // Translucent fill and a darker text colour of the same role, for chips and highlighted controls.
 const hfcTint = (name, pct) => `color-mix(in srgb, ${hfcVar(name)} ${pct}%, transparent)`;
 const hfcInk = (name) => `color-mix(in srgb, ${hfcVar(name)} 47%, var(--primary-text-color, #212121))`;
@@ -1963,7 +2003,7 @@ class HeatpumpFlowCard extends HTMLElement {
   // Comparing each id also catches removals/additions with an unchanged count.
   // Cards and the editor share the result; ordinary value changes keep its identity.
   // HA also sends a new registry object after a change to any entity anywhere: the revision follows the enabled and present
-  // ids, not the object, because a new revision rebuilds the card and drops styles injected by card-mod (#164).
+  // ids, not the object, so unrelated registry updates do not trigger needless rebuilds (#164).
   static _pointtRevision(hass) {
     if (!hass?.entities || !hass.states) return undefined;
     let cache = this._pointtStates.get(hass.entities);
@@ -2021,7 +2061,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (host._registryRequest === cache.promise) return;
     host._registryRequest = cache.promise;
     // HA sends a new compact registry after a change to any entity. The host rebuilds only when the PointT entries differ from
-    // the ones it was built with: a rebuild makes the card flicker and drops styles set with card-mod (#164).
+    // the ones it was built with, avoiding flicker and unnecessary work (#164).
     // Without carried-over entries (first list of a connection) the host drew without the registry and needs the update.
     cache.promise.then(() => {
       if (host._registryRequest !== cache.promise || host._hass?.entities !== cache.display) return;
@@ -2196,6 +2236,8 @@ class HeatpumpFlowCard extends HTMLElement {
               { name: 'language', selector: { select: { mode: 'dropdown', options: languageOptions } } },
               { name: 'fullscreen', selector: { boolean: {} } },
               { name: 'hc_return_label', selector: { boolean: {} } },
+              { name: 'narrow_values', selector: { boolean: {} } },
+              { name: 'buffer_values', selector: { select: { mode: 'dropdown', options: HFC_BUFFER_VALUES.map((v) => ({ value: v, label: L[`buffer_values_${v}`] })) } } },
               { name: 'storage', selector: { select: { mode: 'dropdown', options: HFC_STORAGES.map((v) => ({ value: v, label: L[`storage_${v}`] })) } } },
               { name: 'dhw_type', selector: { select: { mode: 'dropdown', options: HFC_DHW_TYPES.filter((v) => v !== 'tank_in_tank' || (config && config.storage === 'combined')).map((v) => ({ value: v, label: L[`dhw_type_${v}`] })) } } },
               ...(config && config.storage === 'combined' ? [] : [{ name: 'series_buffer', selector: { boolean: {} } }]),
@@ -2277,6 +2319,9 @@ class HeatpumpFlowCard extends HTMLElement {
     if (config.layout !== undefined && config.layout !== null && !HFC_LAYOUTS.includes(config.layout)) {
       throw new Error(`layout must be one of: ${HFC_LAYOUTS.join(', ')}`);
     }
+    if (config.buffer_values !== undefined && config.buffer_values !== null && !HFC_BUFFER_VALUES.includes(config.buffer_values)) {
+      throw new Error(`buffer_values must be one of: ${HFC_BUFFER_VALUES.join(', ')}`);
+    }
     if (config.animations !== undefined && config.animations !== null && !HFC_ANIMATIONS.includes(config.animations)) {
       throw new Error(`animations must be one of: ${HFC_ANIMATIONS.join(', ')}`);
     }
@@ -2285,6 +2330,9 @@ class HeatpumpFlowCard extends HTMLElement {
     }
     if (config.fullscreen !== undefined && config.fullscreen !== null && typeof config.fullscreen !== 'boolean') {
       throw new Error('fullscreen must be true or false');
+    }
+    if (config.narrow_values !== undefined && config.narrow_values !== null && typeof config.narrow_values !== 'boolean') {
+      throw new Error('narrow_values must be true or false');
     }
     if (config.series_buffer !== undefined && config.series_buffer !== null && typeof config.series_buffer !== 'boolean') {
       throw new Error('series_buffer must be true or false');
@@ -2301,6 +2349,11 @@ class HeatpumpFlowCard extends HTMLElement {
       throw new Error(`dhw_type must be one of: ${HFC_DHW_TYPES.join(', ')}`);
     }
     if (config.dhw_type === 'tank_in_tank' && config.storage !== 'combined') throw new Error('dhw_type: tank_in_tank needs storage: combined');
+    const lossSensor = config.entities?.dhw_loss_sensor;
+    if (lossSensor !== undefined && lossSensor !== null && lossSensor !== 'none'
+      && (typeof lossSensor !== 'string' || !lossSensor.startsWith('sensor.'))) {
+      throw new Error('entities.dhw_loss_sensor must be one sensor.* entity id');
+    }
     if (config.primary_pump !== undefined && config.primary_pump !== null && typeof config.primary_pump !== 'boolean') {
       throw new Error('primary_pump must be true or false');
     }
@@ -2432,6 +2485,9 @@ class HeatpumpFlowCard extends HTMLElement {
       const rawN = preset.entities(prefix, { ...idx, hc: idx.hc + n - 1 }, ctx);
       // hc_pressure is the pressure of the whole heating system, drawn at circuit 1 only.
       Object.entries(rawN).filter(([k]) => k.startsWith('hc_') && k !== 'hc_pressure').forEach(([k, v]) => take(`hc${n}_${k.slice(3)}`, v));
+      // Room keys are not prefixed with hc_ in a preset because circuit 1 uses room/room_target. Carry the circuit-specific
+      // result into the numbered public keys so the house overview receives the rooms of circuits 2 to 6.
+      if (preset.circuit_rooms) ['room', 'room_target'].forEach((k) => take(`hc${n}_${k}`, rawN[k]));
     }
     const e = { ...fromPreset };
     const sums = {};
@@ -2599,12 +2655,18 @@ class HeatpumpFlowCard extends HTMLElement {
     const counts = {};
     Object.values(reg).forEach((e) => { if (e?.platform && platformPresets[e.platform]) counts[e.platform] = (counts[e.platform] || 0) + 1; });
     const matches = HeatpumpFlowCard._presetMatches(hass);
+    const instanceGroups = r.preset?.instances ? r.preset.instances(HeatpumpFlowCard._ctx(hass, config.device, r.idx)) : [];
+    const bestInstanceScore = instanceGroups[0]?.score;
+    const tiedInstances = instanceGroups.filter((g) => g.score === bestInstanceScore);
+    const configuredInstance = String(config.prefix || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const instanceExplicit = !!configuredInstance && instanceGroups.some((g) => g.stem === configuredInstance);
     const detection = [
       ...(r.preset ? [`- ${clean(config.preset)} looked for: ${own.looked.length
         ? own.looked.map((l) => `${l.what}${l.platform ? ` (${l.platform})` : ''}: ${l.hit ? 'found' : 'not found'}`).join('; ') : 'its own entity ids'}`] : []),
       `- Heat pump integrations here: ${Object.keys(counts).length ? Object.entries(counts).sort(([a], [b]) => (a < b ? -1 : 1))
         .map(([pl, n]) => `${pl} (${n} ${n === 1 ? 'entity' : 'entities'}; preset${platformPresets[pl].size > 1 ? 's' : ''} ${[...platformPresets[pl]].join(', ')})`).join(', ') : 'none found'}`,
       `- Presets that match here: ${matches.length ? matches.map((m) => `${m.name} (${m.score} of ${HFC_CORE_KEYS.length} core entities)`).join(', ') : 'none'}`,
+      ...(instanceGroups.length ? [`- Preset entity groups: selected ${r.prefix || '(none)'}; ${instanceGroups.map((g) => `${g.stem} (${g.score} entities)`).join(', ')}${tiedInstances.length > 1 && !instanceExplicit ? '; equally complete groups: set prefix to the full group name' : ''}`] : []),
     ];
     // Source of each mapping (#147): found by the preset, set in the configuration ("own", naming its integration when it is not
     // one the preset reads), or cleared on purpose. Keys of circuits beyond hc_count are left out of the unmapped list.
@@ -2703,13 +2765,18 @@ class HeatpumpFlowCard extends HTMLElement {
     ]);
   }
 
-  static _energyInfo(prefs) {
+  static _energyInfo(prefs, hass) {
     const sources = prefs?.energy_sources || [];
     const rate = (src) => {
       const pc = src.power_config;
-      if (pc && (pc.stat_rate_from || pc.stat_rate_to)) return { from: pc.stat_rate_from, to: pc.stat_rate_to };
-      if (pc && pc.stat_rate) return { id: pc.stat_rate, inv: !!pc.stat_rate_inverted };
-      return src.stat_rate ? { id: src.stat_rate } : null;
+      let result = null;
+      if (pc && (pc.stat_rate_from || pc.stat_rate_to)) result = { from: pc.stat_rate_from, to: pc.stat_rate_to };
+      else if (pc && pc.stat_rate) result = { id: pc.stat_rate, inv: !!pc.stat_rate_inverted };
+      else if (src.stat_rate) result = { id: src.stat_rate };
+      if (!result || !hass) return result;
+      const ids = [result.id, result.from, result.to].filter(Boolean);
+      // A missing state remains usable until HA supplies it; a known energy counter (Wh/kWh/MWh) is not current power.
+      return ids.every((id) => !hass.states[id] || HeatpumpFlowCard._fit('power', id, hass.states[id]).verdict !== 'bad') ? result : null;
     };
     const configured = {}; const missing = [];
     const of = (type) => {
@@ -2733,7 +2800,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._energyReq = true;
     HeatpumpFlowCard._energyPrefs = HeatpumpFlowCard._energyPrefs || this._hass.callWS({ type: 'energy/get_prefs' });
     HeatpumpFlowCard._energyPrefs.then((prefs) => {
-      const { energy, configured, missing } = HeatpumpFlowCard._energyInfo(prefs);
+      const { energy, configured, missing } = HeatpumpFlowCard._energyInfo(prefs, this._hass);
       this._energy = energy.solar.length || energy.battery.length || energy.grid.length ? energy : null;
       this._energyConfigured = configured;
       this._energyMissing = missing;
@@ -2757,11 +2824,7 @@ class HeatpumpFlowCard extends HTMLElement {
   }
 
   _rateW(r) {
-    const w = (id) => {
-      const st = id && this._hass.states[id]; const v = parseFloat(st?.state);
-      if (!Number.isFinite(v)) return NaN;
-      return String(st.attributes?.unit_of_measurement || '').toLowerCase() === 'kw' ? v * 1000 : v;
-    };
+    const w = (id) => hfcPowerW(id && this._hass.states[id]);
     if (r.id) return w(r.id) * (r.inv ? -1 : 1);
     return (r.from ? w(r.from) : 0) - (r.to ? w(r.to) : 0);
   }
@@ -2799,12 +2862,24 @@ class HeatpumpFlowCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+    this._renderRoot();
     if (!this._config) return;
     HeatpumpFlowCard._loadPresetRegistry(this, () => {
       this._needsBuild = true; this._rendered = false; this.hass = this._hass;
     });
     try { this._apply(); } catch (err) { this._fail(err); }
+  }
+
+  // Only this container belongs to the card. card-mod and other integrations may add styles beside it in the shadow root;
+  // keeping those nodes out of our render target prevents a later setConfig/rebuild from deleting their CSS variables (#164).
+  _renderRoot() {
+    if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
+    if (this._ownedRoot?.parentNode !== this.shadowRoot) {
+      this._ownedRoot = document.createElement('div');
+      this._ownedRoot.setAttribute('data-hfc-root', '');
+      this.shadowRoot.prepend(this._ownedRoot);
+    }
+    return this._ownedRoot;
   }
 
   _apply() {
@@ -2835,7 +2910,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._failed = true;
     this._rendered = false;
     const msg = this._esc(err && err.message ? err.message : String(err));
-    this.shadowRoot.innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card><div class="hint">Heat Pump Hydraulic Card: ${msg}<br>Details in the browser console. Please report it: github.com/Sturmi77/heatpump-hydraulic-card/issues</div></ha-card>`;
+    this._renderRoot().innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card><div class="hint">Heat Pump Hydraulic Card: ${msg}<br>Details in the browser console. Please report it: github.com/Sturmi77/heatpump-hydraulic-card/issues</div></ha-card>`;
   }
 
   /* ---------- helpers ---------- */
@@ -2857,10 +2932,10 @@ class HeatpumpFlowCard extends HTMLElement {
   }
   _unit(key) { return String(this._st(key)?.attributes?.unit_of_measurement || '').toLowerCase(); }
   // Unit-aware readings: power in W, heat in kW, flow rates in l/h. A list of entities gives the sum of the members that report a number.
-  _w(key) { return this._sum(key, 'kw', (v) => v * 1000); }
-  _kw(key) { return this._sum(key, 'w', (v) => v / 1000); }
-  _sum(key, unit, convert) {
-    const read = (st) => { const v = parseFloat(st?.state); return String(st?.attributes?.unit_of_measurement || '').toLowerCase() === unit ? convert(v) : v; };
+  _w(key) { return this._sumPower(key, 1); }
+  _kw(key) { return this._sumPower(key, 1000); }
+  _sumPower(key, divisor) {
+    const read = (st) => hfcPowerW(st, divisor) / divisor;
     if (!this._sums?.[key]) { const v = read(this._st(key)); return Number.isFinite(v) ? v : NaN; }
     const values = this._sums[key].map((id) => read(this._hass?.states[id])).filter(Number.isFinite);
     return values.length ? values.reduce((a, b) => a + b, 0) : NaN;
@@ -3031,56 +3106,10 @@ class HeatpumpFlowCard extends HTMLElement {
   // Room keys of circuit n: circuit 1 uses the room and target of the house, circuits 2 to 6 their own.
   _roomKey(n, key = 'room') { return n === 1 ? key : `hc${n}_${key}`; }
 
-  // Status line of heating circuit n under its emitter: the mode (or "running") and, with several circuits, the room temperature and
-  // target of that circuit as a part of its own (tap target and screen reader label), e.g. "Heating · Room 21.4 °C · Target 22.0".
-  // Circuit 1 repeats the room of the house there, so every circuit shows its room in the same place (#135).
-  // The two texts are centred together and anchored at the gap between them, so they never overlap. They stay right of the risers
-  // of the further circuits (from x 692, or from x 760 with the return label of the circuit) and inside the schematic (up to x 996); where both do not fit, the room target is left out.
-  // k2 is the type scale of narrow schematics.
-  _hcStatus(n, status, k2) {
+  // Room values have their own overview in the house (#140); the line below an emitter is reserved for its operating mode.
+  _hcStatus(n, status) {
     const s = n === 1 ? '' : String(n);
-    const mode = this._$(`t-hc-mode${s}`); const room = this._$(`t-hc-room${s}`);
-    const i = this._i;
-    let value = ''; let rest = '';
-    if (room) {
-      const rt = this._n(this._roomKey(n, 'room_target'));
-      // Without a room sensor the target stands alone, as in the house.
-      if (this._has(this._roomKey(n))) { value = this._t(this._n(this._roomKey(n))); if (Number.isFinite(rt)) rest = ` · ${i.target} ${this._fmt(rt)}`; }
-      else if (Number.isFinite(rt)) rest = `${i.room_target} ${this._fmt(rt)} °C`;
-    }
-    const both = !!status && !!(value || rest);
-    this._txt(`t-hc-mode${s}`, both ? `${status} ·` : status);
-    if (!mode || !room) return;
-    // The return label of the circuit sits under its return pipe up to x ~750 on the same line.
-    const minX = this._config.hc_return_label && this._has(this._hk(n, 'return')) ? 760 : 692;
-    const key = `${status}|${value}|${rest}|${k2}|${minX}`;
-    if (room._k === key) return;
-    room.textContent = '';
-    if (value) {
-      const span = (cls, text) => { const t = document.createElementNS('http://www.w3.org/2000/svg', 'tspan'); t.setAttribute('class', cls); t.textContent = text; return t; };
-      room.append(span('pre', `${i.room} `), span('room-temp', value));
-    }
-    const target = rest ? document.createTextNode(rest) : null;
-    if (target) room.append(target);
-    let xm = 880; let xr = 880; let measured = true;
-    if (both) {
-      // The widths need the rendered text; a hidden card uses an estimate and measures again on the next update.
-      const width = (el) => {
-        let w = 0;
-        try { w = el.getComputedTextLength(); } catch (err) { w = 0; }
-        if (w > 0) return w;
-        measured = false;
-        return el.textContent.length * 7 * k2;
-      };
-      const wm = width(mode); const gap = 5 * k2;
-      let wr = width(room);
-      if (value && target && wm + gap + wr > 996 - minX) { target.remove(); wr = width(room); }
-      const left = Math.max(Math.min(880 - (wm + gap + wr) / 2, 996 - wm - gap - wr), minX);
-      xm = left + wm; xr = xm + gap;
-    }
-    mode.setAttribute('x', +xm.toFixed(1)); mode.setAttribute('text-anchor', both ? 'end' : 'middle');
-    room.setAttribute('x', +xr.toFixed(1)); room.setAttribute('text-anchor', both ? 'start' : 'middle');
-    room._k = measured ? key : '';
+    this._txt(`t-hc-mode${s}`, status);
   }
 
   // Label with a prefix (VL / RL) that narrow schematics leave out.
@@ -3122,7 +3151,7 @@ class HeatpumpFlowCard extends HTMLElement {
       // Circuit 1 exists wherever the heat loop is drawn, without a sensor of its own: it hangs on the buffer (whose temperature
       // it shows as its flow), or on the heat pump's flow and return in a direct system.
       hc: this._has('hc_flow') || this._has('hc_mode') || this._has('hc_pump') || buffer || this._has('flow') || this._has('return'),
-      house: this._has('room') || this._has('room_target'),
+      house: Array.from({ length: this._hcCount }, (_, n) => this._has(this._roomKey(n + 1)) || this._has(this._roomKey(n + 1, 'room_target'))).some(Boolean),
       circ: this._has('circulation'),
       primaryPump: this._primaryPump(),
       hcPump: this._has('hc_pump'),
@@ -3187,7 +3216,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const i = this._i;
     const T = this._esc(this._config.title ?? i.title);
     if (this._startState()) {
-      this.shadowRoot.innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card class="start"><div class="head">${T ? `<div class="title">${T}</div>` : '<div></div>'}</div>
+      this._renderRoot().innerHTML = `<style>${HeatpumpFlowCard.styles}</style><ha-card class="start"><div class="head">${T ? `<div class="title">${T}</div>` : '<div></div>'}</div>
         <div class="hint" id="start-hint">${this._esc(i.start)} <a href="https://github.com/Sturmi77/heatpump-hydraulic-card#quick-start" target="_blank" rel="noopener noreferrer">${this._esc(i.start_link)}</a></div></ha-card>`;
       this._rendered = true;
       return;
@@ -3197,7 +3226,8 @@ class HeatpumpFlowCard extends HTMLElement {
     const fullscreenIcon = this._fullscreenOpen
       ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>'
       : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>';
-    const energyHint = this._config.power_sources !== 'manual' && this._energyMissing?.length
+    const automaticEnergy = this._config.power_sources !== 'manual' && !['pv', 'battery', 'grid'].some((key) => this._has(key));
+    const energyHint = automaticEnergy && this._energyMissing?.length
       ? i.energy_missing.replace('{sources}', this._energyMissing.map((type) => ({ solar: i.pv, battery: i.battery, grid: i.grid }[type])).join(', ')) : '';
     const de = (k) => (e[k] ? `data-entity="${this._esc(e[k])}"` : '');
     const pipePair = (id, d, show = true) => (show
@@ -3210,11 +3240,16 @@ class HeatpumpFlowCard extends HTMLElement {
     const showHc = P.hc || this._hcCount > 1;
     const U = this._sourceType === 'air' ? this._unitArt() : null;
     const H = 560 + (showHc ? (this._hcCount - 1) * 250 : 0);
+    const equalBuffer = this._config.buffer_values === 'equal';
+    const bufferKeys = ['buffer_top', 'buffer_middle', 'buffer_bottom'].filter((key) => this._has(key));
+    const bufferY = equalBuffer && bufferKeys.length
+      ? Object.fromEntries(bufferKeys.map((key, n) => [key, bufferKeys.length === 1 ? 446 : 382 + n * (118 / (bufferKeys.length - 1))]))
+      : { buffer_top: 392, buffer_middle: 446, buffer_bottom: 502 };
 
-    this.shadowRoot.innerHTML = `
+    this._renderRoot().innerHTML = `
       <style>${HeatpumpFlowCard.styles}</style>
       <div class="fullscreen-backdrop" id="fullscreen-backdrop" ${this._fullscreenOpen ? '' : 'hidden'}></div>
-      <ha-card class="layout-${this._layout} motion-${this._animations} theme-${this._theme}${this._fullscreenOpen ? ' fullscreen' : ''}"${this._fullscreenOpen ? ` role="dialog" aria-modal="true" aria-label="${T}"` : ''}>
+      <ha-card class="layout-${this._layout} motion-${this._animations} theme-${this._theme}${this._config.narrow_values ? ' narrow-values' : ''}${equalBuffer ? ' buffer-values-equal' : ''}${this._fullscreenOpen ? ' fullscreen' : ''}"${this._fullscreenOpen ? ` role="dialog" aria-modal="true" aria-label="${T}"` : ''}>
         <div class="head">
           ${T ? `<div class="title">${T}</div>` : '<div></div>'}
           <div class="head-right">
@@ -3316,24 +3351,17 @@ class HeatpumpFlowCard extends HTMLElement {
               ${P.combined ? `<text class="small zone-title on-tank" x="580" y="304" text-anchor="middle">${this._esc(i.heating_zone)}</text>`
     : `<text class="tank-title" x="${P.station ? 512 : 580}" y="310" text-anchor="${P.station ? 'end' : 'middle'}">${this._esc(i.buffer)}</text>
               <rect class="tank" x="520" y="320" width="120" height="200" rx="26" fill="url(#g-buf)"/>`}
-              <text class="tank-temp" id="t-buf-top" x="580" y="392" text-anchor="middle"></text>
+              <text class="tank-temp${equalBuffer ? ' buffer-value' : ''}" id="t-buf-top" x="580" y="${bufferY.buffer_top ?? 392}" text-anchor="middle"></text>
               <text class="small" id="t-buf-mode" x="580" y="542" text-anchor="middle"></text>
             </g>
-            ${this._has('buffer_middle') ? `<g class="tap" ${de('buffer_middle')}><text class="tank-sub" id="t-buf-middle" x="580" y="446" text-anchor="middle"></text></g>` : ''}
-            <g class="tap" ${de('buffer_bottom')}><text class="tank-sub" id="t-buf-bottom" x="580" y="502" text-anchor="middle"></text></g>
+            ${this._has('buffer_middle') ? `<g class="tap" ${de('buffer_middle')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-middle" x="580" y="${bufferY.buffer_middle ?? 446}" text-anchor="middle"></text></g>` : ''}
+            <g class="tap" ${de('buffer_bottom')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-bottom" x="580" y="${bufferY.buffer_bottom ?? 502}" text-anchor="middle"></text></g>
             ${this._tankHeaters('buffer', P).map((h) => this._heaterSvg(...h)).join('')}` : ''}
 
 
           ${P.solar ? this._solarSvg() : ''}
 
-          ${P.house ? `
-            <g class="tap" ${de(e.room ? 'room' : 'room_target')}>
-              <path class="house" d="M720 130 L830 50 L940 130 V240 H720 Z"/>
-              <text class="tank-title" x="830" y="118" text-anchor="middle">${this._esc(i.house)}</text>
-              <text class="house-temp" id="t-room" x="830" y="172" text-anchor="middle"></text>
-              <text class="house-sub" id="t-room-target" x="830" y="202" text-anchor="middle"></text>
-              ${this._sourceType === 'air' ? '' : '<text class="small" id="t-outdoor" x="830" y="226" text-anchor="middle"></text>'}
-            </g>` : (this._has('outdoor') && this._sourceType !== 'air' ? `<g class="tap" ${de('outdoor')}><text class="small" id="t-outdoor" x="880" y="120" text-anchor="middle"></text></g>` : '')}
+          ${P.house ? this._houseSvg() : (this._has('outdoor') && this._sourceType !== 'air' ? `<g class="tap" ${de('outdoor')}><text class="small" id="t-outdoor" x="880" y="120" text-anchor="middle"></text></g>` : '')}
         </svg>
         </div>
         <div class="side">
@@ -3903,7 +3931,38 @@ class HeatpumpFlowCard extends HTMLElement {
       </g>`;
   }
 
-  // Heating circuit n (1-3). Circuits 2 and 3 sit below circuit 1, fed by risers from its flow and return.
+  // One circuit keeps the established large room display. With several circuits, the house becomes a compact overview: one
+  // independently tappable row per circuit, with its configured name, actual/target temperatures and comfort dot (#140).
+  _houseSvg() {
+    const i = this._i; const e = this._e;
+    const de = (key) => (e[key] ? `data-entity="${this._esc(e[key])}"` : '');
+    if (this._hcCount === 1) {
+      return `<g class="tap" ${de(e.room ? 'room' : 'room_target')}>
+        <path class="house" d="M720 130 L830 50 L940 130 V240 H720 Z"/>
+        <text class="tank-title" x="830" y="118" text-anchor="middle">${this._esc(i.house)}</text>
+        <text class="house-temp" id="t-room" x="830" y="172" text-anchor="middle"></text>
+        <text class="house-sub" id="t-room-target" x="830" y="202" text-anchor="middle"></text>
+        ${this._sourceType === 'air' ? '' : '<text class="small" id="t-outdoor" x="830" y="226" text-anchor="middle"></text>'}
+      </g>`;
+    }
+    const rows = Array.from({ length: this._hcCount }, (_, x) => {
+      const n = x + 1; const s = n === 1 ? '' : String(n); const key = this._roomKey(n);
+      const target = this._roomKey(n, 'room_target'); const entityKey = e[key] ? key : target;
+      const name = this._config[n === 1 ? 'hc_name' : `hc${n}_name`] || `${i.heating_circuit} ${n}`;
+      const y = 118 + x * 21.5;
+      return `<g class="tap house-row" id="house-row${s}" ${de(entityKey)} data-name="${this._esc(name)}">
+        <circle class="house-comfort unknown" id="house-comfort${s}" cx="734" cy="${y - 4}" r="5"/>
+        <text class="house-row-name" x="746" y="${y}">${this._esc(name)}</text>
+        <text class="house-row-value" id="t-house-room${s}" x="950" y="${y}" text-anchor="end"></text>
+      </g>`;
+    }).join('');
+    return `<path class="house" d="M720 110 L842.5 25 L965 110 V262 H720 Z"/>
+      <text class="tank-title" x="842.5" y="91" text-anchor="middle">${this._esc(i.house)}</text>
+      ${rows}
+      ${this._sourceType === 'air' ? '' : `<g class="tap" ${de('outdoor')}><text class="small" id="t-outdoor" x="842.5" y="252" text-anchor="middle"></text></g>`}`;
+  }
+
+  // Heating circuit n (1-6). Circuits 2 to 6 sit below circuit 1, fed by risers from its flow and return.
   _circuitSvg(n) {
     const i = this._i; const e = this._e;
     const s = n === 1 ? '' : String(n);
@@ -3941,7 +4000,6 @@ class HeatpumpFlowCard extends HTMLElement {
         ${em.title}
         <text class="small" id="t-hc-mode${s}" x="880" y="524" text-anchor="middle"></text>
       </g>
-      ${this._hcCount > 1 ? `<g class="tap" ${de(e[this._roomKey(n)] ? this._roomKey(n) : this._roomKey(n, 'room_target'))}><text class="small" id="t-hc-room${s}" x="880" y="524" text-anchor="middle"></text></g>` : ''}
     </g>`;
   }
 
@@ -4214,7 +4272,8 @@ class HeatpumpFlowCard extends HTMLElement {
   _hideRing() { if (this._ring) { this._ring.remove(); this._ring = null; } }
 
   /* ---------- standby loss of the hot-water tank ---------- */
-  // The tank sensors (the uppermost is measured, all of them detect draw-off) and what tells charging from standby:
+  // The configured measurement sensor (otherwise the uppermost tank sensor) is fitted; every real tank sensor detects draw-off.
+  // What tells charging from standby:
   // the operating mode or the compressor with the valve, plus the DHW heater rod and the solar pump. Without a running
   // signal no standby window can be verified, so there is no value.
   // A thermostat (climate, water heater) keeps the temperature in an attribute, which the history query leaves out, so it
@@ -4222,9 +4281,12 @@ class HeatpumpFlowCard extends HTMLElement {
   _lossIds() {
     const keys = ['dhw_top', 'dhw_middle', 'dhw_bottom'].filter((k) => this._has(k));
     const sensors = keys.filter((k) => !['climate', 'water_heater'].includes(String(this._e[k]).split('.')[0]));
-    const temps = sensors.map((k) => this._e[k]);
+    const configured = this._e.dhw_loss_sensor;
+    const measured = configured && this._has('dhw_loss_sensor') && String(configured).startsWith('sensor.') ? configured : null;
+    const tankTemps = sensors.map((k) => this._e[k]);
+    const temps = measured ? [measured, ...tankTemps.filter((id) => id !== measured)] : tankTemps;
     const run = this._timelineIds();
-    if (!temps.length || sensors[0] !== keys[0] || !run) return null;
+    if (!temps.length || (configured ? !measured : sensors[0] !== keys[0]) || !run) return null;
     // A fresh-water station on the buffer has no tank of its own. In a combined storage the circuits draw heat from the same
     // tank, so the pump of every circuit must be known and every window with a running circuit pump is left out (docs/TOPOLOGY.md,
     // D3): one unmonitored circuit could draw heat that would count as standby loss.
@@ -4950,7 +5012,6 @@ class HeatpumpFlowCard extends HTMLElement {
 
     if (P.hc || this._hcCount > 1) {
       const pick = (...v) => v.find((x) => Number.isFinite(x)) ?? NaN;
-      const k2 = this._hcCount > 1 ? parseFloat(getComputedStyle(this._$('svg')).getPropertyValue('--k2')) || 1 : 1;
       // The shared trunk carries the water before it splits: the buffer or heat pump temperatures.
       stroke('hc-trunk-vl', this._vlColor(pick(this._n('buffer_top'), tFlow))); stroke('hc-trunk-rl', this._rlColor(pick(this._n('buffer_bottom'), tRet)));
       for (const { n, mode: cMode, on: hcOn, pump: hcPump } of F.circuits) {
@@ -4988,7 +5049,7 @@ class HeatpumpFlowCard extends HTMLElement {
         }
         // Own return sensor of the circuit only; the fallback to the buffer or heat pump return would repeat another label.
         if (this._config.hc_return_label) this._txtPre(`t-hc-rl${s}`, i.return_short, this._has(k('return')) && Number.isFinite(this._n(k('return'))) ? this._t(this._n(k('return'))) : '');
-        this._hcStatus(n, this._has(k('mode')) ? this._modeLabel(cMode, this._s(k('mode'))) : (hcPump ? i.running : ''), k2);
+        this._hcStatus(n, this._has(k('mode')) ? this._modeLabel(cMode, this._s(k('mode'))) : (hcPump ? i.running : ''));
         if (n === 1 && this._has('hc_pressure')) this._updatePressure('hc_pressure', 'hc', 'pressure-hc', 't-hc-pressure', i.hc_pressure);
       }
     }
@@ -5055,10 +5116,13 @@ class HeatpumpFlowCard extends HTMLElement {
       this._txt('t-valve', loop ? (toDhw ? i.valve_dhw : (cooling ? i.valve_cooling : i.valve_heating)) : '');
       // Without a top sensor the large value stays empty: the lower sensors show their value at their own position.
       const hasTop = this._has('dhw_top');
-      const top = this._n(hasTop ? 'dhw_top' : this._has('dhw_middle') ? 'dhw_middle' : 'dhw_bottom');
-      const bot = this._has('dhw_bottom') ? this._n('dhw_bottom') : top - 5;
+      const middle = this._has('dhw_middle') ? this._n('dhw_middle') : NaN;
+      const top = hasTop ? this._n('dhw_top') : NaN;
+      // A lower sensor says nothing reliable about the water above it. Keep an unmeasured upper zone neutral instead of
+      // painting the whole tank with a cool middle/bottom value (#215). With a measured top, the old two-point fallback stays.
+      const bot = this._has('dhw_bottom') ? this._n('dhw_bottom') : Number.isFinite(middle) ? middle : top - 5;
       this._$('g-dhw-top').setAttribute('stop-color', this._tankColor(top));
-      if (this._has('dhw_middle')) this._$('g-dhw-middle')?.setAttribute('stop-color', this._tankColor(this._n('dhw_middle')));
+      if (this._has('dhw_middle')) this._$('g-dhw-middle')?.setAttribute('stop-color', this._tankColor(middle));
       this._$('g-dhw-bottom').setAttribute('stop-color', this._tankColor(bot));
       this._txt('t-dhw-top', hasTop ? this._t(top) : '');
       this._txt('t-dhw-middle', this._has('dhw_middle') ? this._t(this._n('dhw_middle')) : '');
@@ -5096,11 +5160,28 @@ class HeatpumpFlowCard extends HTMLElement {
 
     // house
     if (P.house) {
-      const rt = this._n('room_target'); const r = this._n('room');
-      const tgt = Number.isFinite(rt) ? `${i.target} ${this._fmt(rt)} °C` : '';
-      // Room sensor missing or unknown: promote the target to the big line.
-      this._txt('t-room', Number.isFinite(r) ? this._t(r) : tgt);
-      this._txt('t-room-target', Number.isFinite(r) ? tgt : '');
+      if (this._hcCount === 1) {
+        const rt = this._n('room_target'); const r = this._n('room');
+        const tgt = Number.isFinite(rt) ? `${i.target} ${this._fmt(rt)} °C` : '';
+        // Room sensor missing or unknown: promote the target to the big line.
+        this._txt('t-room', Number.isFinite(r) ? this._t(r) : tgt);
+        this._txt('t-room-target', Number.isFinite(r) ? tgt : '');
+      } else {
+        for (let n = 1; n <= this._hcCount; n++) {
+          const s = n === 1 ? '' : String(n); const key = this._roomKey(n); const targetKey = this._roomKey(n, 'room_target');
+          const r = this._n(key); const rt = this._n(targetKey); const value = (x) => (Number.isFinite(x) ? this._fmt(x) : '–');
+          const hasRoom = !!this._e[key]; const hasTarget = !!this._e[targetKey];
+          const text = hasRoom && hasTarget ? `${value(r)} / ${value(rt)} °C` : hasRoom ? `${value(r)} °C` : hasTarget ? `${i.target} ${value(rt)} °C` : '–';
+          this._txt(`t-house-room${s}`, text);
+          const state = Number.isFinite(r) && Number.isFinite(rt) ? (r < rt - 0.5 ? 'below' : r > rt + 0.5 ? 'above' : 'on') : 'unknown';
+          const dot = this._$(`house-comfort${s}`); const row = this._$(`house-row${s}`);
+          if (dot) dot.setAttribute('class', `house-comfort ${state}`);
+          if (row) {
+            const comfort = state === 'unknown' ? '' : i[`comfort_${state}`];
+            row.dataset.a11y = `${row.dataset.name}: ${hasRoom ? `${i.room} ${value(r)} °C` : ''}${hasRoom && hasTarget ? ', ' : ''}${hasTarget ? `${i.target} ${value(rt)} °C` : ''}${comfort ? `; ${comfort}` : ''}`;
+          }
+        }
+      }
     }
     const outTxt = this._has('outdoor') ? `${i.outdoor} ${this._t(this._n('outdoor'))}` : '';
     this._txt('t-outdoor', outTxt); this._txt('t-outdoor-hp', outTxt);
@@ -5300,6 +5381,7 @@ HeatpumpFlowCard.styles = `
   .tank { stroke: var(--divider-color, rgba(127,127,127,.4)); stroke-width: 2; }
   .tank-temp { font-size: calc(26px * var(--kt, 1)); font-weight: 700; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.45); stroke-width: 4px; stroke-linejoin: round; }
   .tank-sub { font-size: 14px; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.35); stroke-width: 3px; }
+  .buffer-values-equal .buffer-value { font-size: calc(18px * var(--kt, 1)); font-weight: 600; stroke: rgba(0,0,0,.4); stroke-width: 3px; }
   .on-tank { fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.35); stroke-width: 3px; }
   .zone-title { font-weight: 600; }
   .zone-line { fill: none; stroke: rgba(255,255,255,.8); stroke-width: 2; stroke-dasharray: 6 5; }
@@ -5308,6 +5390,12 @@ HeatpumpFlowCard.styles = `
   .fws-plates { fill: none; stroke: var(--hfc-muted); stroke-width: 2; opacity: .25; }
   .house-temp { font-size: calc(26px * var(--kt, 1)); font-weight: 700; }
   .house-sub { font-size: calc(14px * var(--k2, 1)); }
+  .house-row-name { font-size: calc(12px * var(--k2, 1)); clip-path: polygon(0 0, 80px 0, 80px 100%, 0 100%); }
+  .house-row-value { font-size: calc(13px * var(--k2, 1)); font-weight: 600; }
+  .house-comfort { fill: var(--disabled-text-color, #9e9e9e); stroke: var(--card-background-color, #fff); stroke-width: 1.5; }
+  .house-comfort.below { fill: ${hfcVar('cool-strong')}; }
+  .house-comfort.on { fill: ${hfcVar('good')}; }
+  .house-comfort.above { fill: ${hfcVar('hot')}; }
   .coil { fill: none; stroke: rgba(255,255,255,.55); stroke-width: 3; stroke-linejoin: round; opacity: .25; }
   .coil.on { opacity: .6; stroke-width: 2.5; stroke-dasharray: 5 9; animation: hfc-cdash var(--hfc-coil, 1.4s) linear infinite; }
   .circ { opacity: .35; } .circ.on { opacity: 1; fill: ${hfcVar('cool-strong')}; }
@@ -5472,7 +5560,7 @@ HeatpumpFlowCard.styles = `
   /* narrow schematic (phones, narrow columns): larger type, secondary labels hidden */
   .stage { container-type: inline-size; }
   @container (max-width: 640px) { #svg { --k: 1.2; --ku: 1.1; --kp: 1; --k2: 1; --ks: 1.2; --kt: 1.15; } }
-  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .vol-label, .tank-sub, .pre, #t-valve, #t-circ, #t-dhw-mode { display: none; } }
+  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .vol-label, .tank-sub, .pre, #t-valve, #t-circ, #t-dhw-mode { display: none; } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values [id^="t-hc-rl"] { display: block; } }
   /* layout: compact – tighter spacing for narrow dashboard columns */
   ha-card.layout-compact { padding: 6px 6px 4px; }
   .layout-compact .head { margin: 0 2px 2px; }
@@ -5555,7 +5643,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     this._energyReq = true;
     HeatpumpFlowCard._energyPrefs = HeatpumpFlowCard._energyPrefs || this._hass.callWS({ type: 'energy/get_prefs' });
     HeatpumpFlowCard._energyPrefs.then((prefs) => {
-      this._energyMissing = HeatpumpFlowCard._energyInfo(prefs).missing;
+      this._energyMissing = HeatpumpFlowCard._energyInfo(prefs, this._hass).missing;
       this._render();
     }).catch(() => { this._energyMissing = []; });
   }
@@ -5623,7 +5711,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       const field = (key) => String(computeLabel({ name: key })).replace(/\s*\(.*\)\s*$/, '');
       warn.push(L.warn_disabled.replace('{list}', disabled.map((d) => `${field(d.key)}: ${d.name ? `${d.name} (${d.id})` : d.id}`).join('; ')));
     }
-    if (this._config.power_sources !== 'manual' && this._energyMissing?.length) {
+    if (this._config.power_sources !== 'manual' && !['pv', 'battery', 'grid'].some((key) => r.entities[key]) && this._energyMissing?.length) {
       const names = this._energyMissing.map((type) => ({ solar: L.pv, battery: L.battery, grid: L.grid }[type])).join(', ');
       warn.push(L.warn_energy_sources.replace('{sources}', names));
     }

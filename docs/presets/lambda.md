@@ -12,7 +12,7 @@ That's it. The card finds your entities itself, including the 2nd heating stage 
 
 With the E-Manager enabled in the integration, the card also shows when it asks the heat pump to take up PV surplus (the E-Manager setpoint above 0): a "PV surplus" chip, hatched "Heating · PV surplus" periods in the timeline (`timeline: true`) and the tile `pv_boost_share`. See `pv_boost` under "Entity keys".
 
-PV, battery and grid come from your Energy dashboard automatically, as long as it has power sensors configured (Settings → Dashboards → Energy). If you already have sensors for the heat pump's share of PV, battery and grid, or want a room average, add them yourself; own `pv` / `battery` / `grid` sensors replace the Energy dashboard:
+PV, battery and grid come from your Energy dashboard automatically, as long as it has power sensors configured (Settings → Dashboards → Energy). Power sensors may report W, kW or MW; Wh, kWh and MWh are energy counters and cannot provide a live flow. If you already have sensors for the heat pump's share of PV, battery and grid, or want a room average, add them yourself; own `pv` / `battery` / `grid` sensors replace the Energy dashboard:
 ```yaml
 type: custom:heatpump-flow-card
 preset: lambda
@@ -50,6 +50,6 @@ template:
         state: "{{ states('sensor.inverter_battery_power') | float(0) * -1 }}"
 ```
 
-For automatic detection, each configured Energy-dashboard source needs a power sensor (`stat_rate`), not only a kWh counter. Several grid sources (for example two tariffs on one meter) are covered by one power sensor on any of them; several PV arrays or batteries need one each. The card and editor name sources that are missing one. If exactly one configured source has no usable live power, its displayed share is the remainder between heat-pump power and the known sources.
+For automatic detection, each configured Energy-dashboard source needs a current-power sensor (`stat_rate`) in W, kW or MW, not only a Wh, kWh or MWh counter. Several grid sources (for example two tariffs on one meter) are covered by one power sensor on any of them; several PV arrays or batteries need one each. The card and editor name sources that are missing one. If exactly one configured source has no usable live power, its displayed share is the remainder between heat-pump power and the known sources.
 
 Only the sources the installation has are drawn: without a battery entity (manual) or a battery in the Energy dashboard, the schematic shows PV and grid only. A configured source whose sensor is unavailable stays visible, dimmed.
