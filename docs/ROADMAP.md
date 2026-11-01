@@ -12,7 +12,7 @@ The 0.16.0 line was merged to `main` in [#222](https://github.com/Sturmi77/heatp
 
 The immediate post-merge sequence before any public release is:
 
-1. Ship the compatibility fix for EMS-ESP 3.7.3 descriptive Home Assistant entity ids reported by a WLW166i installation ([#225](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/225)); impact high, effort S). Keep the established short ids and gas-boiler exclusion intact.
+1. Ship the compatibility fix for EMS-ESP 3.7.3 descriptive Home Assistant entity ids reported by a WLW166i installation ([#225](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/225), [#226](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/226); impact high, effort S). Keep the established short ids and gas-boiler exclusion intact.
 2. Let the merged 0.16 changes and the EMS-ESP follow-up receive real-installation feedback; treat regressions as release blockers. Completed feedback issues stay open until the eventual public release.
 3. Do not start the optional indoor-unit enclosure ([#224](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/224)) yet. It is presentation rather than core hydraulic behaviour and still needs model/manual evidence and a reusable scope across indoor units.
 4. Only prepare the release when explicitly requested; until then create no tag, GitHub release or HACS release asset.
