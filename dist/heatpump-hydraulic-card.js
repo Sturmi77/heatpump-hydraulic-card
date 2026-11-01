@@ -503,8 +503,9 @@ const HFC_PRESETS = {
   },
 
   // Bosch, Buderus, Junkers, Nefit, Worcester and other EMS-bus heat pumps via the EMS-ESP gateway (MQTT discovery).
-  // Entity ids come from EMS-ESP short names (boiler_hpactivity, …) and do not depend on the language;
-  // the "multiple instances" entity format adds a prefix, which is detected. Enum texts follow the EMS-ESP language.
+  // Entity ids come either from EMS-ESP short names (boiler_hpactivity, …) or its descriptive Home Assistant object ids
+  // (boiler_compressor_activity, …); the "multiple instances" entity format adds a prefix, which is detected. Enum texts
+  // follow the EMS-ESP language.
   emsesp: {
     name: 'EMS-ESP (Bosch, Buderus, Junkers, Nefit …)',
     tested: true,
@@ -512,40 +513,41 @@ const HFC_PRESETS = {
     source_type: (e, hass) => (/hpbrinein$/.test(e.source_in || '') && hass.states[e.source_in] ? 'brine' : 'air'),
     detect: (ctx) => {
       // Gas boilers have curflowtemp as well; only heat pump entities count.
-      const id = ctx.match(/^sensor\.(?:(.+)_)?boiler_(hpactivity|hptc1)$/, 'mqtt');
+      const id = ctx.match(/^sensor\.(?:(.+)_)?boiler_(hpactivity|hptc1|compressor_activity)$/, 'mqtt');
       return id === undefined ? undefined : (id.match(/^sensor\.(?:(.+)_)?boiler_/)[1] || '');
     },
     entities: (p, i) => {
       const x = p ? `${p}_` : '';
-      const b = (k) => [`binary_sensor.${x}boiler_${k}`, `sensor.${x}boiler_${k}`];
+      const b = (...ks) => ks.flatMap((k) => [`binary_sensor.${x}boiler_${k}`, `sensor.${x}boiler_${k}`]);
+      const sw = (...ks) => ks.map((k) => `switch.${x}boiler_${k}`);
       const s = (...ks) => ks.map((k) => `sensor.${x}${k}`);
       const hc = `hc${i.hc}`;
       return {
-        mode: s('boiler_hpactivity'),
-        compressor: b('hpcompon'),
-        valve: b('hp3way'),
-        power: s('boiler_hpcurrpower'),
-        flow: s('boiler_hptc1', 'boiler_curflowtemp'),
-        return: s('boiler_hptc0', 'boiler_rettemp'),
+        mode: s('boiler_hpactivity', 'boiler_compressor_activity'),
+        compressor: b('hpcompon').concat(s('boiler_compressor_speed')),
+        valve: b('hp3way').concat(sw('3_way_valve')),
+        power: s('boiler_hpcurrpower', 'boiler_compressor_current_power'),
+        flow: s('boiler_hptc1', 'boiler_curflowtemp', 'boiler_current_flow_temperature'),
+        return: s('boiler_hptc0', 'boiler_rettemp', 'boiler_return_temperature'),
         volume: s('boiler_pc0flow'),
         source_in: s('boiler_hptl2', 'boiler_hpbrinein'),
         source_out: s('boiler_hpbrineout'),
-        heater: b('auxheaterstatus').concat(s('boiler_auxheaterlevel')),
-        outdoor: s('boiler_outdoortemp', 'thermostat_outdoortemp'),
-        dhw_top: s('boiler_dhw_curtemp', 'boiler_wwcurtemp', 'boiler_dhw_storagetemp1'),
+        heater: b('auxheaterstatus', 'aux_heater_status').concat(s('boiler_auxheaterlevel')),
+        outdoor: s('boiler_outdoortemp', 'thermostat_outdoortemp', 'boiler_outside_temperature'),
+        dhw_top: s('boiler_dhw_curtemp', 'boiler_wwcurtemp', 'boiler_dhw_storagetemp1', 'boiler_dhw_current_extern_temperature'),
         dhw_bottom: s('boiler_dhw_storagetemp2'),
         dhw_target: s('boiler_dhw_seltemp', 'boiler_wwseltemp'),
-        circulation: b('dhw_circ').concat(b('wwcirc')),
-        hc_pump: [`binary_sensor.${x}mixer_${hc}_pumpstatus`, `sensor.${x}mixer_${hc}_pumpstatus`],
+        circulation: b('dhw_circ', 'wwcirc').concat(sw('dhw_circulation_active')),
+        hc_pump: [`binary_sensor.${x}mixer_${hc}_pumpstatus`, `sensor.${x}mixer_${hc}_pumpstatus`, `binary_sensor.${x}boiler_heating_pump`],
         hc_flow: s(`mixer_${hc}_flowtemphc`, `thermostat_${hc}_targetflowtemp`),
-        room: s(`thermostat_${hc}_currtemp`),
+        room: s(`thermostat_${hc}_currtemp`, `thermostat_${hc}_current_room_temperature`),
         room_target: s(`thermostat_${hc}_seltemp`),
         program: s(`thermostat_${hc}_modetype`),
         hours: s('boiler_uptimecomp', 'boiler_uptimetotal'),
         starts_total: s('boiler_totalcompstarts'),
         energy_total: s('boiler_nrgconstotal'),
         heat_total: s('boiler_nrgsupptotal'),
-        compressor_speed: s('boiler_hpcompspd'),
+        compressor_speed: s('boiler_hpcompspd', 'boiler_compressor_speed'),
         evap_temp: s('boiler_hppl1'),
         cond_temp: s('boiler_hpph1'),
         suction_temp: s('boiler_hptr5'),
