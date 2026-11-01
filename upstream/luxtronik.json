@@ -1,9 +1,8 @@
 {
   "preset": "luxtronik",
   "reviewed": {
-    "date": "2026-10-26",
-    "version": "2026.10.18",
-    "note": "Built from the 2026.10.18 source, no installation."
+    "date": "2026-11-01",
+    "version": "2026.11.01"
   },
   "sources": [
     {

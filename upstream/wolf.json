@@ -1,9 +1,9 @@
 {
   "preset": "wolf",
   "reviewed": {
-    "date": "2026-10-26",
-    "version": null,
-    "note": "Baseline: changes before this date were not tracked. wolf_smartset reviewed from source at v0.3.0 and main e0b859a (PR 10), no installation."
+    "date": "2026-11-01",
+    "version": "0.0.52",
+    "note": "wolf_smartset v0.5.0 checked: every translation key the preset uses still exists."
   },
   "sources": [
     {

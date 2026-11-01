@@ -885,7 +885,8 @@ const HFC_PRESETS = {
         outdoor: s('outdoor_temperature'),
         heater: b('additional_heat_generator'),
         dhw_top: s('dhw_temperature'),
-        dhw_target: ctx.key('luxtronik2', 'number', 'dhw_target_temperature'),
+        // The controller's current target (calc 18, firmware x.90.1) where the integration has no target number.
+        dhw_target: [ctx.key('luxtronik2', 'number', 'dhw_target_temperature'), ctx.key('luxtronik2', 'sensor', 'dhw_target_temperature_controller')].filter(Boolean),
         solar_collector: s('solar_collector_temperature'),
         solar_pump: b('solar_pump'),
         hc_flow: mixer ? mixFlow : undefined,
@@ -982,7 +983,8 @@ const HFC_PRESETS = {
           hc_pump: b(`heating_circuit_${n}_pump`, `pump_on_hk${n}`),
         } : {}),
         ...(n === 1 ? { room: roomActual, room_target: roomTarget, hc_pressure: reading(s('heater_pressure')) } : { hc_room: roomActual, hc_room_target: roomTarget }),
-        program: k('select', 'operation_mode'),
+        // THZ/LWZ units get their own operation-mode select (`operation_mode_thz`, integration after 2026.9).
+        program: k('select', 'operation_mode', 'operation_mode_thz'),
         compressor_speed: reading(s('compressor_speed')),
         hot_gas: reading(s('hot_gas_temperature_wp1', 'hot_gas_temperature')),
         high_pressure: reading(s('high_pressure_wp1', 'high_pressure')),
@@ -1005,7 +1007,10 @@ const HFC_PRESETS = {
       };
     },
     errors: (p, i, ctx) => [ctx.key('stiebel_eltron_isg', 'binary_sensor', 'error_status')].filter(Boolean),
-    controls: (p, i, ctx) => [ctx.key('stiebel_eltron_isg', 'select', 'operation_mode'), ctx.key('stiebel_eltron_isg', 'number', 'comfort_water_temperature_target')].filter(Boolean),
+    controls: (p, i, ctx) => {
+      const key = (domain, ...tks) => tks.map((tk) => ctx.key('stiebel_eltron_isg', domain, tk)).find(Boolean);
+      return [key('select', 'operation_mode', 'operation_mode_thz'), key('number', 'comfort_water_temperature_target', 'comfort_water_temperature_target_thz')].filter(Boolean);
+    },
     details: (p, i, ctx) => ['compressor_heating', 'compressor_heating_water', 'compressor_heating_hp_1', 'cooling_runtime', 'nhz_1_runtime', 'nhz_2_runtime',
       'electrical_booster_heating', 'electrical_booster_heating_water', 'solar_runtime', 'efficiency_heating_1_12_m', 'efficiency_dhw_1_12_m',
       'efficiency_cooling_1_12_m', 'sg_ready_state']

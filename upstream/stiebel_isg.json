@@ -1,9 +1,9 @@
 {
   "preset": "stiebel_isg",
   "reviewed": {
-    "date": "2026-10-27",
+    "date": "2026-11-01",
     "version": "2026.9",
-    "note": "Built from the 2026.9 source, confirmed on a WPMsystem (#69, 29.10.2026)."
+    "note": "main 32e8a67 (unreleased refactor) checked: no translation key removed; *_thz select/number variants mapped as fallbacks for program and quick controls."
   },
   "sources": [
     {

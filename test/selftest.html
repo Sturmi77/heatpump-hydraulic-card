@@ -1525,6 +1525,13 @@
     check(e.hc_flow === `sensor.${px}_flow_in_circuit1_temperature` && e.hc_setpoint === `sensor.${px}_flow_in_circuit1_target_temperature` && e.hc_pump === `binary_sensor.${px}_circulation_pump_heating`, 'Luxtronik mixing circuit 1');
     check(e.source_in === `sensor.${px}_heat_source_input_temperature` && e.hot_gas === `sensor.${px}_hot_gas_temperature` && e.superheat === `sensor.${px}_overheating_temperature`
       && e.errors === undefined && e.circulation === undefined, 'Luxtronik source, refrigerant circuit; no error and circulation mapping');
+    // Without the target number the controller's current target (calc 18, upstream review #242) is the fallback.
+    const luxTarget = `sensor.${px}_dhw_target_temperature_controller`;
+    const luxReg = { ...Object.fromEntries(Object.entries(reg).filter(([id]) => id !== `number.${px}_dhw_target_temperature`)),
+      [luxTarget]: { entity_id: luxTarget, platform: 'luxtronik2', translation_key: 'dhw_target_temperature_controller' } };
+    const luxStates = Object.fromEntries(Object.entries(toStates(s.states('heat'))).filter(([id]) => id !== `number.${px}_dhw_target_temperature`));
+    const luxFallback = C._resolve(s.config, hassOf({ ...luxStates, ...toStates({ [luxTarget]: ['48.0', '°C'] }) }, luxReg)).entities;
+    check(luxFallback.dhw_target === luxTarget, `Luxtronik: the controller's hot-water target stands in for a missing target number (${luxFallback.dhw_target})`);
     const two = C._resolve({ ...s.config, hc_count: 2 }, hass('heat')).entities;
     check(two.hc2_flow === undefined && two.hc2_setpoint === undefined, 'Luxtronik: mixing circuit 2 without a target counts as not installed');
     const two2 = C._resolve({ ...s.config, hc_count: 2 }, hass('heat', { [`sensor.${px}_flow_in_circuit2_target_temperature`]: ['36.0', '°C'], [`sensor.${px}_flow_in_circuit2_temperature`]: ['35.2', '°C'] })).entities;
@@ -1563,6 +1570,13 @@
     check(e.room === sid('actual_room_temperature_hk1') && e.room_target === sid('target_room_temperature_hk1') && e.program === isgId('select', 'operation_mode'), 'Stiebel ISG room temperature with target and the operating mode select');
     check(e.source_in === undefined && e.brine_pressure === undefined && e.solar_collector === undefined && e.hot_gas === sid('hot_gas_temperature_wp1') && e.circulation === bid('circulation_pump') && e.heater === bid('nhz_stages_running'),
       'Stiebel ISG: heat source and solar collector that read unavailable are left out, refrigerant circuit, circulation pump and heater are mapped');
+    // THZ/LWZ units: the integration after 2026.9 gives them their own select and hot-water target (upstream review #245).
+    const thzIds = { select: isgId('select', 'operation_mode'), number: isgId('number', 'comfort_water_temperature_target') };
+    const thzReg = Object.fromEntries(Object.entries(reg).map(([id, entry]) => [id,
+      id === thzIds.select ? { ...entry, translation_key: 'operation_mode_thz' } : id === thzIds.number ? { ...entry, translation_key: 'comfort_water_temperature_target_thz' } : entry]));
+    const thz = C._resolve(s.config, hassOf(toStates(s.states('heat')), thzReg));
+    check(thz.entities.program === thzIds.select && thz.presetControls.join() === [thzIds.select, thzIds.number].join(),
+      `Stiebel ISG: THZ operation mode and hot-water target are found as program and quick controls (${thz.presetControls.join()})`);
     const two = C._resolve({ ...s.config, hc_count: 2 }, hass('heat')).entities;
     check(two.hc2_flow === undefined && two.hc2_pump === undefined && two.hc2_pressure === undefined, 'Stiebel ISG: circuit 2 that reads unavailable is not mapped');
     const two2 = C._resolve({ ...s.config, hc_count: 2 }, hass('heat', { [sid('actual_temperature_hk2')]: ['31.0', '°C'], [sid('target_temperature_hk2')]: ['30.5', '°C'] })).entities;

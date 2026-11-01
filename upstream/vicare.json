@@ -1,9 +1,9 @@
 {
   "preset": "vicare",
   "reviewed": {
-    "date": "2026-10-26",
+    "date": "2026-11-01",
     "version": null,
-    "note": "Baseline: changes before this date were not tracked."
+    "note": "HA dev 2026-11-01: room_temperature/room_humidity come from ViCare room controls, one device per room, without translation key; not mapped (no unambiguous room for the card). Holiday program and pellet sensors not used."
   },
   "sources": [
     {
