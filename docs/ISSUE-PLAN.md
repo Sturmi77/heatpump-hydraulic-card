@@ -29,6 +29,26 @@
 | 2 | [#300 · Show measurements for a selected operating cycle](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/300) | Extend the existing timeline selection with heating and DHW run details. Match two real recorder traces, label mode-only phases and partial runs, and leave unsupported measurements empty. |
 | 3 | [#299 · Confirm ambiguous hydraulic layouts in the editor](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/299) | Choose the first prompts from milestone 1 evidence; this milestone now follows the cycle details (0.20). Provide preview, skip, cancel and explicit save. Compare fresh setup outcomes with the baseline and test existing overrides. |
 
+## Plan for 0.19.0 · Understand a cycle
+
+Agreed on 4 November after the mockup of the run details. One pull request per step, each with self-test, topology test, changelog fragment and README. Steps 4 to 6 change the same timeline code and run one after the other; steps 11 and 12 can come at any time. During the field test ([#298](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/298)) preset detection and the setup path stay unchanged; display options do not affect the measurement.
+
+| Phase | Step | Issue | Content |
+| --- | --- | --- | --- |
+| 0 · Housekeeping | 1 | [#321](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/321) | Merge, swap the milestones, move [#289](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/289) and [#4](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/4), link the field-test form in [#1](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) and [#298](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/298). |
+| | 2 | [#254](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/254), [#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173), [#322](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/322) | Replies: ESPAltherma heating confirmed, cascade entities per key, condensate tray heater to Later; Luxtronik ground source in the upstream discussion. |
+| 1 · Bugs and presets | 3 | [#323](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/323) | ESPAltherma: no derived superheat, evaporation from `low_pressuret` if it fits, tested after a hot-water charge. |
+| 2 · Runs and the detail panel | 4 | [#324](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/324) | Runs from the compressor, phases without one, partial runs at the window edges. |
+| | 5 | [#325](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/325) | Detail panel under the timeline as in the mockup; `timeline_details`. |
+| | 6 | [#326](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/326) | Values per run for hot water and heating, fetched for the run window only. |
+| 3 · Measurements | 7 | [#290](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/290) | Circuit spread tile; the same rule in the run details. |
+| | 8 | [#23](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/23) | Several entities per key: averages for temperature and humidity, rules for units and missing values. |
+| | 9 | [#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173) | Cascade: power and heat of both units through [#23](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/23), per-key entries stay possible, no system COP with a unit missing. |
+| | 10 | [#327](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/327) | Energy and COP per run, only where power and heat cover the run. |
+| 4 · Independent | 11 | [#289](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/289) | Flow rates in l/min as a display option. |
+| | 12 | [#4](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/4) | Phone readability; n42net offered a pull request, the option name is agreed first. |
+| 5 · Acceptance and release | 13 | [#300](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/300) | Compare the run details with recorder traces of at least two installations (the maintainer's Lambda, the cascade in [#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173) or the Daikin in [#254](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/254)); then release 0.19.0. |
+
 ## Scope and follow-up by issue
 
 ### Correct the hydraulic view and complete the 0.18 field follow-up
