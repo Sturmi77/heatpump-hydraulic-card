@@ -1512,6 +1512,8 @@
     const rows = tileRows(card);
     check(JSON.stringify(rows) === JSON.stringify([['Circuit spread', '2.1 K'], ['Circuit spread · OG', '–']]),
       `#290: circuit spread per circuit, named after the circuit, "–" while it stands, none beyond hc_count (${JSON.stringify(rows)})`);
+    card.hass = hassOf(toStates({ ...st, 'sensor.hf': ['89.6', '°F'], 'sensor.hr': ['86', '°F'] })); await wait(10);
+    check(tileRows(card)[0][1] === '2.0 K', `#290: a spread of sensors in °F is a kelvin difference (${tileRows(card)[0][1]})`);
     card.remove();
     const hass = hassOf(st);
     // Without a selection: the editor always lists tiles that are already selected.
