@@ -10,7 +10,7 @@ const HFC_VERSION = '0.18.0';
 // Address this file was loaded from: shows at once when a dashboard resource still points to an old file.
 const HFC_SCRIPT_URL = (() => {
   try {
-    if (document.currentScript?.src) return document.currentScript.src;
+    if (document.currentScript?.src) return document.currentScript.src
     return performance.getEntriesByType('resource').map((r) => r.name).find((n) => /heatpump-(flow|hydraulic)-card[^/?]*\.js/.test(n)) || '';
   } catch (e) { return ''; }
 })();
@@ -1303,7 +1303,7 @@ const HFC_PRESETS = {
 // Built-in languages: one entry here, one block in HFC_I18N (card texts) and one in HFC_EDITOR (editor labels), see
 // docs/TRANSLATING.md. The value is the name of the language in that language. A language may be translated in part:
 // every missing text falls back to English. `npm run i18n:check` verifies the blocks.
-const HFC_LANGUAGES = { en: 'English', de: 'Deutsch', sk: 'Slovenčina', cs: 'Čeština', nl: 'Nederlands' };
+const HFC_LANGUAGES = { en: 'English', de: 'Deutsch', pl: 'Polski', sk: 'Slovenčina', cs: 'Čeština', nl: 'Nederlands' };
 
 const HFC_I18N = {
   en: {
@@ -1340,7 +1340,7 @@ const HFC_I18N = {
       starts: 'Compressor starts', cycles_heating: 'Heating cycles', cycles_dhw: 'DHW cycles', cycles_cooling: 'Cooling cycles', defrosts: 'Defrosts',
       hours: 'Compressor hours', hours_per_start: 'Runtime per start', load_classes: 'Load classes 1-5', aux_hours: 'Heater hours', aux_starts: 'Heater starts',
       spread: 'Spread', volume: 'Flow rate', heat_estimated: 'Heat output', power: 'Power', heat_live: 'Heat output', compressor_speed: 'Compressor',
-      source_spread: 'Source spread', outdoor: 'Outdoor', dhw_top: 'DHW tank', room: 'Room', brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', pv_share: 'PV share today',
+      source_spread: 'Source spread', outdoor: 'Outdoor', dhw_top: 'DHW tank', room: 'Room', brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', hc_spread: 'Circuit spread', pv_share: 'PV share today',
       pv_boost_share: 'PV surplus share of heating', pv_production: 'PV yield', solar_thermal: 'Solar thermal', cost: 'Cost', dhw_loss: 'DHW standby loss',
     },
     periods: { now: 'now', today: 'today', yesterday: 'yesterday', week: 'week', month: 'month', year: 'year', total: 'total' },
@@ -1383,7 +1383,7 @@ const HFC_I18N = {
       starts: 'Verdichterstarts', cycles_heating: 'Heizzyklen', cycles_dhw: 'WW-Zyklen', cycles_cooling: 'Kühlzyklen', defrosts: 'Abtauungen',
       hours: 'Verdichterstunden', hours_per_start: 'Laufzeit pro Start', load_classes: 'Lastklassen 1-5', aux_hours: 'Heizstab-Stunden', aux_starts: 'Heizstab-Starts',
       spread: 'Spreizung', volume: 'Volumenstrom', heat_estimated: 'Wärmeleistung', power: 'Leistung', heat_live: 'Wärmeleistung', compressor_speed: 'Verdichter',
-      source_spread: 'Spreizung Quelle', outdoor: 'Außen', dhw_top: 'WW-Speicher', room: 'Raum', brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', pv_share: 'PV-Anteil heute',
+      source_spread: 'Spreizung Quelle', outdoor: 'Außen', dhw_top: 'WW-Speicher', room: 'Raum', brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', hc_spread: 'Spreizung Heizkreis', pv_share: 'PV-Anteil heute',
       pv_boost_share: 'PV-Überschuss-Anteil am Heizen', pv_production: 'PV-Ertrag', solar_thermal: 'Solarthermie', cost: 'Kosten', dhw_loss: 'WW-Standbyverlust',
     },
     periods: { now: 'aktuell', today: 'heute', yesterday: 'gestern', week: 'Woche', month: 'Monat', year: 'Jahr', total: 'gesamt' },
@@ -1392,6 +1392,53 @@ const HFC_I18N = {
       frost: 'Frostschutz', circulate: 'Umwälzen', off: 'Aus', legionella: 'Legionellenschutz', trailing: 'Nachlauf',
     },
   },
+  
+// Polish by Krzysztonek
+  pl: {
+    not_found: 'Nie znaleziono encji dla tego presetu. Sprawdź integrację i prefiks lub otwórz edytor karty.',
+    start: 'Nie znaleziono obsługiwanej integracji pompy ciepła. Otwórz edytor karty, aby wybrać preset lub zmapować encje.', start_link: 'Obsługiwane integracje',
+    title: 'Pompa ciepła', heat_pump: 'Pompa ciepła', dhw: 'C.W.U.', buffer: 'Bufor', series_tank: 'Bufor szeregowy', combined_tank: 'Zbiornik kombi', heating_zone: 'Ogrzewanie', fresh_water_station: 'Stacja świeżej wody', heating_circuit: 'Obieg grzewczy',
+    house: 'Pokoje', room: 'Pokój', room_target: 'Temp. docelowa pokoju', humidity: 'Wilgotność', dew_point: 'Punkt rosy', dew_margin: 'Margines punktu rosy', dew_warning: 'ryzyko kondensacji', flow_short: 'Zasilanie', comfort_below: 'poniżej celu', comfort_on: 'w celu', comfort_above: 'powyżej celu', running: 'praca', compressor_off: 'Sprężarka wył.', source_in: 'Wlot powietrza', outdoor: 'Zewnątrz',
+    energy_missing: 'Panel energii: brak czujnika mocy dla {sources}; same liczniki energii nie pokazują przepływu na żywo.',
+    brine_in: 'Solanka wejście', brine_out: 'Solanka wyjście', well_in: 'Woda gruntowa wejście', well_out: 'Woda gruntowa wyjście',
+    details: 'Szczegóły', sec_operation: 'Praca', sec_hydraulic: 'Ciśnienia hydrauliczne', sec_refrigerant: 'Obieg czynnika chłodniczego', sec_cutouts: 'Wyłączenia ochronne (liczba zdarzeń)', sec_more: 'Więcej',
+    diagnostic_copy: 'Kopiuj raport diagnostyczny', diagnostic_copied: 'Skopiowano raport diagnostyczny', diagnostic_failed: 'Nie udało się skopiować raportu diagnostycznego',
+    fullscreen_open: 'Otwórz na pełnym ekranie', fullscreen_close: 'Zamknij pełny ekran',
+    det: {
+      hours: 'Czas pracy sprężarki', starts_total: 'Liczba uruchomień sprężarki', aux_hours: 'Czas pracy grzałki', energy_total: 'Energia elektryczna ogółem',
+      cutout_high_pressure: 'Wyłączenia wysokie ciśnienie', cutout_low_pressure: 'Wyłączenia niskie ciśnienie', cutout_temperature: 'Wyłączenia temperatura',
+      env_energy: 'Energia z otoczenia ogółem', heat_total: 'Ciepło ogółem', cop_total: 'COP całkowity', compressor_speed: 'Sprężarka', evap_temp: 'Parowanie', cond_temp: 'Kondensacja',
+      suction_temp: 'Gaz ssawny', hot_gas: 'Gorący gaz', liquid_temp: 'Linia cieczowa', low_pressure: 'Niskie ciśnienie', high_pressure: 'Wysokie ciśnienie',
+      eev: 'Zawór rozprężny', superheat: 'Przegrzanie', subcooling: 'Dochłodzenie',
+    },
+    boiler: 'Kocioł', boiler_off: 'Kocioł wył.', mixer: 'Mieszacz', mixer_opening: 'otwieranie', mixer_closing: 'zamykanie',
+    source_flow: 'Źródło', target: 'Cel', curve_offset: 'krzywa', curve_shift: 'przesunięcie', return_short: 'Powrót', error: 'Błąd', circulation: 'Cyrk.', circulation_from: 'od', circulation_until: 'do', valve_dhw: 'C.W.U.', solar: 'Kolektor słoneczny',
+    brine_pressure: 'Ciśnienie solanki', hc_pressure: 'Ciśnienie c.o.', pressure_normal: 'normalne', pressure_warning: 'ostrzeżenie', pressure_critical: 'krytyczne',
+    timeline_title: 'Ostatnie {h} godz.', timeline_gap: 'Brak danych', timeline_aria: 'Tryb pracy z ostatnich {h} godzin. Strzałki wybierają okres.',
+    run_series: 'cykl {n} od {t}', run_pause: 'przerwa przed {d}', run_partial: 'rozpoczęto przed osiä czasu', run_ongoing: 'nadal trwa', run_phase: 'okres pracy, brak danych sprężarki', run_close: 'Zamknij', run_flow: 'Zasilanie', run_reached: 'osiągnięto', run_missed: '{d} K poniżej', run_heater: 'Grzałka elektryczna', run_on: 'włączona', run_off: 'wyłączona',
+    programs: { eco: 'Eco', night: 'Noc', party: 'Party', holiday: 'Wakacje' },
+    sg_ready: { normal: 'SG normalny', blocked: 'Blokada dostawcy', boost: 'SG podbicie', forced: 'SG wymuszenie' },
+    valve_heating: 'Ogrzewanie', valve_cooling: 'Chłodzenie', bypass: 'Bypass', pv: 'PV', pv_boost: 'Nadwyżka PV', battery: 'Bateria', grid: 'Sieć',
+    stat_cop_heating: 'COP ogrzewania dzisiaj', stat_cop_dhw: 'COP C.W.U. dzisiaj', stat_energy: 'Energia dzisiaj',
+    stat_starts: 'Uruchomienia dzisiaj', stat_spread: 'Różnica temp.', stat_volume: 'Przepływ', stat_heat: 'Moc grzewcza', pv_share: 'PV',
+    tiles: {
+      cop_live: 'COP na żywo', cop_heating: 'COP ogrzewania', cop_dhw: 'COP C.W.U.', cop_cooling: 'EER chłodzenia', cop_total: 'COP całkowity', spf: 'SPF (roczny)',
+      energy: 'Energia elektryczna', env_energy: 'Energia z otoczenia', energy_heating: 'Energia ogrzewanie', energy_dhw: 'Energia C.W.U.', energy_cooling: 'Energia chłodzenie',
+      energy_defrost: 'Energia odszranianie', energy_standby: 'Czuwanie', energy_aux: 'Energia grzałka',
+      heat: 'Ciepło', heat_heating: 'Ciepło ogrzewanie', heat_dhw: 'Ciepło C.W.U.', heat_cooling: 'Moc chłodnicza', heat_defrost: 'Ciepło odszranianie',
+      starts: 'Uruchomienia sprężarki', cycles_heating: 'Cykle ogrzewania', cycles_dhw: 'Cykle C.W.U.', cycles_cooling: 'Cykle chłodzenia', defrosts: 'Odszraniania',
+      hours: 'Czas pracy sprężarki', hours_per_start: 'Czas pracy na cykl', load_classes: 'Klasy obciążenia 1-5', aux_hours: 'Czas pracy grzałki', aux_starts: 'Uruchomienia grzałki',
+      spread: 'Różnica temp.', volume: 'Przepływ', heat_estimated: 'Moc grzewcza', power: 'Moc pobierana', heat_live: 'Moc grzewcza', compressor_speed: 'Sprężarka',
+      source_spread: 'Różnica temp. źródła', outdoor: 'Zewnątrz', dhw_top: 'Zbiornik C.W.U.', room: 'Pokój', brine_pressure: 'Ciśnienie solanki', hc_pressure: 'Ciśnienie c.o.', pv_share: 'Udział PV dzisiaj',
+      pv_boost_share: 'Udział nadwyżki PV w ogrzewaniu', pv_production: 'Produkcja PV', solar_thermal: 'Kolektor słoneczny', cost: 'Koszt', dhw_loss: 'Strata postojowa C.W.U.',
+    },
+    periods: { now: 'teraz', today: 'dzisiaj', yesterday: 'wczoraj', week: 'tydzień', month: 'miesiąc', year: 'rok', total: 'łącznie' },
+    modes: {
+      idle: 'Czuwanie', heating: 'Ogrzewanie', dhw: 'C.W.U.', cooling: 'Chłodzenie', defrost: 'Odszranianie', blocked: 'Zablokowano',
+      frost: 'Ochrona przed mrozem', circulate: 'Cyrkulacja', off: 'Wyłączono', legionella: 'Legionella', trailing: 'Wybieg pompy',
+    },
+  },
+  
   // Slovak and Czech by Havinko1991 (#177, #182).
   sk: {
     not_found: 'Nenašli sa žiadne entity tejto predvoľby. Skontrolujte integráciu a predponu, alebo otvorte editor karty.',
@@ -1428,7 +1475,7 @@ const HFC_I18N = {
       starts: 'Štarty kompresora', cycles_heating: 'Vykurovacie cykly', cycles_dhw: 'Cykly TÚV', cycles_cooling: 'Chladiace cykly', defrosts: 'Odmrazovania',
       hours: 'Prevádzkové hodiny', hours_per_start: 'Doba behu na štart', load_classes: 'Záťažové triedy 1-5', aux_hours: 'Hodiny prídavného ohrevu', aux_starts: 'Štarty prídavného ohrevu',
       spread: 'Rozpätie', volume: 'Prietok', heat_estimated: 'Tepelný výkon', power: 'Výkon', heat_live: 'Tepelný výkon', compressor_speed: 'Kompresor',
-      source_spread: 'Rozpätie zdroja', outdoor: 'Vonku', dhw_top: 'Nádrž TÚV', room: 'Izba', brine_pressure: 'Tlak nemrznúcej zmesi', hc_pressure: 'Tlak vykurovania', pv_share: 'Podiel FVE dnes',
+      source_spread: 'Rozpätie zdroja', outdoor: 'Vonku', dhw_top: 'Nádrž TÚV', room: 'Izba', brine_pressure: 'Tlak nemrznúcej zmesi', hc_pressure: 'Tlak vykurovania', hc_spread: 'Rozpätie okruhu', pv_share: 'Podiel FVE dnes',
       pv_boost_share: 'Podiel prebytku FVE na vykurovaní', pv_production: 'Výnos FVE', solar_thermal: 'Solárne teplo', cost: 'Náklady', dhw_loss: 'Pohotovostná strata TÚV',
     },
     periods: { now: 'teraz', today: 'dnes', yesterday: 'včera', week: 'týždeň', month: 'mesiac', year: 'rok', total: 'celkovo' },
@@ -1472,7 +1519,7 @@ const HFC_I18N = {
       starts: 'Starty kompresoru', cycles_heating: 'Topné cykly', cycles_dhw: 'Cykly TUV', cycles_cooling: 'Chladicí cykly', defrosts: 'Odmrazování',
       hours: 'Provozní hodiny', hours_per_start: 'Doba běhu na start', load_classes: 'Zátěžové třídy 1-5', aux_hours: 'Hodiny přídavného ohřevu', aux_starts: 'Starty přídavného ohřevu',
       spread: 'Rozpětí', volume: 'Průtok', heat_estimated: 'Tepelný výkon', power: 'Výkon', heat_live: 'Tepelný výkon', compressor_speed: 'Kompresor',
-      source_spread: 'Rozpětí zdroje', outdoor: 'Venku', dhw_top: 'Nádrž TUV', room: 'Pokoj', brine_pressure: 'Tlak nemrznoucí směsi', hc_pressure: 'Tlak vytápění', pv_share: 'Podíl FVE dnes',
+      source_spread: 'Rozpětí zdroje', outdoor: 'Venku', dhw_top: 'Nádrž TUV', room: 'Pokoj', brine_pressure: 'Tlak nemrznoucí směsi', hc_pressure: 'Tlak vytápění', hc_spread: 'Rozpětí okruhu', pv_share: 'Podíl FVE dnes',
       pv_boost_share: 'Podíl přebytku FVE na vytápění', pv_production: 'Výnos FVE', solar_thermal: 'Solární teplo', cost: 'Náklady', dhw_loss: 'Pohotovostní ztráta TUV',
     },
     periods: { now: 'nyní', today: 'dnes', yesterday: 'včera', week: 'týden', month: 'měsíc', year: 'rok', total: 'celkově' },
@@ -1515,7 +1562,7 @@ const HFC_I18N = {
       starts: 'Compressorstarts', cycles_heating: 'Verwarmingscycli', cycles_dhw: 'Warmwatercycli', cycles_cooling: 'Koelcycli', defrosts: 'Ontdooiingen',
       hours: 'Compressoruren', hours_per_start: 'Looptijd per start', load_classes: 'Lastklassen 1-5', aux_hours: 'Uren bijverwarming', aux_starts: 'Starts bijverwarming',
       spread: 'ΔT', volume: 'Debiet', heat_estimated: 'Warmtevermogen', power: 'Vermogen', heat_live: 'Warmtevermogen', compressor_speed: 'Compressor',
-      source_spread: 'ΔT bron', outdoor: 'Buiten', dhw_top: 'Warmwatervat', room: 'Kamer', brine_pressure: 'Brondruk', hc_pressure: 'Verwarmingsdruk', pv_share: 'PV-aandeel vandaag',
+      source_spread: 'ΔT bron', outdoor: 'Buiten', dhw_top: 'Warmwatervat', room: 'Kamer', brine_pressure: 'Brondruk', hc_pressure: 'Verwarmingsdruk', hc_spread: 'ΔT groep', pv_share: 'PV-aandeel vandaag',
       pv_boost_share: 'Aandeel PV-overschot in verwarmen', pv_production: 'PV-opbrengst', solar_thermal: 'Zonthermie', cost: 'Kosten', dhw_loss: 'Stilstandsverlies warm water',
     },
     periods: { now: 'nu', today: 'vandaag', yesterday: 'gisteren', week: 'week', month: 'maand', year: 'jaar', total: 'totaal' },
@@ -1728,6 +1775,137 @@ const HFC_EDITOR = {
     cop_heating_today: 'COP Heizen heute', cop_dhw_today: 'COP WW heute', energy_today: 'Verbrauch heute (kWh)',
     pv_share_today: 'PV-Anteil heute (%)', starts_today: 'Verdichterstarts heute',
   },
+
+  // Polish Editor by Krzysztonek 
+  pl: {
+    preset: 'Preset', prefix: 'Prefiks (puste = wykryj automatycznie)', device: 'Urządzenie (opcjonalnie, ogranicza preset)',
+    title: 'Tytuł', language: 'Język', power_threshold: 'Praca powyżej (W)', hc_type: 'Emisja ciepła',
+    power_sources: 'PV / akumulator / sieć', ps_auto: 'Panel energii, chyba że ustawiono poniżej', ps_manual: 'Tylko poniższe czujniki',
+    source_type: 'Źródło ciepła', src_air: 'Powietrze', src_brine: 'Grunt (solanka)', src_water: 'Woda gruntowa',
+    hc_count: 'Obiegi grzewcze', hc2_type: 'Emiter obiegu 2', hc3_type: 'Emiter obiegu 3', hc4_type: 'Emiter obiegu 4', hc5_type: 'Emiter obiegu 5', hc6_type: 'Emiter obiegu 6',
+    unit_style: 'Rysunek urządzenia', unit_auto: 'Automatycznie (z presetu)', unit_generic: 'Ogólny (wentylator)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono',
+    unit_size: 'Rozmiar Vaillant', size_small: '3.5 / 5.5 kW (1 wentylator, niski)', size_medium: '7.5 kW (1 wentylator)', size_large: '10.5 / 12.5 kW (2 wentylatory)',
+    timeline: 'Oś czasu trybu pracy', timeline_hours: 'Długość osi czasu (godziny)', timeline_details: 'Szczegóły pracy pod osią czasu', timeline_marks: 'Pokaż etykiety (np. Podbicie) jako dodatkowe pasy',
+    layout: 'Układ', layout_default: 'Domyślny', layout_compact: 'Kompaktowy (wąskie kolumny)', layout_wide: 'Szeroki (kafelki obok schematu)', layout_wall: 'Wyświetlacz ścienny (duży, kontrolki wygaszają się)',
+    animations: 'Animacje', animations_auto: 'Automatycznie (uwzględnia redukcję ruchu)', animations_always: 'Zawsze', animations_off: 'Wyłączone',
+    flow_speed: 'Prędkość animacji', source_spread: 'Pokaż rozpiętość źródła',
+    theme: 'Motyw karty', theme_auto: 'Automatyczny (panel)', theme_night: 'Nocny', theme_contrast: 'Wysoki kontrast', fullscreen: 'Przycisk pełnego ekranu', diagnostic: 'Przycisk raportu diagnostycznego',
+    wall_timeout: 'Ukryj kontrolki po (sekundy, 0 = nigdy)',
+    narrow_values: 'Zachowaj podwartości zasobnika i powrót obiegu na wąskich kartach',
+    narrow_focus: 'Skupienie na telefonie: większe kluczowe wartości na wąskich kartach, wartości pomocnicze w jednej linii pod schémou',
+    buffer_values: 'Wyróżnienie temperatury bufora', buffer_values_default: 'Górna wartość prominentna (domyślnie)', buffer_values_equal: 'Wszystkie skonfigurowane wartości równe',
+    assistant_device: 'Znajdź encje na tym urządzeniu pompy ciepła',
+    assistant_device_help: 'Dostępne tylko wtedy, gdy nie wykryto żadnego obsługiwanego presetu. Sugestie nie są zapisywane do momentu ich wyboru i potwierdzenia.',
+    assistant_title: 'Proponowane mapowanie encji',
+    assistant_intro: 'Dokładne angielskie i niemieckie nazwy, jednostki oraz klasy urządzeń (device classes) są sprawdzane. Wybierz każdą propozycję, którą chcesz zapisać.',
+    assistant_apply: 'Użyj wybranych propozycji', assistant_none: 'Nie znaleziono jednoznacznych propozycji na tym urządzeniu.',
+    sec_boiler: 'Kocioł / drugi generator ciepła', boiler_state: 'Kocioł włączony (włączony/wyłączony lub moc powyżej 0)', boiler_power: 'Moc kotła (W lub kW)', boiler_flow: 'Temperatura zasilania kotła (°C)',
+    dhw_loss_sensor: 'Pomiar strat postojowych c.w.u. (°C)',
+    hc_mixer: 'Pozycja lub stopień otwarcia mieszacza (%, zgodnie z raportem)', hc_mixer_opening: 'Otwieranie silnika mieszacza (włączone/wyłączone)', hc_mixer_closing: 'Zamykanie silnika mieszacza (włączone/wyłączone)',
+    hc_flow_label: 'Pokaż temperaturę zasilania obiegu', hc_return_label: 'Pokaż temperaturę powrotu obiegu', dew_point_margin: 'Minimalny margines punktu rosy (K)', series_buffer: 'Bufor szeregowy na powrocie', series_bypass: 'Bufor szeregowy z zaworem bocznikowym (wył.: obiegi pracują przy odszranianiu)', primary_pump: 'Pompa pierwotna', hc_name: 'Nazwa obiegu 1', hc2_name: 'Nazwa obiegu 2', hc3_name: 'Nazwa obiegu 3', hc4_name: 'Nazwa obiegu 4', hc5_name: 'Nazwa obiegu 5', hc6_name: 'Nazwa obiegu 6',
+    sec_hc2: 'Obieg grzewczy 2', sec_hc3: 'Obieg grzewczy 3', sec_hc4: 'Obieg grzewczy 4', sec_hc5: 'Obieg grzewczy 5', sec_hc6: 'Obieg grzewczy 6', sec_details: 'Szczegóły: praca', sec_refrigerant: 'Szczegóły: obieg czynnika chłodniczego', sec_cutouts: 'Szczegóły: liczniki wyłączeń',
+    controls: 'Szybkie sterowanie (przełącznik, przycisk, wybór, liczba…)', details_open: 'Szczegóły otwarte domyślnie',
+    from_preset: 'Znalezione przez preset',
+    sum_help: 'Suma tych encji',
+    sec_advanced: 'Zaawansowane',
+    tiles_custom: 'Własny wybór kafelków', tiles: 'Kafelki (przeciągnij, aby uporządkować)',
+    tiles_custom_help: 'Wył.: domyślnie kafelki. Wł.: wybierz kafelki i okresy spośród udostępnianych przez tę instalację; pusta lista ukrywa wiersz.',
+    tiles_yaml: 'Niektóre kafelki mają własną nazwę, encję, cenę lub akcję: edytuj je w YAML.',
+    price_fixed: 'Cena energii elektrycznej za kWh', price_entity: 'Encja ceny energii elektrycznej',
+    price_help: 'Włącza kafelek kosztów. Z encją posiadającą statystyki długoterminowe (np. taryfa dynamiczna), koszty są naliczane godzinowo.',
+    untested: 'nieprzetestowane',
+    untested_help: 'Jeszcze nieprzetestowane na prawdziwej instalacji. Proszę zgłosić, czy działa na: github.com/Sturmi77/heatpump-hydraulic-card/issues (Opinie o presecie).',
+    warn_title: 'Brak w karcie',
+    warn_running: 'Brak trybu pracy, sprężarki, statusu lub mocy: karta nie może określić, czy pompa ciepła pracuje.',
+    warn_power: 'Brak mocy elektrycznej: brak COP na żywo oraz podziału na PV / akumulator / sieć z panelu energii.',
+    warn_energy_sources: 'Panel energii: brak czujnika mocy dla {sources}; same liczniki energii nie pokazują przepływu na żywo.',
+    warn_temps: 'Brak temperatury zasilania lub powrotu: brak różnicy temperatur (spread) i szacowanej mocy grzewczej.',
+    warn_heat: 'Brak mocy grzewczej ani przepływu: brak COP na żywo.',
+    preset_help: 'Znalezione encje są wypełniane poniżej. Wybierz inną encję, aby zastąpić wartość, lub wyczyść pole, aby je ukryć.',
+    from_energy: 'Puste: pobierane z panelu energii',
+    errors: 'Encje błędów', error_ok_text: 'Stany tekstowe oznaczające brak błędu',
+    errors_help: 'Aktywne dla liczby różnej od 0 lub stanu włączonego. Tekst wymaga stanów braku błędu poniżej; stany: nieznany, niedostępny, wyłączony i puste są ignorowane.',
+    error_ok_help: 'Rozdzielone przecinkami, bez rozróżniania wielkości liter; na przykład: No Error, OK. Każdy inny znany tekst wyświetli wtedy chybowy štítok.',
+    total_cop_help: 'Całkowite ciepło, energia środowiskowa i energia elektryczna muszą obejmować ten sam przedział czasowy. Bez całkowitego ciepła COP używa energii środowiskowej plus energii elektrycznej.',
+    language_help: 'Dodatkowe języki i niestandardowe etykiety są konfigurowane za pomocą tekstów w YAML; brakujące etykiety powracają do języka angielskiego.',
+    detected: 'Wykryto', entities_found: 'encji', also_detected: 'Wykryto również tutaj:', not_detected: 'Nie znaleziono w tym Home Assistante – sprawdź integrację, prefiks lub wybierz inny preset',
+    program: 'Program grzewczy (eko, nocny, party, wakacje)', solar_collector: 'Temperatura kolektora słonecznego', solar_pump: 'Pompa solarna działa (binarna)',
+    source_out: 'Temperatura na wyjściu źródła', heater: 'Zapasowa / wbudowana grzałka aktywna',
+    dhw_heater: 'Grzałka c.w.u. aktywna', buffer_heater: 'Grzałka bufora aktywna',
+    hc_underfloor: 'Ogrzewanie podłogowe', hc_radiator: 'Grzejniki płytowe', hc_column: 'Grzejniki członowe',
+    brine_pressure_min: 'Ostrzeżenie o niskim ciśnieniu solanki poniżej', brine_pressure_crit: 'Krytyczne niskie ciśnienie solanki poniżej', brine_pressure_max: 'Ostrzeżenie o wysokim ciśnieniu solanki powyżej',
+    hc_pressure_min: 'Ostrzeżenie o niskim ciśnieniu ogrzewania poniżej', hc_pressure_crit: 'Krytyczne niskie ciśnienie ogrzewania poniżej', hc_pressure_max: 'Ostrzeżenie o wysokim ciśnieniu ogrzewania powyżej',
+    sec_hp: 'Pompa ciepła', sec_storage: 'Magazyn energii', sec_hc: 'Obieg grzewczy i dom', sec_power: 'Źródła zasilania', sec_stats: 'Statystyki',
+    mode: 'Tryb pracy', status: 'Status / podstan', compressor: 'Sprężarka działa (binarna lub częstotliwość)', defrost: 'Odszranianie aktywne (binarne)', fan_speed: 'Prędkość wentylatora (obr./min lub binarna)', power: 'Moc elektryczna',
+    heat: 'Moc grzewcza', flow: 'Temperatura na zasilaniu', return: 'Temperatura na powrocie', volume: 'Przepływ po stronie grzewczej',
+    source_volume: 'Przepływ po stronie źródła', source_in: 'Temperatura źródła / wlotu powietrza', outdoor: 'Temperatura zewnętrzna',
+    valve: 'Zawór przełączający c.w.u. (binarny lub Zbiornik/Pomieszczenie)', bypass_valve: 'Zawór bocznikowy bufora szeregowego (włączony = obejście; domyślnie: odszranianie)',
+    pv_boost: 'Tryb nadwyżki PV (włączony, lub moc powyżej 0)',
+    sg_ready: 'SG-Ready / blokada taryfowa (1–4 lub tekst)',
+    dhw_top: 'Zasobnik c.w.u. góra', dhw_middle: 'Zasobnik c.w.u. środek', dhw_bottom: 'Zasobnik c.w.u. dół', dhw_target: 'Temperatura docelowa c.w.u.', dhw_mode: 'Tryb c.w.u.',
+    circulation: 'Pompa cyrkulacyjna', circulation_start: 'Początek okna cyrkulacji', circulation_end: 'Koniec okna cyrkulacji', circulation_schedule: 'Harmonogram cyrkulacji (następna zmiana)', buffer_top: 'Bufor góra', buffer_middle: 'Bufor środek', buffer_bottom: 'Bufor dół', buffer_mode: 'Tryb bufora',
+    hc_flow: 'Temperatura zasilania obiegu', hc_return: 'Temperatura powrotu obiegu', hc_setpoint: 'Docelowa temperatura zasilania obiegu',
+    hc_mode: 'Tryb obiegu', hc_pump: 'Pompa obiegowa działa (binarna)', hc_volume: 'Przepływ obiegu', hc_curve_offset: 'Przesunięcie krzywej grzewczej (K)', hc_pressure: 'Ciśnienie w obiegu grzewczym', brine_pressure: 'Ciśnienie w obiegu solanki',
+    cutout_high_pressure: 'Wyłączenia wysokociśnieniowe (liczba zdarzeń, a nie ciśnienie)', cutout_low_pressure: 'Wyłączenia niskociśnieniowe (liczba zdarzeń, a nie ciśnienie)', cutout_temperature: 'Wyłączenia temperaturowe (liczba zdarzeń, a nie temperatura)',
+    room: 'Temperatura w pomieszczeniu', room_target: 'Docelowa temperatura w pomieszczeniu', room_humidity: 'Wilgotność w pomieszczeniu (%)', dew_point: 'Punkt rosy (°C, opcjonalnie)',
+    env_energy: 'Całkowita energia środowiskowa', pv: 'Moc z PV (W)', battery: 'Moc z akumulatora (W)', grid: 'Moc z sieci (W)',
+    cop_heating_today: 'COP ogrzewania dzisiaj', cop_dhw_today: 'COP c.w.u. dzisiaj', energy_today: 'Energia dzisiaj (kWh)',
+    pv_share_today: 'Udział PV dzisiaj (%)', starts_today: 'Liczba uruchomień sprężarki dzisiaj',
+    unit_wolf: 'Wolf CHA',
+    unit_kronoterm: 'Kronoterm ADAPT',
+    unit_alpha_innotec: 'Alpha Innotec Hybrox',
+    unit_stiebel: 'Stiebel Eltron WPL-A',
+    storage: 'Zasobnik',
+    storage_separate: 'Oddzielny zasobnik c.w.u. i bufor',
+    storage_combined: 'Zasobnik kombinowany (jeden zbiornik, strefa c.w.u. na górze)',
+    buffer: 'Bufor równoległy (również bez czujników)',
+    dhw_type: 'Przygotowanie ciepłej wody',
+    dhw_type_coil: 'Zasobnik z wężownicą wymiennika',
+    dhw_type_fresh_water: 'Stacja świeżej wody (na buforze lub zasobniku kombinowanym)',
+    dhw_type_tank_in_tank: 'Zasobnik w zasobniku (zbiornik kombinowany)',
+    warn_valve: 'Zawór przełączający raportuje liczbę i nie ma stanów zaworu: karta odczytuje 1 jako ciepłą wodę. Jeśli 1 oznacza ogrzewanie, ustaw jego stany w sekcji Zaawansowane.',
+    warn_map_entities: 'Parametr {maps} znajduje się pod encjami (entities), gdzie karta go ignoruje. W YAML należy umieścić go na najwyższym poziomie konfiguracji karty.',
+    valve_dhw_text: 'Stany zaworu dla ciepłej wody',
+    valve_heating_text: 'Stany zaworu dla ogrzewania',
+    valve_help: 'Rozdzielone przecinkami surowe stany encji zaworu, na przykład 0, 1 lub Tank. Aktualny stan: {state}.',
+    dhw_heater_top: 'Grzałka c.w.u. u góry aktywna (włączona/wyłączona lub W)',
+    dhw_heater_middle: 'Grzałka c.w.u. pośrodku aktywna (włączona/wyłączona lub W)',
+    dhw_heater_bottom: 'Grzałka c.w.u. na dole aktywna (włączona/wyłączona lub W)',
+    buffer_heater_top: 'Grzałka bufora u góry aktywna (włączona/wyłączona lub W)',
+    buffer_heater_middle: 'Grzałka bufora pośrodku aktywna (włączona/wyłączona lub W)',
+    buffer_heater_bottom: 'Grzałka bufora na dole aktywna (włączona/wyłączona lub W)',
+    size_pana_medium: '1 wentylator (3 do 9 kW)',
+    size_pana_large: '2 wentylatory (T-CAP, 12 i 16 kW)',
+    more_fields: 'Więcej pól',
+    warn_disabled: 'Preset użyłby tych encji, ale w Home Assistant są one wyłączone: {list}. Włącz je w menu Ustawienia → Urządzenia i usługi → Encje.',
+    checks_title: 'Sprawdź te pola',
+    check_unit: '{field}: {entity} raportuje jednostkę {unit}, oczekiwano {expected}.',
+    check_domain: '{field}: {entity} jest encją typu {domain}, oczekiwano {expected}.',
+    check_state: '{field}: {entity} raportuje stan \"{state}\", oczekiwano {expected}.',
+    check_counter: '{field}: {entity} jest licznikiem (wartość stale rośnie), oczekiwano {expected}.',
+    check_same: '{field}: {entity} jest również używana dla {other}; te dwa pola mierzą jednak odrębne wielkości.',
+    check_air: '{field}: {entity} jest ustawiona, ale źródłem ciepła jest powietrze. Karta nie rysuje obiegu solanki ani studni; wyczyść to pole lub zmień źródło ciepła.',
+    check_setting: '{field}: {entity} jest ustawieniem ({domain}), a nie tym, co pompa ciepła robi w tej chwili. Wybrany tryb typu „Tylko ogrzewanie” jest odczytywany jako tryb czuwania; pozostaw pole puste lub wskaż czujnik aktualnej pracy.',
+    check_today: '{field}: {entity} raportuje wartość {value}, co przekracza możliwości jednego dnia. Czy to licznik całkowity?',
+    kind_temperature: 'temperatura (°C)',
+    kind_offset: 'różnica temperatur (K)',
+    kind_power: 'moc (W lub kW)',
+    kind_energy: 'energia (kWh)',
+    kind_pressure: 'ciśnienie (bar)',
+    kind_flowrate: 'natężenie przepływu (l/h, l/min lub m³/h)',
+    kind_hours: 'czas trwania (h)',
+    kind_percent: 'procent (%)',
+    kind_counter: 'licznik bez jednostki',
+    kind_ratio: 'liczba bez jednostki',
+    kind_speed: 'włączony/wyłączony, częstotliwość lub prędkość',
+    kind_onoff: 'włączony/wyłączony',
+    kind_onoff_power: 'włączony/wyłączony, stopień lub moc (W)',
+    kind_valve: 'włączony/wyłączony lub stan taki jak Zasobnik/Pomieszczenie',
+    kind_text: 'tekst stanu',
+    all_entities: 'Pokaż wszystkie encje w selektorach',
+    all_entities_help: 'Wył.: pola pomiarowe oferują wyłącznie encje, których jednostka lub klasa urządzenia odpowiadają (°C, W, kWh, bar, l/h). Wł.: każda encja, przydatne dla czujników bez przypisanej jednostki.',
+  },
+  
   // Slovak by Havinko1991 (#177): the editor labels; the card texts fall back to English.
   sk: {
     preset: 'Predvoľba', prefix: 'Predpona (prázdne = automatická detekcia)', device: 'Zariadenie (voliteľné, obmedzuje predvoľbu)',
@@ -2092,6 +2270,9 @@ const hfcHcCount = (config) => Math.min(Math.max(Math.round(+config?.hc_count) |
 // The heat value of a running unit in a cascade counts only while it is this fresh: a value written once an hour belongs to an
 // earlier part of the run (#173).
 const HFC_UNIT_MAX_AGE = 10 * 60000;
+// Keys whose list of entities is averaged (#23): room temperature and humidity of each circuit. Power, heat and the power
+// sources add up their lists instead; every other key takes the first entity of a list.
+const hfcMeanKey = (key) => /^(hc[2-6]_)?room(_humidity)?$/.test(key);
 
 const HFC_ENTITY_GROUPS = {
   sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost', 'sg_ready'],
@@ -2298,6 +2479,8 @@ const HFC_TILES = {
   spread: { live: true }, volume: { live: true }, heat_estimated: { live: true }, power: { live: true }, heat_live: { live: true },
   compressor_speed: { live: true }, source_spread: { live: true }, outdoor: { live: true }, dhw_top: { live: true }, room: { live: true },
   brine_pressure: { live: true }, hc_pressure: { live: true },
+  // Spread of a heating circuit from its own flow and return sensors, one tile per circuit (#290).
+  hc_spread: { live: true }, hc2_spread: { live: true }, hc3_spread: { live: true }, hc4_spread: { live: true }, hc5_spread: { live: true }, hc6_spread: { live: true },
   pv_share: { live: true },
   // Share of the heating time in PV surplus mode, from the recorder history of the mode and the `pv_boost` entity.
   pv_boost_share: { kind: 'share', periods: ['today', 'yesterday', 'week'] },
@@ -3130,7 +3313,7 @@ class HeatpumpFlowCard extends HTMLElement {
       ...detection,
       '',
       'Entity mappings (source: [preset] found by the preset, [own] set in the card configuration):',
-      ...keys.filter((key) => r.entities[key]).flatMap((key) => (r.sums[key] ? r.sums[key].map((id, n) => `${entityLine(`${key} (sum ${n + 1})`, id)} [${source(key, id)}]`)
+      ...keys.filter((key) => r.entities[key]).flatMap((key) => (r.sums[key] ? r.sums[key].map((id, n) => `${entityLine(`${key} (${hfcMeanKey(key) ? 'average' : 'sum'} ${n + 1})`, id)} [${source(key, id)}]`)
         : [`${entityLine(key, r.entities[key])} [${source(key, r.entities[key])}]`])),
       ...(cleared.length ? [`- Cleared on purpose: ${cleared.join(', ')}`] : []),
       `- Not mapped: ${unmapped.length ? unmapped.join(', ') : 'none'} (an empty key is fine when the installation does not have it)`,
@@ -3354,10 +3537,28 @@ class HeatpumpFlowCard extends HTMLElement {
   _has(key) { return !!this._st(key); }
   _s(key) { return this._st(key)?.state; }
   _n(key) {
+    if (this._sums?.[key] && hfcMeanKey(key)) return this._mean(key);
     const attr = hfcTempAttr(this._e[key], key);
     const v = parseFloat(attr ? this._st(key)?.attributes?.[attr] : this._s(key));
     return Number.isFinite(v) ? v : NaN;
   }
+  // Mean of a list of room sensors (#23): the members that report a number, each converted to the unit of the first member,
+  // so the key keeps that member's unit. Unknown only when no member reports a number.
+  _mean(key) {
+    const unitOf = (id) => String(this._hass?.states[id]?.attributes?.unit_of_measurement || '').trim().toLowerCase().replace(/º/g, '°').replace('℃', '°c').replace('℉', '°f');
+    const toC = (v, u) => (u === '°f' ? (v - 32) * 5 / 9 : u === 'k' ? v - 273.15 : v);
+    const fromC = (v, u) => (u === '°f' ? v * 9 / 5 + 32 : u === 'k' ? v + 273.15 : v);
+    const humidity = key.endsWith('_humidity'); const base = unitOf(this._e[key]);
+    const values = this._sums[key].map((id) => {
+      const st = this._hass?.states[id]; const attr = hfcTempAttr(id, key);
+      const v = parseFloat(attr ? st?.attributes?.[attr] : st?.state);
+      return !Number.isFinite(v) || humidity ? v : fromC(toC(v, unitOf(id)), base);
+    }).filter(Number.isFinite);
+    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : NaN;
+  }
+  // A sum is complete when every member reports a number. An incomplete sum is still shown, but no COP is formed from it:
+  // with one of two units of a cascade missing, heat and power would not belong to the same machines (#23, #173).
+  _sumComplete(key) { return !this._sums?.[key] || this._sums[key].every((id) => Number.isFinite(hfcPowerW(this._hass?.states[id]))); }
   _unit(key) { return String(this._st(key)?.attributes?.unit_of_measurement || '').toLowerCase(); }
   // Absolute temperature normalized to Celsius. Most of the drawing uses the installation's native values, but physical
   // calculations (dew point and its margin) need one common scale; a temperature difference in °F is not a kelvin difference.
@@ -4111,6 +4312,12 @@ class HeatpumpFlowCard extends HTMLElement {
 
   _tileLabel(key, period, I = this._i) {
     const def = HFC_TILES[key];
+    // A circuit spread is named after its circuit: the configured name, else the number from circuit 2 on.
+    const hc = HeatpumpFlowCard._hcSpreadCircuit(key);
+    if (hc) {
+      const own = this._config?.[this._hk(hc, 'name')];
+      return own ? `${I.tiles.hc_spread} · ${own}` : hc > 1 ? `${I.tiles.hc_spread} ${hc}` : String(I.tiles.hc_spread);
+    }
     const name = String(I.tiles[key]);
     const word = def.live || def.noSuffix || !period ? '' : String(I.periods[period]);
     // A name that already ends in the period word does not repeat it: "COP gesamt" for the total, not "COP gesamt · gesamt" (#288).
@@ -4330,9 +4537,14 @@ class HeatpumpFlowCard extends HTMLElement {
     return out(v, 1, '');
   }
 
+  // The circuit of a circuit-spread tile (hc_spread = 1, hc2_spread = 2 …), else 0.
+  static _hcSpreadCircuit(key) { const m = /^hc(\d)?_spread$/.exec(key); return m ? +(m[1] || 1) : 0; }
+
   // Live tiles: current values from the schematic entities.
   _liveAvail(key) {
     const h = (k) => this._has(k);
+    const hc = HeatpumpFlowCard._hcSpreadCircuit(key);
+    if (hc) return hc <= (this._hcCount ?? hfcHcCount(this._config)) && h(this._hk(hc, 'flow')) && h(this._hk(hc, 'return'));
     return !!{
       cop_live: !!this._config?.units?.length || (h('power') && (h('heat') || (h('volume') && h('flow') && h('return')))),
       spread: h('flow') && h('return'), volume: h('volume'),
@@ -4346,6 +4558,12 @@ class HeatpumpFlowCard extends HTMLElement {
 
   _liveTile(key, L) {
     const f = (v, d, u) => (Number.isFinite(v) ? `${this._fmt(v, d)} ${u}`.trim() : '–');
+    // Like the heat-pump spread, a circuit spread is shown only while water moves through the circuit.
+    const hc = HeatpumpFlowCard._hcSpreadCircuit(key);
+    if (hc) {
+      const on = (L.circuits || []).find((c) => c.n === hc)?.on;
+      return [on ? f(this._n(this._hk(hc, 'flow')) - this._n(this._hk(hc, 'return')), 1, 'K') : '–', this._e[this._hk(hc, 'flow')]];
+    }
     switch (key) {
       case 'cop_live': return [Number.isFinite(L.cop) ? `${L.heatEstimated ? '≈' : ''}${this._fmt(L.cop, 1)}` : '–', this._e.heat || this._e.power];
       case 'spread': return [L.loop ? f(L.spread, 1, 'K') : '–', this._e.flow];
@@ -6128,7 +6346,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._txt('t-hp-power', running
       ? (Number.isFinite(hpPower) ? `${this._fmt(hpPower, 0)} W${heatTxt ? ` → ${heatTxt}` : ''}` : (heatTxt || i.running))
       : i.compressor_off);
-    const cop = running && hpPower > 50 && heat > 0 ? (heat * 1000) / hpPower : NaN;
+    const cop = running && hpPower > 50 && heat > 0 && this._sumComplete('power') && this._sumComplete('heat') ? (heat * 1000) / hpPower : NaN;
     this._txt('t-hp-cop', Number.isFinite(cop) ? `COP ${heatEstimated ? '≈' : ''}${this._fmt(cop, 1)}` : '');
     const hpHeat = this._$('t-hp-heat');
     if (hpHeat) {
@@ -6285,7 +6503,7 @@ class HeatpumpFlowCard extends HTMLElement {
     // statistics: the tile catalog when `tiles` is set, otherwise the default tiles
     const share = this._n('pv_share_today');
     const custom = Array.isArray(this._config.tiles);
-    const tiles = custom ? this._catalogTiles({ loop, flowLoop, spread, vol, heat, heatEstimated, power: hpPower, cop }) : [];
+    const tiles = custom ? this._catalogTiles({ loop, flowLoop, spread, vol, heat, heatEstimated, power: hpPower, cop, circuits: F.circuits }) : [];
     const add = (key, label, value) => { if (!custom && this._has(key)) tiles.push([this._statLabel(key, label), value, this._e[key]]); };
     add('cop_heating_today', i.stat_cop_heating, this._fmt(this._n('cop_heating_today'), 2));
     add('cop_dhw_today', i.stat_cop_dhw, this._fmt(this._n('cop_dhw_today'), 2));
