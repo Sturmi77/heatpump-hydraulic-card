@@ -565,6 +565,40 @@
     card.remove();
   }
   {
+    // #173: a cascade of two units with power and heat paired per unit; the hydraulic station's power is part of `power` only.
+    const ago = (min) => new Date(Date.now() - min * 60000).toISOString();
+    const v = (state, unit, min = 0) => ({ state, attributes: { unit_of_measurement: unit }, last_updated: ago(min), last_reported: ago(min) });
+    const base = { 'sensor.m': 'heating', 'binary_sensor.c': 'on', 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.st': ['100', 'W'],
+      'sensor.u1': ['600', 'W'], 'sensor.u2': ['500', 'W'], 'sensor.h1': v('2.8', 'kW'), 'sensor.h2': v('2000', 'W') };
+    const cfg = { entities: { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r', power: ['sensor.u1', 'sensor.u2', 'sensor.st'] },
+      units: [{ name: 'WP 1', power: 'sensor.u1', heat: 'sensor.h1' }, { power: 'sensor.u2', heat: 'sensor.h2' }] };
+    const card = mount(cfg, hassOf(toStates(base))); await wait(20);
+    const txt = (id) => card.shadowRoot.getElementById(id)?.textContent || '';
+    const unitRows = () => (card._drawerRows().find(([title]) => title === 'Units')?.[1] || []).map(([, label, , value]) => `${label}: ${value()}`);
+    check(txt('t-hp-power') === '1,200 W → 4.8 kW' && txt('t-hp-cop') === 'COP 4.0' && /2 of 2 units/.test(txt('t-hp-status')),
+      `#173: both units fresh, heat summed, COP against the whole power (${txt('t-hp-power')} / ${txt('t-hp-cop')} / ${txt('t-hp-status')})`);
+    check(JSON.stringify(unitRows()) === JSON.stringify(['WP 1: 600 W → 2.8 kW · COP 4.7', 'Unit 2: 500 W → 2.0 kW · COP 4.0']), `#173: power, heat and COP per unit (${unitRows().join(' | ')})`);
+    card.hass = hassOf(toStates({ ...base, 'sensor.h2': v('2000', 'W', 61) })); await wait(10);
+    check(txt('t-hp-cop') === '' && txt('t-hp-power') === '1,200 W' && unitRows()[1] === 'Unit 2: 500 W · heat not current' && /COP 4\.7/.test(unitRows()[0]),
+      `#173: a heat value written an hour ago is not paired: no system COP, unit 1 keeps its own (${txt('t-hp-cop')} / ${unitRows().join(' | ')})`);
+    card.hass = hassOf(toStates({ ...base, 'sensor.u2': ['0', 'W'], 'sensor.h2': v('2000', 'W', 61) })); await wait(10);
+    check(txt('t-hp-cop') === 'COP 4.0' && unitRows()[1] === 'Unit 2: off' && /1 of 2 units/.test(txt('t-hp-status')),
+      `#173: a standing unit adds no heat, its old heat value does not matter (${txt('t-hp-cop')} / ${unitRows()[1]} / ${txt('t-hp-status')})`);
+    card.remove();
+    // Only the units: power is their sum, and a unit that runs while the compressor entity is off still counts as running.
+    const only = mount({ entities: { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r' }, units: cfg.units },
+      hassOf(toStates({ ...base, 'binary_sensor.c': 'off', 'sensor.u1': ['0', 'W'] }))); await wait(20);
+    const ot = (id) => only.shadowRoot.getElementById(id)?.textContent || '';
+    check(ot('t-hp-power') === '500 W → 2.0 kW' && ot('t-hp-cop') === 'COP 4.0', `#173: without a power key the units' power counts (${ot('t-hp-power')} / ${ot('t-hp-cop')})`);
+    only.remove();
+    const report = C._diagnosticReport(cfg, hassOf(toStates({ ...base, 'sensor.h2': v('2000', 'W', 61) })));
+    check(report.includes('Units (power and heat per unit):') && report.includes('- unit 2 power: sensor.u2') && /- unit 2 heat: sensor\.h2 .*\(written 61 min ago\)/.test(report),
+      '#173: the diagnostic report lists the pairs and the age of each heat value');
+    let err = '';
+    try { C.prototype.setConfig.call(Object.create(C.prototype), { units: [{ power: 'sensor.u1' }] }); } catch (e) { err = e.message; }
+    check(/every unit needs a power and a heat entity/.test(err), `#173: a unit without heat is rejected (${err})`);
+  }
+  {
     // #257: the complete "long names" entity list of a Nefit EnviLine (EMS-ESP 3.8.6).
     const states = toStates({
       'sensor.boiler_compressor_activity': 'heating', 'binary_sensor.boiler_hp_compressor': 'on', 'sensor.boiler_compressor_current_power': ['322', 'W'],

@@ -255,6 +255,7 @@ Everything can be set in the **UI editor**. With a preset, the editor shows whet
 | `power_threshold` | Counts as running above this electrical power in W (default 100). |
 | `power_sources` | `auto` (default): PV / battery / grid from the Energy dashboard unless `pv`, `battery` or `grid` are set. `manual`: only your own sensors. |
 | `entities` | Entity overrides (see below). `null` removes a preset entity. A list of entities for `power`, `heat`, `pv`, `battery` or `grid` shows the sum of their values. |
+| `units` | Units of a cascade, each with its own `power` and `heat` entity (or a list that is added up) and an optional `name` (#173). The card pairs heat and power per unit: the drawer shows power, heat and COP of each unit, the status line how many run. The COP of the system needs the heat of every running unit, written within the last 10 minutes; a standing unit adds no heat. See [Cascades](#cascades). |
 | `mode_map`, `dhw_mode_map`, `buffer_mode_map`, `hc_mode_map` | Raw state → normalized mode, merged over the preset. |
 | `valve_map` | Raw state of the `valve` entity → `dhw` or `heating`, for a valve that does not follow "on = hot water", for example a zone valve with `1` for heating and `0` for hot water: `valve_map: { 0: dhw, 1: heating }`. States that are not in the map keep the default reading (`on`, `Tank`, `DHW` … mean hot water). The map also applies to the timeline when it is drawn from the compressor and the valve. The values are accepted in any case and as `heat`, `hot water` or `hot_water` too. In the visual editor the map is two fields under "Advanced", shown when a valve entity is mapped: "Valve states for hot water" and "Valve states for heating", each a comma-separated list of raw states; the helper text shows the current state of the valve. A map written in YAML stays as it is when the card is saved in the editor unless the fields are changed. When the valve is a sensor that reports a number and there is no map, the editor warns that 1 is read as hot water. |
 | `running_states` | Raw `status` values that count as compressor running. |
@@ -304,6 +305,21 @@ Everything can be set in the **UI editor**. With a preset, the editor shows whet
 - **SG-Ready and utility lock** (`sg_ready`): standard states 1–4 show utility lock, normal operation, raised targets and forced operation. Active instructions appear as a header chip and as distinct periods in the operating timeline. Other numeric, text or binary states are mapped explicitly with `sg_ready_map`; unknown and unavailable states stay hidden instead of being guessed. This first contract is read-only and no preset maps it without verified installation data. Example: `entities: { sg_ready: sensor.heat_pump_sg_ready }`, `sg_ready_map: { EVU lock: blocked, Normal: normal, Recommend: boost, Forced: forced }`.
 - **Power sources:** `pv`, `battery`, `grid` – the heat pump's power from each source. Power sensors in W, kW and MW are converted to W. Energy counters in Wh, kWh or MWh cannot show a current flow and are rejected by the editor check. Optional: without own source sensors the card uses the Energy dashboard.
 - **Sums:** `power`, `heat`, `pv`, `battery` and `grid` also accept a list of entities. The card adds the values of the members that report a number (W, kW and MW can be mixed); the first entity opens on tap and stands for the key in the editor warnings. Example: two meters for compressor and heater rod, `power: [sensor.heat_pump_meter_power, sensor.heater_meter_power]`.
+- <a id="cascades"></a>**Cascades:** with two or more outdoor units, `units` pairs power and heat per unit, so a heat value of one unit is never divided by the power of both. Example for two units behind one hydraulic station:
+
+  ```yaml
+  entities:
+    power: [sensor.unit1_power, sensor.unit2_power, sensor.station_power]
+  units:
+    - name: Unit 1
+      power: sensor.unit1_power
+      heat: sensor.ebusd_hmu_currentyieldpower
+    - name: Unit 2
+      power: sensor.unit2_power
+      heat: sensor.heating_ebusd_wp2_hmu_currentyieldpower
+  ```
+
+  A unit runs above 50 W. While it runs, its heat value counts only when it was written within the last 10 minutes; an hourly value (as from a gateway query) is shown as "heat not current" and the system COP is left out, while the other unit keeps its own COP in the drawer. The system COP is the sum of the units' heat divided by `power` (here including the station), or by the units' power without a `power` key. Leave `heat` empty when `units` are set. The diagnostic report lists every pair with the age of its heat value.
 - **Statistics:** `cop_heating_today`, `cop_dhw_today`, `energy_today`, `pv_share_today`, `starts_today`
 - **Details, operation:** `hours`, `starts_total`, `aux_hours`, `energy_total`, `env_energy` (heat taken from air, ground or water), `heat_total`
 - **Details, refrigerant circuit:** `compressor_speed`, `evap_temp`, `cond_temp`, `suction_temp`, `hot_gas`, `liquid_temp`, `low_pressure`, `high_pressure`, `eev`, `superheat`, `subcooling`
