@@ -4352,7 +4352,8 @@ class HeatpumpFlowCard extends HTMLElement {
     const hc = HeatpumpFlowCard._hcSpreadCircuit(key);
     if (hc) {
       const on = (L.circuits || []).find((c) => c.n === hc)?.on;
-      return [on ? f(this._n(this._hk(hc, 'flow')) - this._n(this._hk(hc, 'return')), 1, 'K') : '–', this._e[this._hk(hc, 'flow')]];
+      // In °C, so a spread of sensors in °F is still a kelvin difference.
+      return [on ? f(this._tempC(this._hk(hc, 'flow')) - this._tempC(this._hk(hc, 'return')), 1, 'K') : '–', this._e[this._hk(hc, 'flow')]];
     }
     switch (key) {
       case 'cop_live': return [Number.isFinite(L.cop) ? `${L.heatEstimated ? '≈' : ''}${this._fmt(L.cop, 1)}` : '–', this._e.heat || this._e.power];
