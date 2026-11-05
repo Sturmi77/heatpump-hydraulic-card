@@ -591,6 +591,13 @@
     const ot = (id) => only.shadowRoot.getElementById(id)?.textContent || '';
     check(ot('t-hp-power') === '500 W → 2.0 kW' && ot('t-hp-cop') === 'COP 4.0', `#173: without a power key the units' power counts (${ot('t-hp-power')} / ${ot('t-hp-cop')})`);
     only.remove();
+    // Units alone are a configuration (no onboarding), and their power decides the running state instead of the mode alone.
+    const bare = mount({ units: cfg.units }, hassOf(toStates({ ...base, 'sensor.u1': ['0', 'W'] }))); await wait(20);
+    check(!bare._startState() && (bare.shadowRoot.getElementById('t-hp-power')?.textContent || '') === '500 W → 2.0 kW', '#173: units alone render the card');
+    bare.remove();
+    const still = mount({ entities: { mode: 'sensor.m' }, units: cfg.units }, hassOf(toStates({ ...base, 'sensor.u1': ['0', 'W'], 'sensor.u2': ['0', 'W'] }))); await wait(20);
+    check(!still._flowModel().running, '#173: with every unit at 0 W a mode that stays on heating does not count as running');
+    still.remove();
     const report = C._diagnosticReport(cfg, hassOf(toStates({ ...base, 'sensor.h2': v('2000', 'W', 61) })));
     check(report.includes('Units (power and heat per unit):') && report.includes('- unit 2 power: sensor.u2') && /- unit 2 heat: sensor\.h2 .*\(written 61 min ago\)/.test(report),
       '#173: the diagnostic report lists the pairs and the age of each heat value');

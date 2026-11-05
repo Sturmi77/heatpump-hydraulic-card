@@ -1415,7 +1415,7 @@ const HFC_I18N = {
     source_flow: 'Źródło', target: 'Cel', curve_offset: 'krzywa', curve_shift: 'przesunięcie', return_short: 'Powrót', error: 'Błąd', circulation: 'Cyrk.', circulation_from: 'od', circulation_until: 'do', valve_dhw: 'C.W.U.', solar: 'Kolektor słoneczny',
     brine_pressure: 'Ciśnienie solanki', hc_pressure: 'Ciśnienie c.o.', pressure_normal: 'normalne', pressure_warning: 'ostrzeżenie', pressure_critical: 'krytyczne',
     timeline_title: 'Ostatnie {h} godz.', timeline_gap: 'Brak danych', timeline_aria: 'Tryb pracy z ostatnich {h} godzin. Strzałki wybierają okres.',
-    run_series: 'cykl {n} od {t}', run_pause: 'przerwa przed {d}', run_partial: 'rozpoczęto przed osiä czasu', run_ongoing: 'nadal trwa', run_phase: 'okres pracy, brak danych sprężarki', run_close: 'Zamknij', run_flow: 'Zasilanie', run_reached: 'osiągnięto', run_missed: '{d} K poniżej', run_heater: 'Grzałka elektryczna', run_on: 'włączona', run_off: 'wyłączona',
+    run_series: 'cykl {n} od {t}', run_pause: 'przerwa przed {d}', run_partial: 'rozpoczęto przed osiä czasu', run_ongoing: 'nadal trwa', run_phase: 'okres pracy, brak danych sprężarki', run_close: 'Zamknij', sec_units: 'Jednostki', unit: 'Jednostka', units_running: '{n} z {m} jednostek', unit_off: 'wył.', unit_stale: 'ciepło nieaktualne', run_flow: 'Zasilanie', run_reached: 'osiągnięto', run_missed: '{d} K poniżej', run_heater: 'Grzałka elektryczna', run_on: 'włączona', run_off: 'wyłączona',
     programs: { eco: 'Eco', night: 'Noc', party: 'Party', holiday: 'Wakacje' },
     sg_ready: { normal: 'SG normalny', blocked: 'Blokada dostawcy', boost: 'SG podbicie', forced: 'SG wymuszenie' },
     valve_heating: 'Ogrzewanie', valve_cooling: 'Chłodzenie', bypass: 'Bypass', pv: 'PV', pv_boost: 'Nadwyżka PV', battery: 'Bateria', grid: 'Sieć',
@@ -1429,7 +1429,7 @@ const HFC_I18N = {
       starts: 'Uruchomienia sprężarki', cycles_heating: 'Cykle ogrzewania', cycles_dhw: 'Cykle C.W.U.', cycles_cooling: 'Cykle chłodzenia', defrosts: 'Odszraniania',
       hours: 'Czas pracy sprężarki', hours_per_start: 'Czas pracy na cykl', load_classes: 'Klasy obciążenia 1-5', aux_hours: 'Czas pracy grzałki', aux_starts: 'Uruchomienia grzałki',
       spread: 'Różnica temp.', volume: 'Przepływ', heat_estimated: 'Moc grzewcza', power: 'Moc pobierana', heat_live: 'Moc grzewcza', compressor_speed: 'Sprężarka',
-      source_spread: 'Różnica temp. źródła', outdoor: 'Zewnątrz', dhw_top: 'Zbiornik C.W.U.', room: 'Pokój', brine_pressure: 'Ciśnienie solanki', hc_pressure: 'Ciśnienie c.o.', pv_share: 'Udział PV dzisiaj',
+      source_spread: 'Różnica temp. źródła', outdoor: 'Zewnątrz', dhw_top: 'Zbiornik C.W.U.', room: 'Pokój', brine_pressure: 'Ciśnienie solanki', hc_pressure: 'Ciśnienie c.o.', hc_spread: 'Różnica temp. obiegu', pv_share: 'Udział PV dzisiaj',
       pv_boost_share: 'Udział nadwyżki PV w ogrzewaniu', pv_production: 'Produkcja PV', solar_thermal: 'Kolektor słoneczny', cost: 'Koszt', dhw_loss: 'Strata postojowa C.W.U.',
     },
     periods: { now: 'teraz', today: 'dzisiaj', yesterday: 'wczoraj', week: 'tydzień', month: 'miesiąc', year: 'rok', total: 'łącznie' },
@@ -2632,7 +2632,7 @@ class HeatpumpFlowCard extends HTMLElement {
   _startState() {
     const c = this._config || {};
     return !this._preset && !Object.values(c.entities || {}).some((v) => v && v !== 'none')
-      && !['errors', 'badges', 'controls'].some((k) => Array.isArray(c[k]) && c[k].length);
+      && !['errors', 'badges', 'controls', 'units'].some((k) => Array.isArray(c[k]) && c[k].length);
   }
 
   static getConfigElement() { return document.createElement('heatpump-flow-card-editor'); }
@@ -6049,7 +6049,8 @@ class HeatpumpFlowCard extends HTMLElement {
     const compOn = this._has('compressor') && (this._on('compressor') || this._n('compressor') > 0);
     // A unit of a cascade that runs (#173) also counts when the compressor entity belongs to the other unit.
     const running = compOn || power > this._threshold || this._runningStates.includes(status) || !!this._units()?.some((u) => u.running)
-      || (!this._has('compressor') && !this._has('power') && !this._has('status') && ['heating', 'dhw', 'cooling', 'defrost'].includes(hp));
+      // The mode alone decides only without any running signal; the power of cascade units is one (#173).
+      || (!this._has('compressor') && !this._has('power') && !this._has('status') && !this._units() && ['heating', 'dhw', 'cooling', 'defrost'].includes(hp));
     const boilerRunning = !!P.boiler && this._boilerOn();
     const generatorMode = running ? (boilerRunning ? 'both' : 'hp_only') : (boilerRunning ? 'boiler_only' : 'idle');
     const generatorRunning = running || boilerRunning;
