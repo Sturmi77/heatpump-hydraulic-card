@@ -95,6 +95,8 @@ run_partial
 run_ongoing
 run_phase
 run_close
+run_electricity
+run_heat
 sec_units
 unit
 units_running

@@ -565,6 +565,44 @@
     card.remove();
   }
   {
+    // #327: electricity, heat and COP of a run, integrated from the history of its window, only where the data cover the run.
+    const M = 60000; const T0 = Date.parse('2030-01-01T10:00:00Z');
+    const at = (min, s) => ({ s: String(s), lu: (T0 + min * M) / 1000 });
+    const series = {
+      'sensor.pw': [at(0, 1000), at(20, 1500)], 'sensor.ht': [at(0, 4), at(20, 5)],
+      'sensor.gap': [at(0, 1000), at(10, 'unavailable'), at(30, 1000)],
+      'sensor.vol': [at(0, 900)], 'sensor.f': [at(0, 35)], 'sensor.r': [at(0, 30)],
+      'sensor.u1': [at(0, 600)], 'sensor.h1': [0, 5, 10, 15, 20, 25, 30, 35].map((m) => at(m, 2.4)),
+      'sensor.u2': [at(0, 500)], 'sensor.h2old': [at(-50, 2.0)], 'sensor.h2': [0, 5, 10, 15, 20, 25, 30, 35].map((m) => at(m, 2.0)),
+      'sensor.st': [at(0, 100)],
+    };
+    const st = toStates({ 'sensor.pw': ['1500', 'W'], 'sensor.ht': ['5', 'kW'], 'sensor.gap': ['1000', 'W'], 'sensor.vol': ['900', 'L/h'], 'sensor.f': ['35', '°C'],
+      'sensor.r': ['30', '°C'], 'sensor.c': 'on', 'sensor.u1': ['600', 'W'], 'sensor.h1': ['2.4', 'kW'], 'sensor.u2': ['500', 'W'], 'sensor.h2old': ['2.0', 'kW'],
+      'sensor.h2': ['2.0', 'kW'], 'sensor.st': ['100', 'W'] });
+    const hass = { ...hassOf(st), callWS: (m) => (m.type === 'history/history_during_period'
+      ? Promise.resolve(Object.fromEntries(m.entity_ids.map((id) => [id, series[id] || []]))) : Promise.reject(new Error('not simulated'))) };
+    const run = { from: T0, to: T0 + 40 * M, kind: 'heat', source: 'run', partial: false, ongoing: false, pause: null, series: 1, seriesFrom: T0, phases: [{ kind: 'heat', from: T0, to: T0 + 40 * M }] };
+    const text = (rows) => rows.filter(([k]) => ['Electricity', 'Heat', 'COP'].includes(k)).map(([k, v]) => `${k}: ${v}`).join(' | ');
+    const rowsOf = async (entities, extra = {}) => {
+      const card = mount({ entities: { compressor: 'sensor.c', ...entities }, ...extra }, hass); await wait(20);
+      card._runValues(run); await wait(20);
+      const out = text(card._runValues(run)); card.remove(); return out;
+    };
+    const dense = await rowsOf({ power: 'sensor.pw', heat: 'sensor.ht' });
+    check(dense === 'Electricity: 0.83 kWh | Heat: 3.00 kWh | COP: 3.6', `#327: power and heat integrated over the run, COP from both (${dense})`);
+    const sparse = await rowsOf({ power: 'sensor.gap', heat: 'sensor.ht' });
+    check(sparse === 'Heat: 3.00 kWh', `#327: power valid for 75 % of the run gives no electricity and no COP (${sparse})`);
+    const est = await rowsOf({ power: 'sensor.pw', volume: 'sensor.vol', flow: 'sensor.f', return: 'sensor.r' });
+    check(est === 'Electricity: 0.83 kWh | Heat: ≈3.49 kWh | COP: ≈4.2', `#327: without a heat entity flow rate × spread, marked ≈ (${est})`);
+    const sum = await rowsOf({ power: ['sensor.pw', 'sensor.gap'], heat: 'sensor.ht' });
+    check(sum === 'Heat: 3.00 kWh', `#327: a sum with a member missing for part of the run gives no electricity (${sum})`);
+    const units = (h2) => ({ units: [{ power: 'sensor.u1', heat: 'sensor.h1' }, { power: 'sensor.u2', heat: h2 }] });
+    const cascade = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units('sensor.h2'));
+    check(cascade === 'Electricity: 0.80 kWh | Heat: 2.93 kWh | COP: 3.7', `#327: a cascade with both units' heat covered (${cascade})`);
+    const stale = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units('sensor.h2old'));
+    check(stale === 'Electricity: 0.80 kWh', `#327: an hour-old heat value of a running unit gives no heat and no COP for the run (${stale})`);
+  }
+  {
     // #173: a cascade of two units with power and heat paired per unit; the hydraulic station's power is part of `power` only.
     const ago = (min) => new Date(Date.now() - min * 60000).toISOString();
     const v = (state, unit, min = 0) => ({ state, attributes: { unit_of_measurement: unit }, last_updated: ago(min), last_reported: ago(min) });
