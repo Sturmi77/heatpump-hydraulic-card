@@ -1326,7 +1326,7 @@ const HFC_I18N = {
     source_flow: 'Source', target: 'Target', curve_offset: 'curve', curve_shift: 'shift', mixer: 'Mixer', mixer_opening: 'opening', mixer_closing: 'closing', return_short: 'RL', error: 'Error', circulation: 'Circ.', circulation_from: 'from', circulation_until: 'until', valve_dhw: 'DHW', solar: 'Solar',
     brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', pressure_normal: 'normal', pressure_warning: 'warning', pressure_critical: 'critical',
     timeline_title: 'Last {h} hours', timeline_gap: 'No data', timeline_aria: 'Operating mode of the last {h} hours. Arrow keys select a period.',
-    run_series: 'run {n} since {t}', run_pause: 'pause before {d}', run_partial: 'began before the timeline', run_ongoing: 'still running', run_phase: 'operating period, no compressor data', run_close: 'Close', sec_units: 'Units', unit: 'Unit', units_running: '{n} of {m} units', unit_off: 'off', unit_stale: 'heat not current', run_flow: 'Flow', run_reached: 'reached', run_missed: '{d} K below', run_heater: 'Heater rod', run_on: 'on', run_off: 'off',
+    run_series: 'run {n} since {t}', run_pause: 'pause before {d}', run_partial: 'began before the timeline', run_ongoing: 'still running', run_phase: 'operating period, no compressor data', run_close: 'Close', run_electricity: 'Electricity', run_heat: 'Heat', sec_units: 'Units', unit: 'Unit', units_running: '{n} of {m} units', unit_off: 'off', unit_stale: 'heat not current', run_flow: 'Flow', run_reached: 'reached', run_missed: '{d} K below', run_heater: 'Heater rod', run_on: 'on', run_off: 'off',
     programs: { eco: 'Eco', night: 'Night', party: 'Party', holiday: 'Holiday' },
     sg_ready: { normal: 'SG normal', blocked: 'Utility lock', boost: 'SG boost', forced: 'SG forced on' },
     valve_heating: 'Heating', valve_cooling: 'Cooling', bypass: 'Bypass', pv: 'PV', pv_boost: 'PV surplus', battery: 'Battery', grid: 'Grid',
@@ -1369,7 +1369,7 @@ const HFC_I18N = {
     source_flow: 'Quelle', target: 'Soll', curve_offset: 'Kurve', curve_shift: 'Verschiebung', mixer: 'Mischer', mixer_opening: 'öffnet', mixer_closing: 'schließt', return_short: 'RL', error: 'Fehler', circulation: 'Zirk.', circulation_from: 'ab', circulation_until: 'bis', valve_dhw: 'WW', solar: 'Solar',
     brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', pressure_normal: 'normal', pressure_warning: 'Warnung', pressure_critical: 'kritisch',
     timeline_title: 'Letzte {h} Stunden', timeline_gap: 'Keine Daten', timeline_aria: 'Betriebsart der letzten {h} Stunden. Mit den Pfeiltasten einen Zeitraum wählen.',
-    run_series: '{n}. Lauf seit {t}', run_pause: 'Pause davor {d}', run_partial: 'begann vor der Zeitleiste', run_ongoing: 'läuft noch', run_phase: 'Betriebsphase, ohne Verdichterdaten', run_close: 'Schließen', sec_units: 'Einheiten', unit: 'Einheit', units_running: '{n} von {m} Einheiten', unit_off: 'aus', unit_stale: 'Wärme nicht aktuell', run_flow: 'Vorlauf', run_reached: 'erreicht', run_missed: '{d} K darunter', run_heater: 'Heizstab', run_on: 'an', run_off: 'aus',
+    run_series: '{n}. Lauf seit {t}', run_pause: 'Pause davor {d}', run_partial: 'begann vor der Zeitleiste', run_ongoing: 'läuft noch', run_phase: 'Betriebsphase, ohne Verdichterdaten', run_close: 'Schließen', run_electricity: 'Strom', run_heat: 'Wärme', sec_units: 'Einheiten', unit: 'Einheit', units_running: '{n} von {m} Einheiten', unit_off: 'aus', unit_stale: 'Wärme nicht aktuell', run_flow: 'Vorlauf', run_reached: 'erreicht', run_missed: '{d} K darunter', run_heater: 'Heizstab', run_on: 'an', run_off: 'aus',
     programs: { eco: 'Eco', night: 'Nacht', party: 'Party', holiday: 'Urlaub' },
     sg_ready: { normal: 'SG normal', blocked: 'EVU-Sperre', boost: 'SG-Anhebung', forced: 'SG-Zwangsbetrieb' },
     valve_heating: 'Heizen', valve_cooling: 'Kühlen', bypass: 'Bypass', pv: 'PV', pv_boost: 'PV-Überschuss', battery: 'Akku', grid: 'Netz',
@@ -1415,7 +1415,7 @@ const HFC_I18N = {
     source_flow: 'Źródło', target: 'Cel', curve_offset: 'krzywa', curve_shift: 'przesunięcie', return_short: 'Powrót', error: 'Błąd', circulation: 'Cyrk.', circulation_from: 'od', circulation_until: 'do', valve_dhw: 'C.W.U.', solar: 'Kolektor słoneczny',
     brine_pressure: 'Ciśnienie solanki', hc_pressure: 'Ciśnienie c.o.', pressure_normal: 'normalne', pressure_warning: 'ostrzeżenie', pressure_critical: 'krytyczne',
     timeline_title: 'Ostatnie {h} godz.', timeline_gap: 'Brak danych', timeline_aria: 'Tryb pracy z ostatnich {h} godzin. Strzałki wybierają okres.',
-    run_series: 'cykl {n} od {t}', run_pause: 'przerwa przed {d}', run_partial: 'rozpoczęto przed osiä czasu', run_ongoing: 'nadal trwa', run_phase: 'okres pracy, brak danych sprężarki', run_close: 'Zamknij', sec_units: 'Jednostki', unit: 'Jednostka', units_running: '{n} z {m} jednostek', unit_off: 'wył.', unit_stale: 'ciepło nieaktualne', run_flow: 'Zasilanie', run_reached: 'osiągnięto', run_missed: '{d} K poniżej', run_heater: 'Grzałka elektryczna', run_on: 'włączona', run_off: 'wyłączona',
+    run_series: 'cykl {n} od {t}', run_pause: 'przerwa przed {d}', run_partial: 'rozpoczęto przed osiä czasu', run_ongoing: 'nadal trwa', run_phase: 'okres pracy, brak danych sprężarki', run_close: 'Zamknij', run_electricity: 'Energia elektryczna', run_heat: 'Ciepło', sec_units: 'Jednostki', unit: 'Jednostka', units_running: '{n} z {m} jednostek', unit_off: 'wył.', unit_stale: 'ciepło nieaktualne', run_flow: 'Zasilanie', run_reached: 'osiągnięto', run_missed: '{d} K poniżej', run_heater: 'Grzałka elektryczna', run_on: 'włączona', run_off: 'wyłączona',
     programs: { eco: 'Eco', night: 'Noc', party: 'Party', holiday: 'Wakacje' },
     sg_ready: { normal: 'SG normalny', blocked: 'Blokada dostawcy', boost: 'SG podbicie', forced: 'SG wymuszenie' },
     valve_heating: 'Ogrzewanie', valve_cooling: 'Chłodzenie', bypass: 'Bypass', pv: 'PV', pv_boost: 'Nadwyżka PV', battery: 'Bateria', grid: 'Sieć',
@@ -1461,7 +1461,7 @@ const HFC_I18N = {
     source_flow: 'Zdroj', target: 'Cieľ', curve_offset: 'krivka', curve_shift: 'posun', return_short: 'RL', error: 'Chyba', circulation: 'Cirk.', circulation_from: 'od', circulation_until: 'do', valve_dhw: 'TÚV', solar: 'Solár',
     brine_pressure: 'Tlak nemrznúcej zmesi', hc_pressure: 'Tlak vykurovania', pressure_normal: 'normálny', pressure_warning: 'varovanie', pressure_critical: 'kritický',
     timeline_title: 'Posledných {h} hodín', timeline_gap: 'Žiadne dáta', timeline_aria: 'Prevádzkový režim za posledných {h} hodín. Šípkami vyberte obdobie.',
-    run_series: '{n}. beh od {t}', run_pause: 'prestávka predtým {d}', run_partial: 'začal pred časovou osou', run_ongoing: 'stále beží', run_phase: 'prevádzková fáza, bez údajov kompresora', run_close: 'Zavrieť', sec_units: 'Jednotky', unit: 'Jednotka', units_running: '{n} z {m} jednotiek', unit_off: 'vyp.', unit_stale: 'teplo nie je aktuálne', run_flow: 'Prívod', run_reached: 'dosiahnutý', run_missed: '{d} K pod', run_heater: 'Vykurovacia tyč', run_on: 'zap', run_off: 'vyp',
+    run_series: '{n}. beh od {t}', run_pause: 'prestávka predtým {d}', run_partial: 'začal pred časovou osou', run_ongoing: 'stále beží', run_phase: 'prevádzková fáza, bez údajov kompresora', run_close: 'Zavrieť', run_electricity: 'Elektrina', run_heat: 'Teplo', sec_units: 'Jednotky', unit: 'Jednotka', units_running: '{n} z {m} jednotiek', unit_off: 'vyp.', unit_stale: 'teplo nie je aktuálne', run_flow: 'Prívod', run_reached: 'dosiahnutý', run_missed: '{d} K pod', run_heater: 'Vykurovacia tyč', run_on: 'zap', run_off: 'vyp',
     programs: { eco: 'Eko', night: 'Nočný', party: 'Párty', holiday: 'Dovolenka' },
     sg_ready: { normal: 'SG normálna prevádzka', blocked: 'Blokovanie distribučnou sieťou', boost: 'SG zvýšená prevádzka', forced: 'SG vynútená prevádzka' },
     valve_heating: 'Vykurovanie', valve_cooling: 'Chladenie', bypass: 'Obtok (Bypass)', pv: 'FVE', pv_boost: 'Prebytok FVE', battery: 'Batéria', grid: 'Sieť',
@@ -1505,7 +1505,7 @@ const HFC_I18N = {
     source_flow: 'Zdroj', target: 'Cíl', curve_offset: 'křivka', curve_shift: 'posun', return_short: 'RL', error: 'Chyba', circulation: 'Cirk.', circulation_from: 'od', circulation_until: 'do', valve_dhw: 'TUV', solar: 'Solár',
     brine_pressure: 'Tlak nemrznoucí směsi', hc_pressure: 'Tlak vytápění', pressure_normal: 'normální', pressure_warning: 'varování', pressure_critical: 'kritický',
     timeline_title: 'Posledních {h} hodin', timeline_gap: 'Žádná data', timeline_aria: 'Provozní režim za posledních {h} hodin. Šipkami vyberte období.',
-    run_series: '{n}. běh od {t}', run_pause: 'pauza předtím {d}', run_partial: 'začal před časovou osou', run_ongoing: 'stále běží', run_phase: 'provozní fáze, bez údajů kompresoru', run_close: 'Zavřít', sec_units: 'Jednotky', unit: 'Jednotka', units_running: '{n} z {m} jednotek', unit_off: 'vyp.', unit_stale: 'teplo není aktuální', run_flow: 'Přívod', run_reached: 'dosažen', run_missed: '{d} K pod', run_heater: 'Topná tyč', run_on: 'zap', run_off: 'vyp',
+    run_series: '{n}. běh od {t}', run_pause: 'pauza předtím {d}', run_partial: 'začal před časovou osou', run_ongoing: 'stále běží', run_phase: 'provozní fáze, bez údajů kompresoru', run_close: 'Zavřít', run_electricity: 'Elektřina', run_heat: 'Teplo', sec_units: 'Jednotky', unit: 'Jednotka', units_running: '{n} z {m} jednotek', unit_off: 'vyp.', unit_stale: 'teplo není aktuální', run_flow: 'Přívod', run_reached: 'dosažen', run_missed: '{d} K pod', run_heater: 'Topná tyč', run_on: 'zap', run_off: 'vyp',
     programs: { eco: 'Eko', night: 'Noční', party: 'Párty', holiday: 'Dovolená' },
     sg_ready: { normal: 'SG normální provoz', blocked: 'Blokování distribuční sítí', boost: 'SG zvýšený provoz', forced: 'SG vynucený provoz' },
     valve_heating: 'Vytápění', valve_cooling: 'Chlazení', bypass: 'Obtok (Bypass)', pv: 'FVE', pv_boost: 'Přebytek FVE', battery: 'Baterie', grid: 'Síť',
@@ -1548,7 +1548,7 @@ const HFC_I18N = {
     source_flow: 'Bron', target: 'Doel', curve_offset: 'stooklijn', curve_shift: 'verschuiving', return_short: 'RL', error: 'Storing', circulation: 'Circ.', circulation_from: 'vanaf', circulation_until: 'tot', valve_dhw: 'WW', solar: 'Zon',
     brine_pressure: 'Brondruk', hc_pressure: 'Verwarmingsdruk', pressure_normal: 'normaal', pressure_warning: 'waarschuwing', pressure_critical: 'kritiek',
     timeline_title: 'Laatste {h} uur', timeline_gap: 'Geen gegevens', timeline_aria: 'Bedrijfsstand van de laatste {h} uur. Kies een periode met de pijltjestoetsen.',
-    run_series: 'run {n} sinds {t}', run_pause: 'pauze ervoor {d}', run_partial: 'begon vóór de tijdlijn', run_ongoing: 'loopt nog', run_phase: 'bedrijfsperiode, geen compressorgegevens', run_close: 'Sluiten', sec_units: 'Units', unit: 'Unit', units_running: '{n} van {m} units', unit_off: 'uit', unit_stale: 'warmte niet actueel', run_flow: 'Aanvoer', run_reached: 'bereikt', run_missed: '{d} K eronder', run_heater: 'Verwarmingselement', run_on: 'aan', run_off: 'uit',
+    run_series: 'run {n} sinds {t}', run_pause: 'pauze ervoor {d}', run_partial: 'begon vóór de tijdlijn', run_ongoing: 'loopt nog', run_phase: 'bedrijfsperiode, geen compressorgegevens', run_close: 'Sluiten', run_electricity: 'Elektriciteit', run_heat: 'Warmte', sec_units: 'Units', unit: 'Unit', units_running: '{n} van {m} units', unit_off: 'uit', unit_stale: 'warmte niet actueel', run_flow: 'Aanvoer', run_reached: 'bereikt', run_missed: '{d} K eronder', run_heater: 'Verwarmingselement', run_on: 'aan', run_off: 'uit',
     programs: { eco: 'Eco', night: 'Nacht', party: 'Party', holiday: 'Vakantie' },
     sg_ready: { normal: 'SG normaal', blocked: 'Netblokkering', boost: 'SG-verhoging', forced: 'SG gedwongen aan' },
     valve_heating: 'Verwarmen', valve_cooling: 'Koelen', bypass: 'Bypass', pv: 'PV', pv_boost: 'PV-overschot', battery: 'Accu', grid: 'Net',
@@ -2270,6 +2270,8 @@ const hfcHcCount = (config) => Math.min(Math.max(Math.round(+config?.hc_count) |
 // The heat value of a running unit in a cascade counts only while it is this fresh: a value written once an hour belongs to an
 // earlier part of the run (#173).
 const HFC_UNIT_MAX_AGE = 10 * 60000;
+// Share of a run that the history of power and heat must cover with valid values before its energy and COP are shown (#327).
+const HFC_RUN_COVER = 0.95;
 // Keys whose list of entities is averaged (#23): room temperature and humidity of each circuit. Power, heat and the power
 // sources add up their lists instead; every other key takes the first entity of a list.
 const hfcMeanKey = (key) => /^(hc[2-6]_)?room(_humidity)?$/.test(key);
@@ -5626,8 +5628,14 @@ class HeatpumpFlowCard extends HTMLElement {
     const dhw = run.kind === 'dhw';
     const keys = (dhw ? ['dhw_top', 'dhw_target', 'heater', ...HFC_TANK_HEATERS.filter((k) => k.startsWith('dhw_')), 'defrost']
       : ['flow', 'return', 'hc_flow', 'hc_return', 'hc_setpoint', 'compressor_speed', 'volume', 'outdoor', 'defrost']).filter((k) => this._has(k));
-    if (!keys.length) return [];
-    const list = [...new Set(keys.map((k) => this._e[k]))];
+    // Energy of the run (#327): power and heat with every member of their sums, the units of a cascade (#173), and flow rate,
+    // flow and return for a heat estimate.
+    const units = Array.isArray(this._config.units) && this._config.units.length ? this._config.units : null;
+    const idsOf = (k) => this._sums?.[k] || [this._e[k]];
+    const energyIds = [...['power', 'heat', 'volume', 'flow', 'return'].filter((k) => this._has(k)).flatMap(idsOf),
+      ...(units || []).flatMap((u) => [u.power, u.heat].flat())];
+    if (!keys.length && !energyIds.length) return [];
+    const list = [...new Set([...keys.map((k) => this._e[k]), ...energyIds])];
     const attrs = keys.some((k) => hfcTempAttr(this._e[k], k));
     // A run that is still going ends "now", which moves with every update: its query has no end and a fixed key, so it is
     // refreshed every five minutes like the other queries instead of being asked again on every update. The same holds for the
@@ -5721,7 +5729,58 @@ class HeatpumpFlowCard extends HTMLElement {
       const out = mean(nums('outdoor'));
       if (Number.isFinite(out)) rows.push([`${i.outdoor} Ø`, this._esc(this._t(out))]);
     }
+    rows.push(...this._runEnergy(run, hist, { time, nums, at, units, idsOf }));
     if (defrosts > 0 || thaw?.known) rows.push([i.tiles.defrosts, String(defrosts)]);
+    return rows;
+  }
+
+  // Electricity, heat and COP of a run (#327), integrated from the recorder history of the run window. A value is shown only
+  // when its data hold a valid value for at least HFC_RUN_COVER of the run, and the COP only when both do.
+  // - Electricity: `power` with every member of its sum valid at the same time, else the power of the units (#173).
+  // - Heat: the units' pairs (a running unit's heat counts for HFC_UNIT_MAX_AGE after it was written, a standing unit adds
+  //   none), else `heat`, else flow rate × spread × 1.163 Wh/(l·K), marked ≈.
+  // Energy counters and hourly long-term statistics are not used, so a counter reset or an hourly value is never split onto a run.
+  _runEnergy(run, hist, { time, nums, at, units, idsOf }) {
+    const i = this._i;
+    const span = run.to - run.from;
+    if (!(span > 0)) return [];
+    const watts = (id, factor) => {
+      const attributes = this._hass?.states[id]?.attributes;
+      return (hist[id] || []).map((e) => ({ t: time(e), v: hfcPowerW({ state: String(e.s ?? e.state), attributes }, factor) }))
+        .filter((p) => Number.isFinite(p.t)).sort((a, b) => a.t - b.t);
+    };
+    // Values of several series at every time one of them changes, joined by fn (which sees NaN for an invalid member).
+    const combine = (series, fn) => [...new Set(series.flatMap((s) => s.map((p) => p.t)))].sort((a, b) => a - b)
+      .map((t) => ({ t, v: fn(series.map((s) => at(s, t))) }));
+    const total = (vs) => (vs.every(Number.isFinite) ? vs.reduce((a, b) => a + b, 0) : NaN);
+    const sumW = (ids, factor = 1) => combine(ids.map((id) => watts(id, factor)), total);
+    // A heat value of a unit is stale HFC_UNIT_MAX_AGE after it was written, unless a newer one follows.
+    const fresh = (pts) => pts.flatMap((p, n) => ((pts[n + 1]?.t ?? Infinity) - p.t > HFC_UNIT_MAX_AGE && Number.isFinite(p.v)
+      ? [p, { t: p.t + HFC_UNIT_MAX_AGE, v: NaN }] : [p]));
+    const integrate = (pts) => {
+      let sum = 0; let w = 0;
+      pts.forEach((p, n) => {
+        const a = Math.max(p.t, run.from); const b = Math.min(pts[n + 1]?.t ?? run.to, run.to);
+        if (b > a && Number.isFinite(p.v)) { sum += p.v * (b - a); w += b - a; }
+      });
+      return w / span >= HFC_RUN_COVER ? sum / 3.6e9 : NaN; // W·ms → kWh
+    };
+    const elec = this._has('power') ? integrate(sumW(idsOf('power')))
+      : units ? integrate(sumW(units.flatMap((u) => [u.power].flat()))) : NaN;
+    let estimated = false; let heat = NaN;
+    if (units && !this._has('heat')) {
+      heat = integrate(combine(units.map((u) => combine([sumW([u.power].flat()), fresh(sumW([u.heat].flat(), 1000))],
+        ([p, h]) => (!Number.isFinite(p) ? NaN : p <= 50 ? 0 : h))), total));
+    } else if (this._has('heat')) heat = integrate(sumW(idsOf('heat'), 1000));
+    else if (['volume', 'flow', 'return'].every((k) => this._has(k))) {
+      heat = integrate(combine([nums('volume'), nums('flow'), nums('return')], ([v, f, r]) => (v * Math.max(f - r, 0) * 1.163)));
+      estimated = true;
+    }
+    const kwh = (v, approx = false) => `${approx ? '≈' : ''}${this._fmt(v, v < 10 ? 2 : 1)} kWh`;
+    const rows = [];
+    if (Number.isFinite(elec)) rows.push([i.run_electricity, this._esc(kwh(elec))]);
+    if (Number.isFinite(heat)) rows.push([i.run_heat, this._esc(kwh(heat, estimated))]);
+    if (elec > 0.005 && heat > 0) rows.push(['COP', this._esc(`${estimated ? '≈' : ''}${this._fmt(heat / elec, 1)}`)]);
     return rows;
   }
 
