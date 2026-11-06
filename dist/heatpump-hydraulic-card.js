@@ -5345,8 +5345,8 @@ class HeatpumpFlowCard extends HTMLElement {
   }
 
   // Runs of the heat pump between start and end, from the segments of _timelineSegments (#300, #324). With a compressor a run
-  // lasts from on to off; the operating periods inside it (heating, hot water, defrost) are its phases. Without one, every
-  // stretch of operating periods without a pause is a phase run. A run that began before the window is `partial`, one still
+  // lasts from on to off and is divided where heating, hot water and cooling change; the operating periods inside a part are
+  // its phases. Without one, every stretch of operating periods without a pause is a phase run, divided in the same way. A run that began before the window is `partial`, one still
   // going at its end `ongoing`. `pause` is the standstill before the run; `series` counts the runs since the last standstill of
   // at least HFC_RUNS.seriesGap minutes, which began at `seriesFrom`.
   // Returns [{ from, to, kind, phases: [{ kind, from, to }], source: 'run' | 'phase', partial, ongoing, pause, series, seriesFrom }].
@@ -5385,7 +5385,22 @@ class HeatpumpFlowCard extends HTMLElement {
       r.series = prev && r.pause < HFC_RUNS.seriesGap * 60000 ? prev.series + 1 : 1;
       r.seriesFrom = r.series > 1 ? prev.seriesFrom : r.from;
     });
-    return runs;
+    // A modulating heat pump can run for a day with hot-water charges inside: a change between heating, hot water and cooling
+    // starts a new period of the run, so a charge can be selected on its own. Defrost stays in the period it interrupts, and so
+    // does an SG-Ready overlay, which replaces the kind of a segment without changing what the water does. The periods share
+    // the series of their run, and only the first has a pause before it.
+    return runs.flatMap((r) => {
+      const parts = [];
+      r.phases.forEach((p) => {
+        const kind = p.kind === 'pv' ? 'heat' : p.kind;
+        if (!['defrost', 'sg-boost', 'sg-forced'].includes(kind) && parts[parts.length - 1]?.kind !== kind) parts.push({ kind, from: p.from });
+      });
+      if (parts.length < 2) return [r];
+      return parts.map((part, n) => {
+        const from = n ? part.from : r.from; const to = parts[n + 1]?.from ?? r.to;
+        return { ...r, from, to, kind: part.kind, phases: phasesIn(from, to), partial: r.partial && !n, ongoing: r.ongoing && n === parts.length - 1, pause: n ? null : r.pause };
+      });
+    });
   }
 
   // Preset rule for units without a valve or hot-water charging entity (`valve_rule: 'flow_above_dhw'`, ViCare #196): hot water
