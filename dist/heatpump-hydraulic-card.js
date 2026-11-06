@@ -557,7 +557,9 @@ const HFC_PRESETS = {
         // Long names: binary_sensor.boiler_hp_compressor read off while the compressor ran at 31 % (EMS-ESP 3.9.0-dev, #287),
         // so the compressor speed comes first there.
         compressor: b('hpcompon').concat(s('boiler_compressor_speed'), b('hp_compressor')),
-        valve: b('hp3way', 'dhw_3wayvalve', 'ww3wayvalve', 'dhw_3_way_valve_active').concat(sw('3_way_valve')),
+        // The heat pump's own 3-way valve also switches when hot water is used for defrosting, the boiler's DHW valve flag does not
+        // (#224), so the hp3way switch comes before it.
+        valve: b('hp3way').concat(sw('hp3way'), b('dhw_3wayvalve', 'ww3wayvalve', 'dhw_3_way_valve_active'), sw('3_way_valve')),
         power: s('boiler_hpcurrpower', 'boiler_compressor_current_power'),
         // "Compressor power output" is the heat output in kW, next to the electrical current power in W.
         heat: s('boiler_hppower', 'boiler_compressor_power_output'),
@@ -593,7 +595,8 @@ const HFC_PRESETS = {
         heat_total: s('boiler_nrgsupptotal', 'boiler_total_energy_supplied'),
         compressor_speed: s('boiler_hpcompspd', 'boiler_compressor_speed'),
         evap_temp: s('boiler_hppl1', 'boiler_evaporator_inlet_temperature_tr4'),
-        eev: s('boiler_expansion_valve_vr1'),
+        // Expansion valve VR1 (short name expvalve); larger outdoor units also report VR0 (recvalve) (#224).
+        eev: s('boiler_expvalve', 'boiler_expansion_valve_vr1'),
         cond_temp: s('boiler_hpph1'),
         suction_temp: s('boiler_hptr5', 'boiler_compressor_inlet_temperature_tr5'),
         hot_gas: s('boiler_hptr6', 'boiler_compressor_outlet_temperature_tr6'),
@@ -1087,7 +1090,11 @@ const HFC_PRESETS = {
         // so it is no diverter valve and stays unmapped (#155).
         valve: w('statusdhw_dhwactive'),
         power: [h('currentconsumedpower'), h('rundataelectricpowerconsumption')],
-        heat: h('currentyieldpower'),
+        // On the HMU, CurrentYieldPower is the yield from the environment, heat minus electricity (#338; RunDataHeatOutput =
+        // yield + CurrentConsumedPower in 104 of 108 readings on a cascade). Heat is that sum; RunDataHeatOutput comes first
+        // where ebusd reports it. With only one of the two parts, heat stays unmapped rather than wrong.
+        heat: h('rundataheatoutput') || (h('currentyieldpower') && h('currentconsumedpower')
+          ? { sum: [h('currentyieldpower'), h('currentconsumedpower')] } : undefined),
         flow: h('rundataflowtemp'),
         return: h('rundatareturntemp'),
         volume: h('buildingcircuitflow'),
@@ -1229,6 +1236,8 @@ const HFC_PRESETS = {
   // base topic ("espaltherma"). Only the values a user uncomments in the definition exist, so every key is optional.
   espaltherma: {
     name: 'Daikin Altherma (ESPAltherma)',
+    // Confirmed on an EPRA12EAV3 in heating and during a hot-water charge (#254).
+    tested: true,
     // The water pump of the indoor unit (or monobloc) also runs for hot water.
     primary_pump: true,
     auto_circuits: false,
@@ -3042,7 +3051,15 @@ class HeatpumpFlowCard extends HTMLElement {
     if (preset?.ready && !preset.ready(ctx)) ready = false;
     prefix = String(prefix || '').trim().toLowerCase();
     const fromPreset = {};
+    const presetSums = {};
     const take = (k, v) => {
+      // { sum: [a, b] }: the key is the sum of these entities, as a list in the configuration is (ebusd heat, #338).
+      if (v && Array.isArray(v.sum)) {
+        const ids = v.sum.filter(Boolean);
+        if (ids.length) fromPreset[k] = ids[0];
+        if (ids.length > 1) presetSums[k] = ids; else delete presetSums[k];
+        return;
+      }
       const list = (Array.isArray(v) ? v : [v]).filter(Boolean);
       // First candidate with a value; one that exists but is unavailable or unknown (not reported by this model) yields to a later one.
       const live = (id) => hass.states[id] && !['unknown', 'unavailable'].includes(hass.states[id].state);
@@ -3059,17 +3076,16 @@ class HeatpumpFlowCard extends HTMLElement {
       if (preset.circuit_rooms) ['room', 'room_target'].forEach((k) => take(`hc${n}_${k}`, rawN[k]));
     }
     const e = { ...fromPreset };
-    const sums = {};
+    const sums = { ...presetSums };
     // User entities override the preset; null or "none" removes a preset entity.
     // A list adds the values of its entities (power, heat and the power sources), e.g. two S0 meters, or averages them (rooms, #23).
     // The first member that exists stands for the key, so a missing first sensor does not hide the key.
     Object.entries(config.entities || {}).forEach(([k, v]) => {
-      if (v === null || v === 'none') delete e[k];
-      else if (Array.isArray(v)) {
+      if (v === null || v === 'none') { delete e[k]; delete sums[k]; } else if (Array.isArray(v)) {
         const ids = v.filter(Boolean);
         if (ids.length) e[k] = ids.find((id) => hass?.states?.[id]) || ids[0];
-        if (ids.length > 1) sums[k] = ids;
-      } else if (v) e[k] = v;
+        if (ids.length > 1) sums[k] = ids; else delete sums[k];
+      } else if (v) { e[k] = v; delete sums[k]; }
     });
     const presetErrors = preset && preset.errors ? preset.errors(prefix, idx, ctx) : [];
     const errors = config.errors !== undefined ? config.errors : presetErrors;
@@ -5653,7 +5669,8 @@ class HeatpumpFlowCard extends HTMLElement {
       ...(units || []).flatMap((u) => [u.power, u.heat].flat())];
     if (!keys.length && !energyIds.length) return [];
     const list = [...new Set([...keys.map((k) => this._e[k]), ...energyIds])];
-    const attrs = keys.some((k) => hfcTempAttr(this._e[k], k));
+    // Attributes are needed when any requested temperature is read from one, also flow and return of the heat estimate (#327).
+    const attrs = [...new Set([...keys, ...['flow', 'return'].filter((k) => this._has(k))])].some((k) => hfcTempAttr(this._e[k], k));
     // A run that is still going ends "now", which moves with every update: its query has no end and a fixed key, so it is
     // refreshed every five minutes like the other queries instead of being asked again on every update. The same holds for the
     // start of a run cut by the window, which moves with the window.
@@ -5662,6 +5679,9 @@ class HeatpumpFlowCard extends HTMLElement {
       entity_ids: list, minimal_response: true, ...(attrs ? {} : { no_attributes: true }), significant_changes_only: false,
     }, (res) => res || {});
     if (!hist) return [];
+    // The rows of a run are computed once per history and minute: _updateTimeline asks on every card update.
+    const memo = `${this._runId(run)}|${run.kind}|${Math.floor(run.to / 60000)}|${this._lang}|${this._config.flow_rate_unit || ''}`;
+    if (this._runMemo?.hist === hist && this._runMemo.key === memo) return this._runMemo.rows;
     const time = (e) => { const v = e.lu ?? e.lc ?? e.last_updated ?? e.last_changed; return typeof v === 'number' ? (v > 1e11 ? v : v * 1000) : Date.parse(v); };
     const states = (key) => {
       const id = this._e[key]; const attr = hfcTempAttr(id, key);
@@ -5688,11 +5708,16 @@ class HeatpumpFlowCard extends HTMLElement {
       });
       return w ? sum / w : NaN;
     };
-    const diff = (a, b) => {
-      const pa = nums(a); const pb = nums(b);
-      const times = [...new Set([...pa, ...pb].map((p) => p.t))].sort((x, y) => x - y);
-      return mean(times.map((t) => ({ t, v: at(pa, t) - at(pb, t) })));
+    // Values of several sorted series at every time one of them changes, joined by fn (which sees NaN for an invalid member).
+    // One cursor per series, so a long run with frequent samples stays linear.
+    const combine = (series, fn) => {
+      const pos = series.map(() => -1);
+      return [...new Set(series.flatMap((x) => x.map((p) => p.t)))].sort((a, b) => a - b).map((t) => ({ t, v: fn(series.map((x, k) => {
+        while (pos[k] + 1 < x.length && x[pos[k] + 1].t <= t) pos[k]++;
+        return pos[k] >= 0 ? x[pos[k]].v : NaN;
+      })) }));
     };
+    const diff = (a, b) => mean(combine([nums(a), nums(b)], ([x, y]) => x - y));
     const on = (s) => !['off', 'unavailable', 'unknown', 'none', '', 'false', 'aus'].includes(String(s).toLowerCase()) && !(parseFloat(s) <= 0);
     // Periods a key was on within the run, and how often it switched on. A key without recorder history in the window is
     // unknown, not off.
@@ -5746,8 +5771,9 @@ class HeatpumpFlowCard extends HTMLElement {
       const out = mean(nums('outdoor'));
       if (Number.isFinite(out)) rows.push([`${i.outdoor} Ø`, this._esc(this._t(out))]);
     }
-    rows.push(...this._runEnergy(run, hist, { time, nums, at, units, idsOf }));
+    rows.push(...this._runEnergy(run, hist, { time, nums, combine, units, idsOf }));
     if (defrosts > 0 || thaw?.known) rows.push([i.tiles.defrosts, String(defrosts)]);
+    this._runMemo = { hist, key: memo, rows };
     return rows;
   }
 
@@ -5757,7 +5783,7 @@ class HeatpumpFlowCard extends HTMLElement {
   // - Heat: the units' pairs (a running unit's heat counts for HFC_UNIT_MAX_AGE after it was written, a standing unit adds
   //   none), else `heat`, else flow rate × spread × 1.163 Wh/(l·K), marked ≈.
   // Energy counters and hourly long-term statistics are not used, so a counter reset or an hourly value is never split onto a run.
-  _runEnergy(run, hist, { time, nums, at, units, idsOf }) {
+  _runEnergy(run, hist, { time, nums, combine, units, idsOf }) {
     const i = this._i;
     const span = run.to - run.from;
     if (!(span > 0)) return [];
@@ -5766,9 +5792,6 @@ class HeatpumpFlowCard extends HTMLElement {
       return (hist[id] || []).map((e) => ({ t: time(e), v: hfcPowerW({ state: String(e.s ?? e.state), attributes }, factor) }))
         .filter((p) => Number.isFinite(p.t)).sort((a, b) => a.t - b.t);
     };
-    // Values of several series at every time one of them changes, joined by fn (which sees NaN for an invalid member).
-    const combine = (series, fn) => [...new Set(series.flatMap((s) => s.map((p) => p.t)))].sort((a, b) => a - b)
-      .map((t) => ({ t, v: fn(series.map((s) => at(s, t))) }));
     const total = (vs) => (vs.every(Number.isFinite) ? vs.reduce((a, b) => a + b, 0) : NaN);
     const sumW = (ids, factor = 1) => combine(ids.map((id) => watts(id, factor)), total);
     // A heat value of a unit is stale HFC_UNIT_MAX_AGE after it was written, unless a newer one follows.
@@ -5786,7 +5809,7 @@ class HeatpumpFlowCard extends HTMLElement {
       : units ? integrate(sumW(units.flatMap((u) => [u.power].flat()))) : NaN;
     let estimated = false; let heat = NaN;
     if (units && !this._has('heat')) {
-      heat = integrate(combine(units.map((u) => combine([sumW([u.power].flat()), fresh(sumW([u.heat].flat(), 1000))],
+      heat = integrate(combine(units.map((u) => combine([sumW([u.power].flat()), combine([u.heat].flat().map((id) => fresh(watts(id, 1000))), total)],
         ([p, h]) => (!Number.isFinite(p) ? NaN : p <= 50 ? 0 : h))), total));
     } else if (this._has('heat')) heat = integrate(sumW(idsOf('heat'), 1000));
     else if (['volume', 'flow', 'return'].every((k) => this._has(k))) {
@@ -6423,7 +6446,9 @@ class HeatpumpFlowCard extends HTMLElement {
     this._txt('t-hp-power', running
       ? (Number.isFinite(hpPower) ? `${this._fmt(hpPower, 0)} W${heatTxt ? ` → ${heatTxt}` : ''}` : (heatTxt || i.running))
       : i.compressor_off);
-    const cop = running && hpPower > 50 && heat > 0 && this._sumComplete('power') && this._sumComplete('heat') ? (heat * 1000) / hpPower : NaN;
+    // With units, an estimated heat stands in for the display only; the COP needs every pair complete (#173).
+    const cop = running && hpPower > 50 && heat > 0 && this._sumComplete('power') && this._sumComplete('heat') && (!units || units.every((u) => u.complete))
+      ? (heat * 1000) / hpPower : NaN;
     this._txt('t-hp-cop', Number.isFinite(cop) ? `COP ${heatEstimated ? '≈' : ''}${this._fmt(cop, 1)}` : '');
     const hpHeat = this._$('t-hp-heat');
     if (hpHeat) {
@@ -7339,8 +7364,11 @@ class HeatpumpHydraulicCard extends HeatpumpFlowCard {
 }
 class HeatpumpHydraulicCardEditor extends HeatpumpFlowCardEditor {}
 const hfcDefine = (name, cls) => { if (!customElements.get(name)) customElements.define(name, cls); };
-// A class of this card from another copy of the script: marked since 0.9.3, recognised by its name before.
-const hfcOwnCopy = (cls) => !!cls && (cls.hfcOwner === 'sturmi77' || ['HeatpumpFlowCard', 'HeatpumpHydraulicCard'].includes(cls.name));
+// A class of this card from another copy of the script: marked since 0.9.3, recognised before by its name together with two
+// helpers every release has had. Another project's card uses the same element and class name (Xerolux/heatpump-flow-card), so
+// the name alone would report it as an old copy of this card and suggest deleting its folder (forum, 4 November).
+const hfcOwnCopy = (cls) => !!cls && (cls.hfcOwner === 'sturmi77' || (['HeatpumpFlowCard', 'HeatpumpHydraulicCard'].includes(cls.name)
+  && typeof cls.prototype?._txt === 'function' && typeof cls.prototype?._cls === 'function'));
 const hfcMine = (name) => { const c = customElements.get(name); return !c || hfcOwnCopy(c); };
 const hfcNewer = (a, b) => {
   const p = (v) => String(v).split('.').map((n) => parseInt(n, 10) || 0);

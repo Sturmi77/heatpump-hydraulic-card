@@ -42,7 +42,7 @@ Each entry names the brands, the preset with its setup page, the integration it 
 - **Alpha Innotec**, **Novelan**, **Roth**, **Siemens**, **Elco**, **Buderus**, **Nibe**, **Wolf** heat pumps with a Luxtronik controller: preset [`luxtronik`](docs/presets/luxtronik.md), integration [Luxtronik](https://github.com/BenPru/luxtronik) (HACS, `luxtronik2`). Confirmed on one water-to-water installation; air and brine reports welcome. Coverage [93 %](docs/COVERAGE.md#luxtronik), 1 open.
 - **Stiebel Eltron** (WPM 3, WPM 3i, WPMsystem, LWZ) and **Tecalor** heat pumps with an ISG: preset [`stiebel_isg`](docs/presets/stiebel-isg.md), integration [Stiebel Eltron ISG](https://github.com/pail23/stiebel_eltron_isg_component) (HACS, `stiebel_eltron_isg`). Confirmed on a WPMsystem; WPM 3, WPM 3i and LWZ from the integration source. Coverage [100 %](docs/COVERAGE.md#stiebel_isg).
 - **Samsung** EHS (Mono, Split, TDM) on the NASA bus: preset [`samsung`](docs/presets/samsung.md), integration [esphome-samsung-nasa](https://github.com/Beormund/esphome-samsung-nasa) (ESPHome). Tested on a real installation. Coverage [100 %](docs/COVERAGE.md#samsung).
-- **Daikin** Altherma, **ROTEX** (Altherma 3, LT, EPRA, ERGA, EBLA …): preset [`espaltherma`](docs/presets/espaltherma.md), integration [ESPAltherma](https://github.com/raomin/ESPAltherma) (ESP32 on the X10A port, MQTT device discovery of the beta branch). Untested. Coverage [92 %](docs/COVERAGE.md#espaltherma), 1 open.
+- **Daikin** Altherma, **ROTEX** (Altherma 3, LT, EPRA, ERGA, EBLA …): preset [`espaltherma`](docs/presets/espaltherma.md), integration [ESPAltherma](https://github.com/raomin/ESPAltherma) (ESP32 on the X10A port, MQTT device discovery of the beta branch). Tested on a real installation (EPRA12EAV3, heating and hot water). Coverage [92 %](docs/COVERAGE.md#espaltherma), 1 open.
 - **Any other heat pump**: no preset; the editor's mapping assistant or your own `entities` ([any other heat pump](#any-other-heat-pump)).
 
 *Coverage* is the share of the core fields (the fields the editor shows first) that the preset fills, out of those its integration offers; open fields could still be mapped or need checking. It is generated from the card, and [docs/COVERAGE.md](docs/COVERAGE.md) has the details: the fields an integration does not offer and why, the further fields, stat tiles and texts. Which outdoor-unit drawing each preset selects is listed under [Outdoor-unit style coverage](#outdoor-unit-style-coverage).
@@ -314,13 +314,13 @@ Everything can be set in the **UI editor**. With a preset, the editor shows whet
   units:
     - name: Unit 1
       power: sensor.unit1_power
-      heat: sensor.ebusd_hmu_currentyieldpower
+      heat: [sensor.ebusd_hmu_currentyieldpower, sensor.ebusd_hmu_currentconsumedpower]
     - name: Unit 2
       power: sensor.unit2_power
-      heat: sensor.heating_ebusd_wp2_hmu_currentyieldpower
+      heat: [sensor.heating_ebusd_wp2_hmu_currentyieldpower, sensor.heating_ebusd_wp2_hmu_currentconsumedpower]
   ```
 
-  A unit runs above 50 W. While it runs, its heat value counts only when it was written within the last 10 minutes; an hourly value (as from a gateway query) is shown as "heat not current" and the system COP is left out, while the other unit keeps its own COP in the drawer. The system COP is the sum of the units' heat divided by `power` (here including the station), or by the units' power without a `power` key. Leave `heat` empty when `units` are set. The diagnostic report lists every pair with the age of its heat value.
+  A unit runs above 50 W. While it runs, its heat value counts only when it was written within the last 10 minutes; an hourly value (as from a gateway query) is shown as "heat not current" and the system COP is left out, while the other unit keeps its own COP in the drawer. The system COP is the sum of the units' heat divided by `power` (here including the station), or by the units' power without a `power` key. Leave `heat` empty when `units` are set. On the aroTHERM, `currentyieldpower` is only the yield from the environment, so the heat of a unit is that plus its `currentconsumedpower`, as in the example (#338). The diagnostic report lists every pair with the age of its heat value.
 - **Means:** `room`, `room_humidity` and the room keys of circuits 2 to 6 (`hc2_room`, `hc2_room_humidity` …) also accept a list. The card shows the mean of the members that report a number; a member in °F or K is converted to the unit of the first one, a climate entity counts with its current temperature in the unit of the Home Assistant installation. The value is unknown only when no member reports one. Example: `room: [sensor.living_room_temperature, sensor.kitchen_temperature]`. Other keys take the first entity of a list.
 - **Statistics:** `cop_heating_today`, `cop_dhw_today`, `energy_today`, `pv_share_today`, `starts_today`
 - **Details, operation:** `hours`, `starts_total`, `aux_hours`, `energy_total`, `env_energy` (heat taken from air, ground or water), `heat_total`
