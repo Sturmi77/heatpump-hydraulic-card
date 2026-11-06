@@ -54,6 +54,8 @@ Each entry names the brands, the preset with its setup page, the integration it 
 
 The current release is **[0.18.0](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.18.0)**: a parallel buffer without sensors, SG-Ready and utility lock, room humidity and dew point for cooling, the circulation time window, a new preset for Daikin Altherma (ESPAltherma), ViCare and ebusd confirmed on real installations, and corrected circuit pumps, flow rates and risers. 0.17.2 added own counters for the stat tiles (`tile_sources`), complete Slovak and Czech texts and hot-water values on phones. 0.17.1 fixed the first feedback on 0.17.0 (EMS-ESP "long names", a signed mixer movement for ebusd, narrow-card labels). 0.17.0 brought a guided mapping assistant for unsupported heat pumps, a separate manually configured boiler/second heat generator, a compact room overview for up to six circuits, a three-way mixer for mixed circuits, smoother flow animations, Dutch, the remaining Slovak and Czech editor texts, additional confirmed presets and the accumulated 0.16 display and compatibility improvements. What changed in each release is in the [release notes](https://github.com/Sturmi77/heatpump-hydraulic-card/releases) and the [changelog](CHANGELOG.md), the plan for the next releases in the [development plan](docs/ROADMAP.md). Reports from real installations are the most useful help right now, above all for the presets marked *untested*; please use the [tester issue](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/1) or the [preset feedback form](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/new?template=preset_feedback.yml). Setting up the card for the first time? The [field-test form](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/new?template=field_test.yml) records how long it took and where it was unclear (#298).
 
+A beta of the next version is available: **[0.19.0-beta.1](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.19.0-beta.1)**. It adds run details under the timeline, with electricity, heat and COP per run. In HACS: open the card, ⋮ → Redownload, and pick the version.
+
 ## Features
 
 - **Power sources:** PV, battery and grid flowing into the heat pump, taken from the **Energy dashboard** or your own sensors.
@@ -505,6 +507,7 @@ The built-in languages and how complete they are (generated, see [coverage](docs
 | Language | Card texts | Editor |
 |---|---|---|
 | Deutsch (`de`) | 100 % | 100 % |
+| Polski (`pl`) | 100 % | 100 % |
 | Slovenčina (`sk`) | 100 % | 100 % |
 | Čeština (`cs`) | 100 % | 100 % |
 | Nederlands (`nl`) | 100 % | 100 % |
