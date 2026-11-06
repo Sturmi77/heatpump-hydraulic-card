@@ -285,6 +285,17 @@
     check(grouped.prefix === 'ebusd_arotherm_ebusd_arotherm'
       && ['mode', 'flow', 'return', 'power', 'heat'].every((key) => grouped.entities[key]?.startsWith(`sensor.${grouped.prefix}_`)),
     `ebusd selects one most-complete daemon for every mapping (${grouped.prefix})`);
+    // #338: CurrentYieldPower is the environmental yield, so heat is yield + consumed power; RunDataHeatOutput comes first.
+    const gp = `sensor.${grouped.prefix}_hmu_`;
+    check(JSON.stringify(grouped.sums.heat) === JSON.stringify([`${gp}currentyieldpower`, `${gp}currentconsumedpower`]),
+      `#338: ebusd heat is the sum of yield and consumed power (${JSON.stringify(grouped.sums.heat)})`);
+    const yc = mount({ preset: 'ebusd' }, hassOf(multi, multiReg)); await wait(20);
+    check(yc._kw('heat') === 6 && /COP 5\.0/.test(yc.shadowRoot.getElementById('t-hp-cop')?.textContent || ''), `#338: heat 4.8 + 1.2 kW, COP 5.0 (${yc._kw('heat')} kW)`);
+    yc.remove();
+    const withOutput = C._resolve({ preset: 'ebusd' }, hassOf({ ...multi, ...toStates({ [`${gp}rundataheatoutput`]: ['6.1', 'kW'] }) }, { ...multiReg, [`${gp}rundataheatoutput`]: { platform: 'mqtt' } }));
+    const own = C._resolve({ preset: 'ebusd', entities: { heat: 'sensor.my_heat' } }, hassOf(multi, multiReg));
+    check(withOutput.entities.heat === `${gp}rundataheatoutput` && !withOutput.sums.heat && own.entities.heat === 'sensor.my_heat' && !own.sums.heat,
+      '#338: RunDataHeatOutput is taken directly, and an own heat entity replaces the preset sum');
     const explicit = C._resolve({ preset: 'ebusd', prefix: 'ebus_arotherm' }, hassOf(multi, multiReg));
     check(explicit.prefix === 'ebus_arotherm' && ['mode', 'flow', 'return'].every((key) => explicit.entities[key]?.startsWith('sensor.ebus_arotherm_'))
       && explicit.entities.power === undefined, 'a full ebusd prefix selects one instance explicitly without falling back to another');
@@ -601,6 +612,22 @@
     check(cascade === 'Electricity: 0.80 kWh | Heat: 2.93 kWh | COP: 3.7', `#327: a cascade with both units' heat covered (${cascade})`);
     const stale = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units('sensor.h2old'));
     check(stale === 'Electricity: 0.80 kWh', `#327: an hour-old heat value of a running unit gives no heat and no COP for the run (${stale})`);
+    // Review of #347: freshness applies to each member of a unit's heat list, so a fresh member does not renew a stale one.
+    const member = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units(['sensor.h2', 'sensor.h2old']));
+    check(member === 'Electricity: 0.80 kWh', `#327: a stale member of a unit's heat list leaves the run without heat (${member})`);
+    // A flow temperature read from a climate entity: the query asks for attributes, so the hot-water estimate still works.
+    series['climate.fl'] = [{ s: 'heat', a: { current_temperature: 35 }, lu: T0 / 1000 }];
+    hass.states['climate.fl'] = { entity_id: 'climate.fl', state: 'heat', attributes: { current_temperature: 35 } };
+    const asked = [];
+    const askHass = { ...hass, callWS: (m) => { asked.push(m); return hass.callWS(m); } };
+    const dc = mount({ entities: { compressor: 'sensor.c', power: 'sensor.pw', volume: 'sensor.vol', flow: 'climate.fl', return: 'sensor.r' } }, askHass); await wait(20);
+    const dhwRun = { ...run, kind: 'dhw', phases: [{ kind: 'dhw', from: T0, to: T0 + 40 * M }] };
+    dc._runValues(dhwRun); await wait(20);
+    const dhwRows = text(dc._runValues(dhwRun));
+    const q = asked.find((m) => m.type === 'history/history_during_period' && m.end_time);
+    check(q && !q.no_attributes && /Heat: ≈3\.49 kWh/.test(dhwRows), `#327: a climate flow sensor is read from its attribute in a hot-water run (${dhwRows})`);
+    check(dc._runValues(dhwRun) === dc._runValues(dhwRun), '#327: the rows of a run are computed once per history and minute');
+    dc.remove();
   }
   {
     // #173: a cascade of two units with power and heat paired per unit; the hydraulic station's power is part of `power` only.
@@ -623,6 +650,11 @@
     check(txt('t-hp-cop') === 'COP 4.0' && unitRows()[1] === 'Unit 2: off' && /1 of 2 units/.test(txt('t-hp-status')),
       `#173: a standing unit adds no heat, its old heat value does not matter (${txt('t-hp-cop')} / ${unitRows()[1]} / ${txt('t-hp-status')})`);
     card.remove();
+    // Review of #347: with a flow rate the heat can be estimated for the display, but an incomplete pair still gives no COP.
+    const est = mount({ ...cfg, entities: { ...cfg.entities, volume: 'sensor.v' } }, hassOf(toStates({ ...base, 'sensor.v': ['900', 'L/h'], 'sensor.h2': v('2000', 'W', 61) }))); await wait(20);
+    const et = (id) => est.shadowRoot.getElementById(id)?.textContent || '';
+    check(/≈5\.2 kW/.test(et('t-hp-power')) && et('t-hp-cop') === '', `#173: an estimated heat does not form a COP while a running unit's heat is not current (${et('t-hp-power')} / "${et('t-hp-cop')}")`);
+    est.remove();
     // Only the units: power is their sum, and a unit that runs while the compressor entity is off still counts as running.
     const only = mount({ entities: { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r' }, units: cfg.units },
       hassOf(toStates({ ...base, 'binary_sensor.c': 'off', 'sensor.u1': ['0', 'W'] }))); await wait(20);
@@ -2765,7 +2797,10 @@
     fr.remove();
 
     // #171: an older copy of this card took the names first (a resource from before the rename); and the same version twice
-    check(!!hfcOlderCopy(class HeatpumpFlowCard {}) && !!hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: '0.1.0' }))
+    // Another project's card with the same element and class name (Xerolux/heatpump-flow-card) is foreign: an unmarked old copy of
+    // this card is told apart by the helpers every release has had.
+    check(!hfcOlderCopy(class HeatpumpFlowCard extends HTMLElement { render() {} }), 'a foreign card class named HeatpumpFlowCard is no older copy of this card');
+    check(!!hfcOlderCopy(class HeatpumpFlowCard { _txt() {} _cls() {} }) && !!hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: '0.1.0' }))
       && !hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: HFC_VERSION }))
       && !hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: '99.0.0' })) && !hfcOlderCopy(class Other {}) && !hfcOlderCopy(undefined),
     'an own copy without version marker or with a lower version is older; the same, a newer or a foreign class is not');

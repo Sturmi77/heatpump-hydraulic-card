@@ -314,13 +314,13 @@ Everything can be set in the **UI editor**. With a preset, the editor shows whet
   units:
     - name: Unit 1
       power: sensor.unit1_power
-      heat: sensor.ebusd_hmu_currentyieldpower
+      heat: [sensor.ebusd_hmu_currentyieldpower, sensor.ebusd_hmu_currentconsumedpower]
     - name: Unit 2
       power: sensor.unit2_power
-      heat: sensor.heating_ebusd_wp2_hmu_currentyieldpower
+      heat: [sensor.heating_ebusd_wp2_hmu_currentyieldpower, sensor.heating_ebusd_wp2_hmu_currentconsumedpower]
   ```
 
-  A unit runs above 50 W. While it runs, its heat value counts only when it was written within the last 10 minutes; an hourly value (as from a gateway query) is shown as "heat not current" and the system COP is left out, while the other unit keeps its own COP in the drawer. The system COP is the sum of the units' heat divided by `power` (here including the station), or by the units' power without a `power` key. Leave `heat` empty when `units` are set. The diagnostic report lists every pair with the age of its heat value.
+  A unit runs above 50 W. While it runs, its heat value counts only when it was written within the last 10 minutes; an hourly value (as from a gateway query) is shown as "heat not current" and the system COP is left out, while the other unit keeps its own COP in the drawer. The system COP is the sum of the units' heat divided by `power` (here including the station), or by the units' power without a `power` key. Leave `heat` empty when `units` are set. On the aroTHERM, `currentyieldpower` is only the yield from the environment, so the heat of a unit is that plus its `currentconsumedpower`, as in the example (#338). The diagnostic report lists every pair with the age of its heat value.
 - **Means:** `room`, `room_humidity` and the room keys of circuits 2 to 6 (`hc2_room`, `hc2_room_humidity` …) also accept a list. The card shows the mean of the members that report a number; a member in °F or K is converted to the unit of the first one, a climate entity counts with its current temperature in the unit of the Home Assistant installation. The value is unknown only when no member reports one. Example: `room: [sensor.living_room_temperature, sensor.kitchen_temperature]`. Other keys take the first entity of a list.
 - **Statistics:** `cop_heating_today`, `cop_dhw_today`, `energy_today`, `pv_share_today`, `starts_today`
 - **Details, operation:** `hours`, `starts_total`, `aux_hours`, `energy_total`, `env_energy` (heat taken from air, ground or water), `heat_total`
