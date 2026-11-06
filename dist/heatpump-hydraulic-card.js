@@ -2521,6 +2521,8 @@ const HFC_TILES = {
 };
 // Standby loss of the hot-water tank: history window, minimum standby window, settling time after charging or draw-off,
 // and the temperature changes within 30 minutes that count as draw-off or as heating the card cannot explain.
+// Room for the valve label between the hot-water flow (x 420) and the tank (x 520), in drawing units.
+const HFC_VALVE_LABEL = 84;
 const HFC_LOSS = { hours: 48, minWindow: 3, settle: 0.5, drawOff: 1.5, rise: 1.0 };
 // Runs of the timeline (#300): a pause shorter than seriesGap minutes continues a series of runs, so short cycling shows as
 // "3rd run since 21:00"; a longer standstill starts a new series.
@@ -4124,8 +4126,9 @@ class HeatpumpFlowCard extends HTMLElement {
             ${SRC.map(([id, x, label, , key]) => this._source(id, x, label, this._srcEntity(key))).join('')}` : ''}
 
           ${
-    // The return pipes lie under the flow pipes where they cross (the flow at x 380, the hot-water flow at x 420).
-    pipePair('rl-dhw', 'M520 215 H400 Q380 215 380 235 V380', P.dhw && !P.station)}
+    // The return from the hot-water tank goes down beside the tank and joins the return under the valve: it crosses only the
+    // heating flow (vl-buf at y 360), not the flow and the hot-water flow. The return pipes lie under the flow pipes.
+    pipePair('rl-dhw', 'M520 215 H512 Q490 215 490 237 V358 Q490 380 468 380 H380', P.dhw && !P.station)}
           ${pipePair('rl-buf', 'M520 495 H400 Q380 495 380 475 V380')}
           ${pipePair('rl', 'M380 380 H290')}
           ${pipePair('vl', P.dhw && !P.station ? 'M290 250 H402' : 'M290 250 H400 Q420 250 420 270 V338 Q420 360 442 360 H520')}
@@ -4177,7 +4180,7 @@ class HeatpumpFlowCard extends HTMLElement {
             <g class="tap" ${de(e.valve ? 'valve' : 'dhw_mode')}>
               <circle class="valve" cx="420" cy="250" r="18"/>
               <path class="valve-arrow" id="valve-arrow" d="M420 262 V240 M412 248 L420 240 L428 248"/>
-              <text class="small" id="t-valve" x="446" y="254"></text>
+              <text class="small" id="t-valve" x="432" y="198"></text>
             </g>
             <g class="tap" ${de(['dhw_top', 'dhw_middle', 'dhw_bottom'].find((k) => e[k]) || 'dhw_top')}>
               ${P.combined ? `<text class="tank-title" x="580" y="30" text-anchor="middle">${this._esc(i.combined_tank)}</text>
@@ -6513,7 +6516,17 @@ class HeatpumpFlowCard extends HTMLElement {
     if (P.dhw) {
       const arrow = this._$('valve-arrow');
       if (arrow) arrow.setAttribute('transform', toDhw ? '' : 'rotate(180 420 250)');
-      this._txt('t-valve', loop ? (toDhw ? i.valve_dhw : (cooling ? i.valve_cooling : i.valve_heating)) : '');
+      const valveText = loop ? (toDhw ? i.valve_dhw : (cooling ? i.valve_cooling : i.valve_heating)) : '';
+      this._txt('t-valve', valveText);
+      // The valve label stands between the hot-water flow and the tank (x 432 to 520): a longer word is compressed to fit.
+      // It is measured once per text; a hidden label measures 0 and is measured again at the next update.
+      const valveLabel = this._$('t-valve');
+      if (valveLabel && valveLabel._fit !== valveText) {
+        valveLabel.removeAttribute('textLength'); valveLabel.removeAttribute('lengthAdjust');
+        const width = valveLabel.getComputedTextLength?.() || 0;
+        if (width > HFC_VALVE_LABEL) { valveLabel.setAttribute('textLength', HFC_VALVE_LABEL); valveLabel.setAttribute('lengthAdjust', 'spacingAndGlyphs'); }
+        if (width > 0 || !valveText) valveLabel._fit = valveText;
+      }
       // Without a top sensor the large value stays empty: the lower sensors show their value at their own position.
       const hasTop = this._has('dhw_top');
       const middle = this._has('dhw_middle') ? this._n('dhw_middle') : NaN;

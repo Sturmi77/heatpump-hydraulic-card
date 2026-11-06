@@ -1,0 +1,1 @@
+- The return from the hot-water tank goes down beside the tank and joins the return under the valve. It crossed the flow and the hot-water flow before, and it went through the boiler box; now it crosses only the heating flow. The valve label moves above the valve, between the hot-water flow and the tank, and a long word is compressed to fit there.
