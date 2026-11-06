@@ -514,10 +514,14 @@
     const runsOf = (hh, ii, s, e) => card._timelineRuns(hh, ii, card._timelineSegments(hh, ii, s * M, e * M), s * M, e * M);
     const fmt = (runs) => runs.map((r) => `${r.kind}:${r.from / M}-${r.to / M}:s${r.series}${r.pause !== null ? `:p${r.pause / M}` : ''}${r.partial ? ':partial' : ''}${r.ongoing ? ':ongoing' : ''}`).join(' ');
     const runs = runsOf(hist, ids, 0, 100);
-    check(fmt(runs) === 'dhw:10-40:s1 heat:50-70:s2:p10 heat:75-80:s3:p5 heat:82-90:s4:p2',
-      `runs: hot water outweighs the heating start, defrost stays in its run, unavailable ends a run, short pauses continue the series (${fmt(runs)})`);
-    check(runs[1].phases.map((p) => `${p.kind}:${p.from / M}-${p.to / M}`).join() === 'heat:50-52,defrost:52-55,heat:55-70' && runs[0].seriesFrom === 10 * M && runs[3].seriesFrom === 10 * M,
-      `a run keeps its phases and the start of its series (${runs[1].phases.map((p) => p.kind).join()})`);
+    check(fmt(runs) === 'heat:10-22:s1 dhw:22-40:s1 heat:50-70:s2:p10 heat:75-80:s3:p5 heat:82-90:s4:p2',
+      `runs: heating and hot water divide a run, defrost stays in its part, unavailable ends a run, short pauses continue the series (${fmt(runs)})`);
+    check(runs[2].phases.map((p) => `${p.kind}:${p.from / M}-${p.to / M}`).join() === 'heat:50-52,defrost:52-55,heat:55-70' && runs[0].seriesFrom === 10 * M && runs[4].seriesFrom === 10 * M,
+      `a run keeps its phases and the start of its series (${runs[2].phases.map((p) => p.kind).join()})`);
+    // A modulating heat pump runs for a day with hot-water charges inside; a defrost between them stays with the period before it.
+    const day = runsOf({ 'sensor.m': h([[0, 'heating'], [30, 'dhw'], [50, 'defrost'], [55, 'heating'], [100, 'pv'], [110, 'dhw'], [120, 'heating']]), 'sensor.c': h([[0, '40'], [130, '0']]) }, ids, 5, 125);
+    check(fmt(day) === 'heat:5-30:s1:partial dhw:30-55:s1 heat:55-110:s1 dhw:110-120:s1 heat:120-125:s1:ongoing' && day[1].phases.map((p) => p.kind).join() === 'dhw,defrost' && day[2].pause === null,
+      `a long run is divided at hot water, defrost stays in its period, pv counts as heating, only the first part is partial (${fmt(day)})`);
     const cut = runsOf({ 'sensor.m': h([[0, 'heating'], [40, 'idle'], [55, 'heating']]), 'sensor.c': h([[0, 'on'], [40, 'off'], [55, 'on']]) }, ids, 20, 60);
     check(fmt(cut) === 'heat:20-40:s1:partial heat:55-60:s2:p15:ongoing', `runs cut by the window are partial or ongoing (${fmt(cut)})`);
     const apart = runsOf({ 'sensor.m': h([[0, 'heating']]), 'sensor.c': h([[0, 'off'], [10, 'on'], [20, 'off'], [100, 'on'], [110, 'off']]) }, ids, 0, 120);
