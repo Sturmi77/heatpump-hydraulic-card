@@ -714,6 +714,19 @@
     check(/heat_max_age must be a number of minutes/.test(err), `#173: a negative heat_max_age is rejected (${err})`);
   }
   {
+    // #346: the counters with two decimals come first where they exist, the whole-kWh counters stay the fallback.
+    const base = { 'sensor.boiler_hpactivity': 'heating', 'sensor.boiler_hptc1': ['30', '°C'], 'sensor.boiler_nrgsuppheating': ['100', 'kWh'], 'sensor.boiler_nrgconstotal': ['50', 'kWh'],
+      'sensor.boiler_nrgsupptotal': ['120', 'kWh'] };
+    const precise = { ...base, 'sensor.boiler_nrgheat': ['100.25', 'kWh'], 'sensor.boiler_metertotal': ['50.31', 'kWh'], 'sensor.boiler_nrgtotal': ['120.75', 'kWh'] };
+    const resolved = (st) => { const s = toStates(st); return C._resolve({ preset: 'emsesp' }, hassOf(s, Object.fromEntries(Object.keys(s).map((id) => [id, { platform: 'mqtt' }])))); };
+    const fine = resolved(precise); const coarse = resolved(base);
+    check(fine.tiles.heat_heating.total === 'sensor.boiler_nrgheat' && fine.tiles.energy.total === 'sensor.boiler_metertotal' && fine.tiles.heat.total === 'sensor.boiler_nrgtotal'
+      && fine.entities.energy_total === 'sensor.boiler_metertotal' && fine.entities.heat_total === 'sensor.boiler_nrgtotal',
+    `#346: EMS-ESP takes the counters with two decimals first (${fine.tiles.heat_heating.total} / ${fine.tiles.energy.total})`);
+    check(coarse.tiles.heat_heating.total === 'sensor.boiler_nrgsuppheating' && coarse.tiles.energy.total === 'sensor.boiler_nrgconstotal' && coarse.entities.energy_total === 'sensor.boiler_nrgconstotal',
+      '#346: without them the whole-kWh counters stay');
+  }
+  {
     // #257: the complete "long names" entity list of a Nefit EnviLine (EMS-ESP 3.8.6).
     const states = toStates({
       'sensor.boiler_compressor_activity': 'heating', 'binary_sensor.boiler_hp_compressor': 'on', 'sensor.boiler_compressor_current_power': ['322', 'W'],
