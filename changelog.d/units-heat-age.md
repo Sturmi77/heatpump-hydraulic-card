@@ -1,0 +1,2 @@
+- `units`: new `heat_max_age` per unit, in minutes, with 10 as the default and `0` for no age check (#173). Home Assistant does not write an MQTT sensor again when the same value arrives, so a steady heat value counted as "heat not current" although it was read. It applies live and to the energy of a run, and the diagnostic report names the limit.
+- Diagnostic report: with another project's card under the name `heatpump-flow-card`, "Loaded from" shows the file of this card, and the other file is no longer listed as a second copy.
