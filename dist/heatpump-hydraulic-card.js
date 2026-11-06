@@ -5373,13 +5373,14 @@ class HeatpumpFlowCard extends HTMLElement {
       r.seriesFrom = r.series > 1 ? prev.seriesFrom : r.from;
     });
     // A modulating heat pump can run for a day with hot-water charges inside: a change between heating, hot water and cooling
-    // starts a new period of the run, so a charge can be selected on its own. Defrost stays in the period it interrupts. The
-    // periods share the series of their run, and only the first has a pause before it.
+    // starts a new period of the run, so a charge can be selected on its own. Defrost stays in the period it interrupts, and so
+    // does an SG-Ready overlay, which replaces the kind of a segment without changing what the water does. The periods share
+    // the series of their run, and only the first has a pause before it.
     return runs.flatMap((r) => {
       const parts = [];
       r.phases.forEach((p) => {
-        const kind = heatKinds.includes(p.kind) ? 'heat' : p.kind;
-        if (kind !== 'defrost' && parts[parts.length - 1]?.kind !== kind) parts.push({ kind, from: p.from });
+        const kind = p.kind === 'pv' ? 'heat' : p.kind;
+        if (!['defrost', 'sg-boost', 'sg-forced'].includes(kind) && parts[parts.length - 1]?.kind !== kind) parts.push({ kind, from: p.from });
       });
       if (parts.length < 2) return [r];
       return parts.map((part, n) => {

@@ -522,6 +522,10 @@
     const day = runsOf({ 'sensor.m': h([[0, 'heating'], [30, 'dhw'], [50, 'defrost'], [55, 'heating'], [100, 'pv'], [110, 'dhw'], [120, 'heating']]), 'sensor.c': h([[0, '40'], [130, '0']]) }, ids, 5, 125);
     check(fmt(day) === 'heat:5-30:s1:partial dhw:30-55:s1 heat:55-110:s1 dhw:110-120:s1 heat:120-125:s1:ongoing' && day[1].phases.map((p) => p.kind).join() === 'dhw,defrost' && day[2].pause === null,
       `a long run is divided at hot water, defrost stays in its period, pv counts as heating, only the first part is partial (${fmt(day)})`);
+    // An SG-Ready overlay replaces the kind of a segment; a boost during a charge does not cut the charge into three periods.
+    const sgSegs = [['dhw', 0, 20], ['sg-boost', 20, 30], ['dhw', 30, 60], ['heat', 60, 80]].map(([kind, from, to]) => ({ kind, from: from * M, to: to * M }));
+    const sgRuns = card._timelineRuns({ 'sensor.c': h([[0, 'on'], [80, 'off']]) }, { cycle: 'sensor.c' }, sgSegs, 0, 90 * M);
+    check(fmt(sgRuns) === 'dhw:0-60:s1:partial heat:60-80:s1', `an SG-Ready overlay does not divide a run (${fmt(sgRuns)})`);
     const cut = runsOf({ 'sensor.m': h([[0, 'heating'], [40, 'idle'], [55, 'heating']]), 'sensor.c': h([[0, 'on'], [40, 'off'], [55, 'on']]) }, ids, 20, 60);
     check(fmt(cut) === 'heat:20-40:s1:partial heat:55-60:s2:p15:ongoing', `runs cut by the window are partial or ongoing (${fmt(cut)})`);
     const apart = runsOf({ 'sensor.m': h([[0, 'heating']]), 'sensor.c': h([[0, 'off'], [10, 'on'], [20, 'off'], [100, 'on'], [110, 'off']]) }, ids, 0, 120);
