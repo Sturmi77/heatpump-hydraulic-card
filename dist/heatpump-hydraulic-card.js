@@ -1236,6 +1236,8 @@ const HFC_PRESETS = {
   // base topic ("espaltherma"). Only the values a user uncomments in the definition exist, so every key is optional.
   espaltherma: {
     name: 'Daikin Altherma (ESPAltherma)',
+    // Confirmed on an EPRA12EAV3 in heating and during a hot-water charge (#254).
+    tested: true,
     // The water pump of the indoor unit (or monobloc) also runs for hot water.
     primary_pump: true,
     auto_circuits: false,

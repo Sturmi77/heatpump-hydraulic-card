@@ -12,7 +12,7 @@ For Daikin Altherma and ROTEX heat pumps with an ESP32 on the X10A port running 
 
 Each value gets the id `<prefix>_<label>`: the label of the model definition in lower case, letters and digits only, spaces as underscores. "Leaving water temp. after BUH (R2T)" becomes `sensor.espaltherma_leaving_water_temp_after_buh_r2t`. The labels stay English when the names are translated, and they are the same in the Altherma 3, LT, EPRA, ERGA and EBLA definitions. The prefix is the base topic (`espaltherma` by default) and is detected from the leaving water temperature together with the inverter frequency. Only the values you uncomment in the definition file exist, so every field is optional.
 
-The preset was built from the beta source and the entity list of an EPRA12EAV3 (#254). Heating is confirmed on that installation with card 0.18.0; a hot-water charge is not yet confirmed, so the preset is still marked untested.
+The preset was built from the beta source and the entity list of an EPRA12EAV3 (#254). Heating and a hot-water charge are confirmed on that installation with card 0.18.0 (valve on hot water, tank charging, COP 3.9 at 1,470 W → 5.8 kW), so the preset is marked tested.
 
 What you get:
 - leaving water after the backup heater (R2T, falling back to R1T before it), inlet water (R4T), flow rate (l/min)
