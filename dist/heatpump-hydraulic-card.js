@@ -11,7 +11,9 @@ const HFC_VERSION = '0.18.0';
 const HFC_SCRIPT_URL = (() => {
   try {
     if (document.currentScript?.src) return document.currentScript.src
-    return performance.getEntriesByType('resource').map((r) => r.name).find((n) => /heatpump-(flow|hydraulic)-card[^/?]*\.js/.test(n)) || '';
+    // The file name of this card first: another project's card may be called heatpump-flow-card.js as well.
+    const names = performance.getEntriesByType('resource').map((r) => r.name);
+    return names.find((n) => /heatpump-hydraulic-card[^/?]*\.js/.test(n)) || names.find((n) => /heatpump-flow-card[^/?]*\.js/.test(n)) || '';
   } catch (e) { return ''; }
 })();
 
@@ -2283,6 +2285,12 @@ const hfcHcCount = (config) => Math.min(Math.max(Math.round(+config?.hc_count) |
 // The heat value of a running unit in a cascade counts only while it is this fresh: a value written once an hour belongs to an
 // earlier part of the run (#173).
 const HFC_UNIT_MAX_AGE = 10 * 60000;
+// The age limit of a unit in ms: `heat_max_age` in minutes, 0 for no limit.
+const hfcUnitMaxAge = (unit) => {
+  const minutes = unit?.heat_max_age;
+  if (minutes === undefined || minutes === null) return HFC_UNIT_MAX_AGE;
+  return +minutes === 0 ? Infinity : +minutes * 60000;
+};
 // Share of a run that the history of power and heat must cover with valid values before its energy and COP are shown (#327).
 const HFC_RUN_COVER = 0.95;
 // Keys whose list of entities is averaged (#23): room temperature and humidity of each circuit. Power, heat and the power
@@ -2960,7 +2968,10 @@ class HeatpumpFlowCard extends HTMLElement {
     if (config.units !== undefined && config.units !== null) {
       const ids = (v) => [v].flat().length > 0 && [v].flat().every((id) => typeof id === 'string' && id);
       if (!Array.isArray(config.units)) throw new Error('units must be a list of units, each with power and heat');
-      config.units.forEach((u) => { if (!u || typeof u !== 'object' || !ids(u.power) || !ids(u.heat)) throw new Error('units: every unit needs a power and a heat entity'); });
+      config.units.forEach((u) => {
+        if (!u || typeof u !== 'object' || !ids(u.power) || !ids(u.heat)) throw new Error('units: every unit needs a power and a heat entity');
+        if (u.heat_max_age !== undefined && u.heat_max_age !== null && !(+u.heat_max_age >= 0)) throw new Error('units: heat_max_age must be a number of minutes, 0 or more');
+      });
     }
     if (config.unit_style !== undefined && config.unit_style !== null && !HFC_UNIT_STYLES.includes(config.unit_style)) {
       throw new Error(`unit_style must be one of: ${HFC_UNIT_STYLES.join(', ')}`);
@@ -3364,7 +3375,8 @@ class HeatpumpFlowCard extends HTMLElement {
       ...(Array.isArray(config.units) ? ['Units (power and heat per unit):', ...config.units.flatMap((u, n) => [
         ...[u.power].flat().map((id) => entityLine(`unit ${n + 1} power`, id)),
         ...[u.heat].flat().map((id) => { const st = hass.states[id]; const t = Date.parse(st?.last_reported || st?.last_updated || '');
-          return `${entityLine(`unit ${n + 1} heat`, id)}${Number.isFinite(t) ? ` (written ${Math.round((Date.now() - t) / 60000)} min ago)` : ''}`; }),
+          const limit = hfcUnitMaxAge(u) === Infinity ? 'no age limit' : `limit ${hfcUnitMaxAge(u) / 60000} min`;
+          return `${entityLine(`unit ${n + 1} heat`, id)}${Number.isFinite(t) ? ` (written ${Math.round((Date.now() - t) / 60000)} min ago, ${limit})` : ''}`; }),
       ]), ''] : []),
       ...(config.tile_sources ? ['Tile sources (own):', ...Object.keys(config.tile_sources).flatMap((key) => {
         const periods = Object.entries(r.tiles[key] || {});
@@ -3613,18 +3625,19 @@ class HeatpumpFlowCard extends HTMLElement {
   }
   // Units of a cascade (#173): power and heat paired per unit, each a single entity or a list that is added up. A unit runs
   // above 50 W. Its pair is complete when its power reports a number and, while it runs, its heat reports a number written
-  // within HFC_UNIT_MAX_AGE; a standing unit adds no heat. Null without the `units` option.
+  // within the unit's age limit; a standing unit adds no heat. Null without the `units` option.
   _units() {
     const list = this._config.units;
     if (!Array.isArray(list) || !list.length) return null;
     const st = (id) => this._hass?.states[id];
     const sum = (v, divisor) => { const vals = [v].flat().map((id) => hfcPowerW(st(id), divisor) / divisor); return vals.every(Number.isFinite) ? vals.reduce((a, b) => a + b, 0) : NaN; };
-    // Age of the oldest member; last_reported moves with every write, also when the value stays the same.
-    const age = (v) => Math.max(...[v].flat().map((id) => Date.now() - (Date.parse(st(id)?.last_reported || st(id)?.last_updated || '') || 0)));
+    // Age of the oldest member, from the last write Home Assistant knows of. An MQTT sensor is not written when the same value
+    // arrives again, so a steady value looks old although it is read: `heat_max_age` adapts the limit to the source (#173).
+    const age =(v) => Math.max(...[v].flat().map((id) => Date.now() - (Date.parse(st(id)?.last_reported || st(id)?.last_updated || '') || 0)));
     return list.map((u, n) => {
       const power = sum(u.power, 1); const heat = sum(u.heat, 1000);
       const running = power > 50;
-      const fresh = Number.isFinite(heat) && age(u.heat) <= HFC_UNIT_MAX_AGE;
+      const fresh = Number.isFinite(heat) && age(u.heat) <= hfcUnitMaxAge(u);
       return { n: n + 1, name: u.name || `${this._i.unit} ${n + 1}`, entity: [u.power].flat()[0], power, heat: running ? heat : 0, running, fresh,
         complete: Number.isFinite(power) && (!running || fresh), cop: running && fresh && heat > 0 ? (heat * 1000) / power : NaN };
     });
@@ -5784,7 +5797,7 @@ class HeatpumpFlowCard extends HTMLElement {
   // Electricity, heat and COP of a run (#327), integrated from the recorder history of the run window. A value is shown only
   // when its data hold a valid value for at least HFC_RUN_COVER of the run, and the COP only when both do.
   // - Electricity: `power` with every member of its sum valid at the same time, else the power of the units (#173).
-  // - Heat: the units' pairs (a running unit's heat counts for HFC_UNIT_MAX_AGE after it was written, a standing unit adds
+  // - Heat: the units' pairs (a running unit's heat counts up to its age limit after it was written, a standing unit adds
   //   none), else `heat`, else flow rate × spread × 1.163 Wh/(l·K), marked ≈.
   // Energy counters and hourly long-term statistics are not used, so a counter reset or an hourly value is never split onto a run.
   _runEnergy(run, hist, { time, nums, combine, units, idsOf }) {
@@ -5798,9 +5811,9 @@ class HeatpumpFlowCard extends HTMLElement {
     };
     const total = (vs) => (vs.every(Number.isFinite) ? vs.reduce((a, b) => a + b, 0) : NaN);
     const sumW = (ids, factor = 1) => combine(ids.map((id) => watts(id, factor)), total);
-    // A heat value of a unit is stale HFC_UNIT_MAX_AGE after it was written, unless a newer one follows.
-    const fresh = (pts) => pts.flatMap((p, n) => ((pts[n + 1]?.t ?? Infinity) - p.t > HFC_UNIT_MAX_AGE && Number.isFinite(p.v)
-      ? [p, { t: p.t + HFC_UNIT_MAX_AGE, v: NaN }] : [p]));
+    // A heat value of a unit is stale at the unit's age limit after it was written, unless a newer one follows.
+    const fresh = (pts, limit) => (limit === Infinity ? pts : pts.flatMap((p, n) => ((pts[n + 1]?.t ?? Infinity) - p.t > limit && Number.isFinite(p.v)
+      ? [p, { t: p.t + limit, v: NaN }] : [p])));
     const integrate = (pts) => {
       let sum = 0; let w = 0;
       pts.forEach((p, n) => {
@@ -5813,7 +5826,7 @@ class HeatpumpFlowCard extends HTMLElement {
       : units ? integrate(sumW(units.flatMap((u) => [u.power].flat()))) : NaN;
     let estimated = false; let heat = NaN;
     if (units && !this._has('heat')) {
-      heat = integrate(combine(units.map((u) => combine([sumW([u.power].flat()), combine([u.heat].flat().map((id) => fresh(watts(id, 1000))), total)],
+      heat = integrate(combine(units.map((u) => combine([sumW([u.power].flat()), combine([u.heat].flat().map((id) => fresh(watts(id, 1000), hfcUnitMaxAge(u))), total)],
         ([p, h]) => (!Number.isFinite(p) ? NaN : p <= 50 ? 0 : h))), total));
     } else if (this._has('heat')) heat = integrate(sumW(idsOf('heat'), 1000));
     else if (['volume', 'flow', 'return'].every((k) => this._has(k))) {
@@ -7389,7 +7402,9 @@ const hfcCardScripts = () => {
   const re = /heatpump-(flow|hydraulic)-card[^/?#]*\.js/;
   let urls = [...document.querySelectorAll('script[src]')].map((s) => s.src);
   try { urls = urls.concat(performance.getEntriesByType('resource').map((r) => r.name)); } catch (e) { /* no timing API */ }
-  return [...new Set(urls.filter((u) => re.test(u)).map((u) => u.replace(/[?#].*$/, '')))];
+  // While another project's card holds the generic name, a script of that name is its file, not a copy of this card.
+  const foreign = !hfcMine('heatpump-flow-card');
+  return [...new Set(urls.filter((u) => re.test(u) && !(foreign && /\/heatpump-flow-card[^/?#]*\.js/.test(u))).map((u) => u.replace(/[?#].*$/, '')))];
 };
 // The warning for an older copy: in the console, and once per browser session as a Home Assistant notification, because the
 // dashboard keeps running the old code and nothing else would show it (#166).
