@@ -43,6 +43,8 @@ What you get:
 
 **Writable values with short names:** EMS-ESP publishes values that can be changed as `number` and `switch` entities, so the preset also looks for the hot-water target `number.boiler_dhw_seltemp` (older `wwseltemp`), the room target `number.thermostat_hc1_seltemp`, circulation `switch.boiler_dhw_circ` (older `wwcirc`) and the mixer circuit pump `switch.mixer_hc1_pumpstatus`. The 3-way valve is also found as `dhw_3wayvalve` (older `ww3wayvalve`), the boiler heating pump of a direct circuit as `heatingpump`, and the "circulation pump fitted" switch as `dhw_circpump`. Taken from a Bosch Compress with mixer module and EMS-ESP MQTT discovery.
 
+**Hot-water target:** the tank shows the setpoint the boiler currently works to, `sensor.boiler_dhw_settemp` (older `wwsettemp`). It follows the comfort mode: a Bosch Compress in Eco+ charges to 50 °C while the selected temperature `dhw_seltemp` reads 48 °C. The selected temperature (sensor, then number, long name `dhw_selected_temperature`) stays the fallback. The long-name counterpart of `settemp` is not mapped, because no installation with long names has confirmed its id yet.
+
 Without a heat output sensor, the heat output is estimated from flow rate × spread. With `hc_count: 2` (up to 6) the mixer and thermostat entities of the further circuits are added; `index: {hc: 2}` starts at circuit 2 instead.
 
 ### PV, battery and grid
