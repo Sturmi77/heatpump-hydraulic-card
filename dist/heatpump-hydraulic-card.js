@@ -3071,6 +3071,8 @@ class HeatpumpFlowCard extends HTMLElement {
     prefix = String(prefix || '').trim().toLowerCase();
     const fromPreset = {};
     const presetSums = {};
+    // First candidate with a value; one that exists but is unavailable or unknown (not reported by this model) yields to a later one.
+    const live = (id) => hass.states[id] && !['unknown', 'unavailable'].includes(hass.states[id].state);
     const take = (k, v) => {
       // { sum: [a, b] }: the key is the sum of these entities, as a list in the configuration is (ebusd heat, #338).
       if (v && Array.isArray(v.sum)) {
@@ -3080,8 +3082,6 @@ class HeatpumpFlowCard extends HTMLElement {
         return;
       }
       const list = (Array.isArray(v) ? v : [v]).filter(Boolean);
-      // First candidate with a value; one that exists but is unavailable or unknown (not reported by this model) yields to a later one.
-      const live = (id) => hass.states[id] && !['unknown', 'unavailable'].includes(hass.states[id].state);
       const hit = list.find(live) || list.find((id) => hass.states[id]) || list[0];
       if (hit) fromPreset[k] = hit;
     };
@@ -3108,11 +3108,12 @@ class HeatpumpFlowCard extends HTMLElement {
     });
     const presetErrors = preset && preset.errors ? preset.errors(prefix, idx, ctx) : [];
     const errors = config.errors !== undefined ? config.errors : presetErrors;
-    // Stat tile entities: { tile: { period: entity } }, only entities that exist.
+    // Stat tile entities: { tile: { period: entity } }, only entities that exist, those with a value first.
     const tiles = {};
     if (preset && preset.tiles) {
       Object.entries(preset.tiles(prefix, idx, ctx)).forEach(([k, periods]) => Object.entries(periods || {}).forEach(([period, v]) => {
-        const hit = (Array.isArray(v) ? v : [v]).filter(Boolean).find((id) => hass.states[id]);
+        const list = (Array.isArray(v) ? v : [v]).filter(Boolean);
+        const hit = list.find(live) || list.find((id) => hass.states[id]);
         if (hit) (tiles[k] = tiles[k] || {})[period] = hit;
       }));
     }

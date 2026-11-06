@@ -725,6 +725,9 @@
     `#346: EMS-ESP takes the counters with two decimals first (${fine.tiles.heat_heating.total} / ${fine.tiles.energy.total})`);
     check(coarse.tiles.heat_heating.total === 'sensor.boiler_nrgsuppheating' && coarse.tiles.energy.total === 'sensor.boiler_nrgconstotal' && coarse.entities.energy_total === 'sensor.boiler_nrgconstotal',
       '#346: without them the whole-kWh counters stay');
+    const gap = resolved({ ...precise, 'sensor.boiler_nrgheat': 'unavailable' });
+    check(gap.tiles.heat_heating.total === 'sensor.boiler_nrgsuppheating' && gap.tiles.energy.total === 'sensor.boiler_metertotal',
+      `#346: a counter that reports no value yields to the next one (${gap.tiles.heat_heating.total})`);
   }
   {
     // #257: the complete "long names" entity list of a Nefit EnviLine (EMS-ESP 3.8.6).
