@@ -4952,9 +4952,30 @@
     const card = mount(s.config, hassOf(toStates(s.states('heat')), s.registry || {}, null, s)); await wait(20);
     const el = (id) => card.shadowRoot.getElementById(id);
     const before = (a, b) => !!(el(a) && el(b) && el(a).compareDocumentPosition(el(b)) & Node.DOCUMENT_POSITION_FOLLOWING);
-    check(['p-vl', 'p-vl-dhw'].every((id) => before('p-rl-dhw', id) && before('f-rl-dhw', id)),
-      'the return from the hot-water tank and its dashes are drawn under the flow and the hot-water flow');
+    check(['p-vl', 'p-vl-dhw', 'p-vl-buf'].every((id) => before('p-rl-dhw', id) && before('f-rl-dhw', id)),
+      'the return from the hot-water tank and its dashes are drawn under the flow, the hot-water flow and the heating flow');
     check(['p-rl-buf', 'p-rl'].every((id) => before(id, 'p-vl')), 'all return pipes of the heat pump are drawn before its flow pipes');
+    card.remove();
+  }
+
+  // Hot-water return: one crossing. The return from the tank goes down beside the tank and crosses only the heating flow;
+  // the valve label above the valve stays between the hot-water flow and the tank, also in the longest language.
+  {
+    const s = setups.find((x) => x.config.preset === 'heishamon') || setups[0];
+    const hass = hassOf(toStates(s.states('heat')), s.registry || {}, null, s);
+    const card = mount(s.config, { ...hass, locale: { language: 'sk' }, language: 'sk' }); await wait(20);
+    const el = (id) => card.shadowRoot.getElementById(id);
+    const rl = el('p-rl-dhw'); const len = rl.getTotalLength(); const pts = [];
+    for (let d = 0; d <= len; d += 2) pts.push(rl.getPointAtLength(d));
+    const hits = (id) => pts.filter((p) => el(id).isPointInStroke(new DOMPoint(p.x, p.y))).length;
+    check(hits('p-vl') === 0 && hits('p-vl-dhw') === 0 && hits('p-vl-buf') > 0,
+      `the return from the hot-water tank crosses only the heating flow (flow ${hits('p-vl')}, hot-water flow ${hits('p-vl-dhw')}, heating flow ${hits('p-vl-buf')} points)`);
+    const label = el('t-valve'); const b = label.getBBox();
+    check(label.textContent === 'Vykurovanie' && b.x >= 424 && b.x + b.width <= 520 && b.y + b.height <= 211,
+      `the longest valve label fits between the hot-water flow and the tank, above the return (${label.textContent}: ${[b.x, b.y, b.width, b.height].map(Math.round).join(',')})`);
+    const free = ['p-vl-dhw', 'p-rl-dhw', 'p-vl'].every((id) => [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]]
+      .every(([x, y]) => !el(id).isPointInStroke(new DOMPoint(x, y))));
+    check(free, 'the corners of the valve label touch no pipe');
     card.remove();
   }
 
