@@ -636,6 +636,8 @@
     check(cascade === 'Electricity: 0.80 kWh | Heat: 2.93 kWh | COP: 3.7', `#327: a cascade with both units' heat covered (${cascade})`);
     const stale = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units('sensor.h2old'));
     check(stale === 'Electricity: 0.80 kWh', `#327: an hour-old heat value of a running unit gives no heat and no COP for the run (${stale})`);
+    const noLimit = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, { units: [{ power: 'sensor.u1', heat: 'sensor.h1' }, { power: 'sensor.u2', heat: 'sensor.h2old', heat_max_age: 0 }] });
+    check(noLimit === 'Electricity: 0.80 kWh | Heat: 2.93 kWh | COP: 3.7', `#327: heat_max_age 0 counts an unchanged heat value over the run (${noLimit})`);
     // Review of #347: freshness applies to each member of a unit's heat list, so a fresh member does not renew a stale one.
     const member = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units(['sensor.h2', 'sensor.h2old']));
     check(member === 'Electricity: 0.80 kWh', `#327: a stale member of a unit's heat list leaves the run without heat (${member})`);
@@ -692,12 +694,24 @@
     const still = mount({ entities: { mode: 'sensor.m' }, units: cfg.units }, hassOf(toStates({ ...base, 'sensor.u1': ['0', 'W'], 'sensor.u2': ['0', 'W'] }))); await wait(20);
     check(!still._flowModel().running, '#173: with every unit at 0 W a mode that stays on heating does not count as running');
     still.remove();
+    // An MQTT sensor is not written when the same value arrives again, so the limit follows the source: heat_max_age in minutes, 0 for none.
+    const aged = async (limit) => {
+      const k = mount({ ...cfg, units: [cfg.units[0], { ...cfg.units[1], heat_max_age: limit }] }, hassOf(toStates({ ...base, 'sensor.h2': v('2000', 'W', 61) }))); await wait(20);
+      const out = k.shadowRoot.getElementById('t-hp-cop')?.textContent || ''; k.remove(); return out;
+    };
+    const limits = [await aged(30), await aged(90), await aged(0)];
+    check(limits[0] === '' && limits[1] === 'COP 4.0' && limits[2] === 'COP 4.0', `#173: heat_max_age sets the limit of a unit, 0 removes it (${limits.join(' / ')})`);
+    check(/\(written 61 min ago, no age limit\)/.test(C._diagnosticReport({ ...cfg, units: [cfg.units[0], { ...cfg.units[1], heat_max_age: 0 }] }, hassOf(toStates({ ...base, 'sensor.h2': v('2000', 'W', 61) })))),
+      '#173: the report names the age limit');
     const report = C._diagnosticReport(cfg, hassOf(toStates({ ...base, 'sensor.h2': v('2000', 'W', 61) })));
-    check(report.includes('Units (power and heat per unit):') && report.includes('- unit 2 power: sensor.u2') && /- unit 2 heat: sensor\.h2 .*\(written 61 min ago\)/.test(report),
+    check(report.includes('Units (power and heat per unit):') && report.includes('- unit 2 power: sensor.u2') && /- unit 2 heat: sensor\.h2 .*\(written 61 min ago, limit 10 min\)/.test(report),
       '#173: the diagnostic report lists the pairs and the age of each heat value');
     let err = '';
     try { C.prototype.setConfig.call(Object.create(C.prototype), { units: [{ power: 'sensor.u1' }] }); } catch (e) { err = e.message; }
     check(/every unit needs a power and a heat entity/.test(err), `#173: a unit without heat is rejected (${err})`);
+    err = '';
+    try { C.prototype.setConfig.call(Object.create(C.prototype), { units: [{ power: 'sensor.u1', heat: 'sensor.h1', heat_max_age: -1 }] }); } catch (e) { err = e.message; }
+    check(/heat_max_age must be a number of minutes/.test(err), `#173: a negative heat_max_age is rejected (${err})`);
   }
   {
     // #257: the complete "long names" entity list of a Nefit EnviLine (EMS-ESP 3.8.6).
@@ -2818,6 +2832,10 @@
     check(!!w && (w.__warns || []).some((m) => /custom:heatpump-hydraulic-card/.test(m)), 'the console says which name to use');
     check(!!w && w.customCards.length === 1 && w.customCards[0].type === 'heatpump-hydraulic-card' && w.customCards[0].name === 'Heat Pump Hydraulic Card', 'the card picker then lists the unique name');
     check(!!w && !(w.__warns || []).some((m) => /older copy/.test(m)), 'a foreign card with the same name is no older copy');
+    // The other card's file is not a second copy of this card in the diagnostic report.
+    const other = w.document.createElement('script'); other.type = 'text/plain'; other.src = 'https://ha.example/local/community/heatpump-flow-card/heatpump-flow-card.js';
+    w.document.head.appendChild(other);
+    check(!w.eval('hfcCardScripts()').some((u) => u.endsWith('/heatpump-flow-card.js')), 'the script of a foreign card with the generic name is not listed as a copy of this card');
     fr.remove();
 
     // #171: an older copy of this card took the names first (a resource from before the rename); and the same version twice
