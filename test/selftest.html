@@ -1581,6 +1581,32 @@
     document.querySelectorAll('heatpump-flow-card').forEach((c) => c.remove());
   }
   {
+    // #289: flow rates shown in l/min or m³/h; inside the card they stay l/h.
+    const ents = { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r', volume: 'sensor.v', hc_flow: 'sensor.hf', hc_volume: 'sensor.hv', hc_pump: 'binary_sensor.p' };
+    const st = toStates({ 'sensor.m': 'heating', 'binary_sensor.c': 'on', 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.v': ['9.8', 'L/min'],
+      'sensor.hf': ['33', '°C'], 'sensor.hv': ['720', 'L/h'], 'binary_sensor.p': 'on' });
+    const shown = async (unit) => {
+      const card = mount({ entities: ents, tiles: ['volume'], ...(unit ? { flow_rate_unit: unit } : {}) }, hassOf(st)); await wait(20);
+      const t = (id) => card.shadowRoot.getElementById(id)?.textContent || '';
+      const out = [t('t-vol'), t('t-hc-vol'), tileRows(card)[0]?.[1], card._lh('volume')].join(' | '); card.remove(); return out;
+    };
+    const lh = await shown(); const lmin = await shown('l/min'); const m3 = await shown('m3/h');
+    check(lh === '588 l/h | 720 l/h | 588 l/h | 588' && lmin === '9.8 l/min | 12.0 l/min | 9.8 l/min | 588' && m3 === '0.59 m³/h | 0.72 m³/h | 0.59 m³/h | 588',
+      `#289: schematic, circuit and tile follow flow_rate_unit, the value inside stays l/h (${lh} / ${lmin} / ${m3})`);
+    let err = '';
+    try { C.prototype.setConfig.call(Object.create(C.prototype), { flow_rate_unit: 'gal/min' }); } catch (e) { err = e.message; }
+    check(/flow_rate_unit must be one of: l\/h, l\/min, m³\/h/.test(err), `#289: an unknown unit is rejected (${err})`);
+    check(C._diagnosticReport({ entities: ents, flow_rate_unit: 'l/min' }, hassOf(st)).includes('Flow rates shown in: l/min'), '#289: the report names the unit');
+    const ed = document.createElement('heatpump-flow-card-editor');
+    let out;
+    ed.addEventListener('config-changed', (ev) => { out = ev.detail.config; });
+    ed.setConfig({ entities: ents }); ed.hass = hassOf(st);
+    ed._changed({ entities: ents, flow_rate_unit: 'l/min' });
+    const set = out.flow_rate_unit;
+    ed._changed({ entities: ents, flow_rate_unit: 'l/h' });
+    check(set === 'l/min' && !('flow_rate_unit' in out), `#289: the editor stores l/min and leaves the default l/h out (${set} / ${out.flow_rate_unit})`);
+  }
+  {
     // #290: spread of a heating circuit from its own flow and return, one tile per circuit, shown while the circuit flows.
     const ents = { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r', hc_flow: 'sensor.hf', hc_return: 'sensor.hr', hc_pump: 'binary_sensor.p1',
       hc2_flow: 'sensor.hf2', hc2_return: 'sensor.hr2', hc2_pump: 'binary_sensor.p2', hc3_flow: 'sensor.hf3', hc3_return: 'sensor.hr3' };
