@@ -42,6 +42,7 @@ English is the reference. A text without a translation shows in English.
 | Language | Card texts | Editor |
 |---|---|---|
 | Deutsch (`de`) | 100 % | 100 % |
+| Polski (`pl`) | 100 % | 100 % |
 | Slovenčina (`sk`) | 100 % | 100 % |
 | Čeština (`cs`) | 100 % | 100 % |
 | Nederlands (`nl`) | 100 % | 100 % |
