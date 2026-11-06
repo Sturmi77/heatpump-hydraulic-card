@@ -593,8 +593,8 @@ const HFC_PRESETS = {
         // also counts standby, and uptimecomp is the hot-water share under the dhw tag (#333).
         hours: s('boiler_uptimecontrol', 'boiler_total_operating_time_heat'),
         starts_total: s('boiler_totalcompstarts', 'boiler_total_compressor_control_starts'),
-        energy_total: s('boiler_nrgconstotal', 'boiler_total_energy_consumption'),
-        heat_total: s('boiler_nrgsupptotal', 'boiler_total_energy_supplied'),
+        energy_total: s('boiler_metertotal', 'boiler_meter_total', 'boiler_nrgconstotal', 'boiler_total_energy_consumption'),
+        heat_total: s('boiler_nrgtotal', 'boiler_total_energy', 'boiler_nrgsupptotal', 'boiler_total_energy_supplied'),
         compressor_speed: s('boiler_hpcompspd', 'boiler_compressor_speed'),
         evap_temp: s('boiler_hppl1', 'boiler_evaporator_inlet_temperature_tr4'),
         // Expansion valve VR1 (short name expvalve); larger outdoor units also report VR0 (recvalve) (#224).
@@ -609,9 +609,13 @@ const HFC_PRESETS = {
     tiles: (p) => {
       const t = (...ks) => ({ total: ks.map((k) => `sensor.${p ? `${p}_` : ''}boiler_${k}`) });
       return {
-        energy: t('nrgconstotal', 'metertotal', 'total_energy_consumption'), energy_heating: t('nrgconscompheating', 'meterheat'), energy_dhw: t('dhw_nrgconscomp', 'dhw_meter'),
-        energy_cooling: t('nrgconscompcooling', 'metercool'), energy_aux: t('auxelecheatnrgconstotal', 'metereheat'),
-        heat: t('nrgsupptotal', 'total_energy_supplied'), heat_heating: t('nrgsuppheating'), heat_dhw: t('dhw_nrgsupp'), heat_cooling: t('nrgsuppcooling'),
+        // The counters with two decimals of CS5800/6800i and WLW176/186i first (`meter…` electricity, `nrg…` heat): the whole-kWh
+        // counters make the COP of a day jump in coarse steps (#346).
+        energy: t('metertotal', 'meter_total', 'nrgconstotal', 'total_energy_consumption'), energy_heating: t('meterheat', 'meter_heating', 'nrgconscompheating'),
+        energy_dhw: t('dhw_meter', 'dhw_nrgconscomp'), energy_cooling: t('metercool', 'meter_cooling', 'nrgconscompcooling'),
+        energy_aux: t('metereheat', 'meter_e_heater', 'auxelecheatnrgconstotal'),
+        heat: t('nrgtotal', 'total_energy', 'nrgsupptotal', 'total_energy_supplied'), heat_heating: t('nrgheat', 'energy_heating', 'nrgsuppheating'),
+        heat_dhw: t('dhw_nrg', 'dhw_energy', 'dhw_nrgsupp'), heat_cooling: t('nrgcool', 'energy_cooling', 'nrgsuppcooling'),
         starts: t('totalcompstarts', 'total_compressor_control_starts'), cycles_heating: t('heatingstarts'), cycles_dhw: t('dhw_startshp'), cycles_cooling: t('coolingstarts'),
         hours: t('uptimecontrol', 'total_operating_time_heat'),
       };
@@ -3069,6 +3073,8 @@ class HeatpumpFlowCard extends HTMLElement {
     prefix = String(prefix || '').trim().toLowerCase();
     const fromPreset = {};
     const presetSums = {};
+    // First candidate with a value; one that exists but is unavailable or unknown (not reported by this model) yields to a later one.
+    const live = (id) => hass.states[id] && !['unknown', 'unavailable'].includes(hass.states[id].state);
     const take = (k, v) => {
       // { sum: [a, b] }: the key is the sum of these entities, as a list in the configuration is (ebusd heat, #338).
       if (v && Array.isArray(v.sum)) {
@@ -3078,8 +3084,6 @@ class HeatpumpFlowCard extends HTMLElement {
         return;
       }
       const list = (Array.isArray(v) ? v : [v]).filter(Boolean);
-      // First candidate with a value; one that exists but is unavailable or unknown (not reported by this model) yields to a later one.
-      const live = (id) => hass.states[id] && !['unknown', 'unavailable'].includes(hass.states[id].state);
       const hit = list.find(live) || list.find((id) => hass.states[id]) || list[0];
       if (hit) fromPreset[k] = hit;
     };
@@ -3106,11 +3110,12 @@ class HeatpumpFlowCard extends HTMLElement {
     });
     const presetErrors = preset && preset.errors ? preset.errors(prefix, idx, ctx) : [];
     const errors = config.errors !== undefined ? config.errors : presetErrors;
-    // Stat tile entities: { tile: { period: entity } }, only entities that exist.
+    // Stat tile entities: { tile: { period: entity } }, only entities that exist, those with a value first.
     const tiles = {};
     if (preset && preset.tiles) {
       Object.entries(preset.tiles(prefix, idx, ctx)).forEach(([k, periods]) => Object.entries(periods || {}).forEach(([period, v]) => {
-        const hit = (Array.isArray(v) ? v : [v]).filter(Boolean).find((id) => hass.states[id]);
+        const list = (Array.isArray(v) ? v : [v]).filter(Boolean);
+        const hit = list.find(live) || list.find((id) => hass.states[id]);
         if (hit) (tiles[k] = tiles[k] || {})[period] = hit;
       }));
     }
