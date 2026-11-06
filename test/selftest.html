@@ -297,6 +297,21 @@
     const own = C._resolve({ preset: 'ebusd', entities: { heat: 'sensor.my_heat' } }, hassOf(multi, multiReg));
     check(withOutput.entities.heat === `${gp}rundataheatoutput` && !withOutput.sums.heat && own.entities.heat === 'sensor.my_heat' && !own.sums.heat,
       '#338: RunDataHeatOutput is taken directly, and an own heat entity replaces the preset sum');
+    // Review of #350: an entity that reports no value does not take the place of the sum, also on a running card.
+    const outReg = { ...multiReg, [`${gp}rundataheatoutput`]: { platform: 'mqtt' } };
+    const outHass = (state) => hassOf({ ...multi, ...toStates({ [`${gp}rundataheatoutput`]: [state, 'kW'] }) }, outReg);
+    const gone = C._resolve({ preset: 'ebusd' }, outHass('unavailable'));
+    const onlyOutput = C._resolve({ preset: 'ebusd' }, hassOf(Object.fromEntries(Object.entries({ ...multi, ...toStates({ [`${gp}rundataheatoutput`]: ['unavailable', 'kW'] }) })
+      .filter(([id]) => !id.endsWith('_currentyieldpower'))), outReg));
+    check(gone.entities.heat === `${gp}currentyieldpower` && gone.sums.heat?.length === 2 && onlyOutput.entities.heat === `${gp}rundataheatoutput` && !onlyOutput.sums.heat,
+      `#338: without a value of RunDataHeatOutput the sum takes over, without the sum the direct entity stays (${gone.entities.heat} / ${onlyOutput.entities.heat})`);
+    const live = mount({ preset: 'ebusd' }, outHass('6.1')); await wait(20);
+    const direct = live._kw('heat');
+    live._checkedAt = 0; live.hass = outHass('unavailable'); await wait(20);
+    const back = live._kw('heat');
+    live._checkedAt = 0; live.hass = outHass('6.2'); await wait(20);
+    check(direct === 6.1 && back === 6 && live._kw('heat') === 6.2, `#338: a running card follows the value of RunDataHeatOutput (${direct} / ${back} / ${live._kw('heat')})`);
+    live.remove();
     const explicit = C._resolve({ preset: 'ebusd', prefix: 'ebus_arotherm' }, hassOf(multi, multiReg));
     check(explicit.prefix === 'ebus_arotherm' && ['mode', 'flow', 'return'].every((key) => explicit.entities[key]?.startsWith('sensor.ebus_arotherm_'))
       && explicit.entities.power === undefined, 'a full ebusd prefix selects one instance explicitly without falling back to another');

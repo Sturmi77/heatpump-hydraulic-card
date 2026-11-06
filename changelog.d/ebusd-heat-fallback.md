@@ -1,0 +1,1 @@
+- ebusd: while `RunDataHeatOutput` reports no value, the heat falls back to `CurrentYieldPower` + `CurrentConsumedPower` instead of staying empty. The preset checks this again every minute.

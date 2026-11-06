@@ -18,7 +18,7 @@ With several ebusd daemons, the preset groups entities by this complete stem and
 What you get:
 - operating state from `RunDataStatuscode` (heating, hot water, cooling, defrost, blocked, frost protection; fault codes show as text)
 - flow, return, building-circuit flow rate, air inlet and outdoor temperature
-- electrical power and heat output of the outdoor unit, giving a live COP. `CurrentYieldPower` is the yield from the environment (heat minus electricity), so the heat is `CurrentYieldPower` + `CurrentConsumedPower`; `RunDataHeatOutput` comes first where ebusd reports it (#338). Before 0.19 the card showed the yield as heat, a COP lower by 1
+- electrical power and heat output of the outdoor unit, giving a live COP. `CurrentYieldPower` is the yield from the environment (heat minus electricity), so the heat is `CurrentYieldPower` + `CurrentConsumedPower`; `RunDataHeatOutput` comes first while it reports a value (#338). Before 0.19 the card showed the yield as heat, a COP lower by 1
 - compressor speed as "running"; the diverter valve from the hydraulic station's hot water flag (`vwzio_statusdhw_dhwactive`) where ebusd reports it, otherwise from the operating state (`hwc_…` is hot water)
 - DHW temperature and target, heating circuits with flow, target and pump from the controller, zone room temperature and target
 - heating-circuit pressure (outdoor unit, else controller)
