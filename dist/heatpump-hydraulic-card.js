@@ -3055,12 +3055,13 @@ class HeatpumpFlowCard extends HTMLElement {
     const e = { ...fromPreset };
     const sums = {};
     // User entities override the preset; null or "none" removes a preset entity.
-    // A list adds the values of its entities (power, heat and the power sources), e.g. two S0 meters; the first one stands for the key.
+    // A list adds the values of its entities (power, heat and the power sources), e.g. two S0 meters, or averages them (rooms, #23).
+    // The first member that exists stands for the key, so a missing first sensor does not hide the key.
     Object.entries(config.entities || {}).forEach(([k, v]) => {
       if (v === null || v === 'none') delete e[k];
       else if (Array.isArray(v)) {
         const ids = v.filter(Boolean);
-        if (ids.length) e[k] = ids[0];
+        if (ids.length) e[k] = ids.find((id) => hass?.states?.[id]) || ids[0];
         if (ids.length > 1) sums[k] = ids;
       } else if (v) e[k] = v;
     });
@@ -3547,7 +3548,9 @@ class HeatpumpFlowCard extends HTMLElement {
   // Mean of a list of room sensors (#23): the members that report a number, each converted to the unit of the first member,
   // so the key keeps that member's unit. Unknown only when no member reports a number.
   _mean(key) {
-    const unitOf = (id) => String(this._hass?.states[id]?.attributes?.unit_of_measurement || '').trim().toLowerCase().replace(/º/g, '°').replace('℃', '°c').replace('℉', '°f');
+    // A climate entity's current_temperature has no unit of its own: it is in the unit of the Home Assistant installation.
+    const unitOf = (id) => String(this._hass?.states[id]?.attributes?.unit_of_measurement
+      || (hfcTempAttr(id, key) ? this._hass?.config?.unit_system?.temperature : '') || '').trim().toLowerCase().replace(/º/g, '°').replace('℃', '°c').replace('℉', '°f');
     const toC = (v, u) => (u === '°f' ? (v - 32) * 5 / 9 : u === 'k' ? v - 273.15 : v);
     const fromC = (v, u) => (u === '°f' ? v * 9 / 5 + 32 : u === 'k' ? v + 273.15 : v);
     const humidity = key.endsWith('_humidity'); const base = unitOf(this._e[key]);
@@ -4564,7 +4567,8 @@ class HeatpumpFlowCard extends HTMLElement {
     const hc = HeatpumpFlowCard._hcSpreadCircuit(key);
     if (hc) {
       const on = (L.circuits || []).find((c) => c.n === hc)?.on;
-      return [on ? f(this._n(this._hk(hc, 'flow')) - this._n(this._hk(hc, 'return')), 1, 'K') : '–', this._e[this._hk(hc, 'flow')]];
+      // In °C, so a spread of sensors in °F is still a kelvin difference.
+      return [on ? f(this._tempC(this._hk(hc, 'flow')) - this._tempC(this._hk(hc, 'return')), 1, 'K') : '–', this._e[this._hk(hc, 'flow')]];
     }
     switch (key) {
       case 'cop_live': return [Number.isFinite(L.cop) ? `${L.heatEstimated ? '≈' : ''}${this._fmt(L.cop, 1)}` : '–', this._e.heat || this._e.power];

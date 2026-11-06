@@ -1591,6 +1591,8 @@
     const rows = tileRows(card);
     check(JSON.stringify(rows) === JSON.stringify([['Circuit spread', '2.1 K'], ['Circuit spread · OG', '–']]),
       `#290: circuit spread per circuit, named after the circuit, "–" while it stands, none beyond hc_count (${JSON.stringify(rows)})`);
+    card.hass = hassOf(toStates({ ...st, 'sensor.hf': ['89.6', '°F'], 'sensor.hr': ['86', '°F'] })); await wait(10);
+    check(tileRows(card)[0][1] === '2.0 K', `#290: a spread of sensors in °F is a kelvin difference (${tileRows(card)[0][1]})`);
     card.remove();
     const hass = hassOf(st);
     // Without a selection: the editor always lists tiles that are already selected.
@@ -3461,6 +3463,16 @@
     card.hass = hassOf(toStates({ ...st, 'sensor.r1': 'unavailable', 'sensor.r2': 'unknown' })); await wait(10);
     check(Number.isNaN(card._n('room')), '#23: without any room value the mean is unknown');
     card.remove();
+    // A climate entity reports in the unit of the installation; a missing first member does not hide the rooms.
+    const fStates = toStates({ ...st, 'sensor.r1': ['68', '°F'] }); fStates['climate.r3'].attributes = { current_temperature: 68 };
+    const fHass = { ...hassOf(fStates), config: { unit_system: { temperature: '°F' } } };
+    const fCard = mount({ entities: { ...ents, room: ['sensor.r1', 'climate.r3'] } }, fHass); await wait(20);
+    check(Math.abs(fCard._n('room') - 68) < 1e-9, `#23: a climate entity counts in the installation's unit (${fCard._n('room')})`);
+    fCard.remove();
+    const gap = mount({ entities: { ...ents, room: ['sensor.gone', 'sensor.r1'], room_humidity: undefined } }, hassOf(states)); await wait(20);
+    check(gap._e.room === 'sensor.r1' && gap._n('room') === 20 && /20\.0/.test(gap.shadowRoot.getElementById('t-room')?.textContent || ''),
+      `#23: the first existing member stands for the key, so the house overview stays (${gap._e.room} / ${gap.shadowRoot.getElementById('t-room')?.textContent})`);
+    gap.remove();
     const report = C._diagnosticReport(cfg, hassOf(states));
     check(report.includes('- room (average 1): sensor.r1') && report.includes('- room (average 2): sensor.r2') && report.includes('- power (sum 2): sensor.p2'),
       '#23: the diagnostic report names averaged and summed members');
