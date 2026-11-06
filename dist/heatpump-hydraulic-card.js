@@ -1074,6 +1074,8 @@ const HFC_PRESETS = {
     unit_style: 'vaillant',
     // The controller reports all its circuits, inactive ones included, so the editor stub cannot count them.
     auto_circuits: false,
+    // Heat follows whether RunDataHeatOutput reports a value.
+    dynamic: true,
     detect: (ctx) => hfcEbusdInstances(ctx)[0]?.stem,
     instances: (ctx, requested) => hfcEbusdInstances(ctx, requested),
     entities: (p, i, ctx) => {
@@ -1082,6 +1084,9 @@ const HFC_PRESETS = {
       const h = (n) => e('hmu', n); const c = (n) => e('ctl[sv]\\d', n); const w = (n) => e('vwzio', n);
       // Writable controller values that ebusd publishes as number or select entities.
       const cd = (domain, n) => ctx.match(new RegExp(`^${domain}\\.${x}_ctl[sv]\\d_${n}$`), 'mqtt');
+      const output = h('rundataheatoutput');
+      const parts = [h('currentyieldpower'), h('currentconsumedpower')];
+      const direct = output && !['unknown', 'unavailable'].includes(ctx.state(output));
       return {
         mode: h('rundatastatuscode'),
         compressor: [h('rundatacompressorspeed'), h('currentcompressorutil')],
@@ -1092,9 +1097,8 @@ const HFC_PRESETS = {
         power: [h('currentconsumedpower'), h('rundataelectricpowerconsumption')],
         // On the HMU, CurrentYieldPower is the yield from the environment, heat minus electricity (#338; RunDataHeatOutput =
         // yield + CurrentConsumedPower in 104 of 108 readings on a cascade). Heat is that sum; RunDataHeatOutput comes first
-        // where ebusd reports it. With only one of the two parts, heat stays unmapped rather than wrong.
-        heat: h('rundataheatoutput') || (h('currentyieldpower') && h('currentconsumedpower')
-          ? { sum: [h('currentyieldpower'), h('currentconsumedpower')] } : undefined),
+        // while it reports a value. With only one of the two parts, heat stays unmapped rather than wrong.
+        heat: direct || !parts.every(Boolean) ? output : { sum: parts },
         flow: h('rundataflowtemp'),
         return: h('rundatareturntemp'),
         volume: h('buildingcircuitflow'),
