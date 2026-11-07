@@ -1,0 +1,4 @@
+- Several heating circuits: the circuit labels start right of the risers, which covered the flow temperature of the lower circuits on phones (#361).
+- ViCare: in a single circuit without a buffer, the circuit pump is drawn as the primary pump in front of the 3-way valve. It runs for heating and hot water, and the circuit stands still while hot water charges (#344). `primary_pump: false` keeps the old drawing.
+- SG-Ready: the states of the OpenEMS / FEMS heat pump controller (integration `ha_openems`) are understood without `sg_ready_map` (#359).
+- Diagnostic report: a section "Power sources" lists each PV, battery and grid source of the Energy dashboard with its power sensor and value, so a source without a power sensor or a battery with the opposite sign can be found (#357).

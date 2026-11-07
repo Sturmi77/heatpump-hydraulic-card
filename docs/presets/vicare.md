@@ -36,6 +36,12 @@ Limits:
 
 A mapped `valve` (for example your own template sensor) or a reported "DHW charging" entity replaces the rule. The diagnostic report says when the rule is in use. Confirmed on a Vitocal 250 by the reporter of #186: the compressor is on while heating and while charging hot water, and the flow rises above the tank during a charge.
 
+## Circuit pump without a buffer
+
+Without a buffer and with one heating circuit, the pump ViCare reports as the circuit pump (`circulation_pump`) is the indoor unit's own pump in front of the 3-way valve. It also runs while hot water charges. The card therefore draws it as the primary pump on the flow next to the heat pump: it turns for heating and for hot water, and the circuit has no pump of its own. During a charge the circuit stands still, as the valve closes the heating side (#344).
+
+With a buffer, with several circuits or with your own `hc_pump` in the configuration, the pump stays in the circuit. `primary_pump: false` keeps it there as well.
+
 ## Notes
 
 ViCare has no live electrical power, so add `power` from a meter if you have one; the heat output is estimated from flow rate × spread. For a Vitocal with a ground source, set `source_type: brine`: the primary circuit supply and return become brine in and out. Circuits 2 and 3 share the same translation keys in ViCare, so map their entities manually (`hc2_flow`, …).
