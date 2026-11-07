@@ -1,0 +1,2 @@
+- Cascades with `units`: the heat of the system and of a run is always the sum of the units. A `heat` key, which a preset such as ebusd maps to the first unit only, no longer replaces it; before, a run divided the heat of one unit by the electricity of both and showed COP 1.3 instead of 2.5 (#173). While a running unit has no current heat, the run and the live view show no heat and no COP.
+- `narrow_values` also keeps the flow rates of the heat pump, the circuits and the source on narrow cards (#360).

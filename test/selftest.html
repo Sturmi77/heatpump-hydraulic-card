@@ -668,6 +668,11 @@
     // Review of #347: freshness applies to each member of a unit's heat list, so a fresh member does not renew a stale one.
     const member = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units(['sensor.h2', 'sensor.h2old']));
     check(member === 'Electricity: 0.80 kWh', `#327: a stale member of a unit's heat list leaves the run without heat (${member})`);
+    // #173 beta feedback: a heat key (from a preset, mapped to the first unit only) does not replace the units' heat of a run.
+    const withHeat = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'], heat: 'sensor.ht' }, units('sensor.h2'));
+    check(withHeat === cascade, `#173: with units the run heat comes from the units, not from the heat key (${withHeat})`);
+    const withHeatStale = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'], heat: 'sensor.ht' }, units('sensor.h2old'));
+    check(withHeatStale === 'Electricity: 0.80 kWh', `#173: with units and a heat key, a running unit without current heat leaves the run without heat and COP (${withHeatStale})`);
     // A flow temperature read from a climate entity: the query asks for attributes, so the hot-water estimate still works.
     series['climate.fl'] = [{ s: 'heat', a: { current_temperature: 35 }, lu: T0 / 1000 }];
     hass.states['climate.fl'] = { entity_id: 'climate.fl', state: 'heat', attributes: { current_temperature: 35 } };
@@ -708,6 +713,13 @@
     const et = (id) => est.shadowRoot.getElementById(id)?.textContent || '';
     check(/≈5\.2 kW/.test(et('t-hp-power')) && et('t-hp-cop') === '', `#173: an estimated heat does not form a COP while a running unit's heat is not current (${et('t-hp-power')} / "${et('t-hp-cop')}")`);
     est.remove();
+    // #173 beta feedback: a heat key (a preset maps it to the first unit only) is not used for the system heat with units.
+    const keyed = mount({ ...cfg, entities: { ...cfg.entities, heat: 'sensor.hk' } }, hassOf(toStates({ ...base, 'sensor.hk': ['2.8', 'kW'] }))); await wait(20);
+    const kt = (id) => keyed.shadowRoot.getElementById(id)?.textContent || '';
+    check(kt('t-hp-power') === '1,200 W → 4.8 kW' && kt('t-hp-cop') === 'COP 4.0', `#173: with units the system heat is the units' sum, not the heat key (${kt('t-hp-power')} / ${kt('t-hp-cop')})`);
+    keyed.hass = hassOf(toStates({ ...base, 'sensor.hk': ['2.8', 'kW'], 'sensor.h2': v('2000', 'W', 61) })); await wait(10);
+    check(kt('t-hp-power') === '1,200 W' && kt('t-hp-cop') === '', `#173: with units and a heat key, a running unit without current heat gives no system heat and COP (${kt('t-hp-power')} / "${kt('t-hp-cop')}")`);
+    keyed.remove();
     // Only the units: power is their sum, and a unit that runs while the compressor entity is off still counts as running.
     const only = mount({ entities: { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r' }, units: cfg.units },
       hassOf(toStates({ ...base, 'binary_sensor.c': 'off', 'sensor.u1': ['0', 'W'] }))); await wait(20);
@@ -2167,8 +2179,11 @@
     check(o.k === '1.4' && o.vol === 'none' && o.pre === 'none' && o.valve === 'none', `narrow schematic: type 1.4x, secondary labels hidden (${JSON.stringify(o)})`);
     const kept = mount({ ...s.config, hc_return_label: true, narrow_values: true }, hass); kept.style.display = 'block'; kept.style.width = '400px'; await wait(30);
     check(getComputedStyle(q(kept, 't-buf-bottom')).display !== 'none' && getComputedStyle(q(kept, 't-hc-rl')).display !== 'none'
-      && getComputedStyle(q(kept, 't-vol')).display === 'none' && getComputedStyle(q(kept, 't-valve')).display === 'none',
+      && getComputedStyle(q(kept, 't-valve')).display === 'none',
     'narrow_values keeps buffer sub-values and circuit return, but not unrelated secondary labels');
+    // #360: the flow rates of the heat pump, the circuits and the source stay with narrow_values and grow like the other kept values.
+    check([...kept.shadowRoot.querySelectorAll('.vol-label')].every((t) => getComputedStyle(t).display !== 'none') && parseFloat(getComputedStyle(q(kept, 't-vol')).fontSize) > 15,
+      `#360: narrow_values keeps the flow rates (${getComputedStyle(q(kept, 't-vol')).fontSize})`);
     // #257: on a phone the tank bottom tells how much hot water is left; narrow_values keeps it and the target line.
     check(getComputedStyle(q(kept, 't-dhw-bottom')).display !== 'none' && getComputedStyle(q(kept, 't-dhw-mode')).display !== 'none'
       && parseFloat(getComputedStyle(q(kept, 't-dhw-bottom')).fontSize) > 15,
