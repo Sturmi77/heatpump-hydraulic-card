@@ -1,0 +1,1 @@
+- EMS-ESP: the hot-water target under the tank is the setpoint the boiler currently works to (`dhw/settemp`), so it follows the comfort mode; before, it showed the selected temperature (`dhw/seltemp`), which stays the fallback. A Bosch Compress in Eco+ showed 48 °C while charging to 50 °C.

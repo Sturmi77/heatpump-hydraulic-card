@@ -5246,6 +5246,29 @@
     c.remove();
   }
 
+  // 23. EMS-ESP hot-water target: the setpoint the boiler works to (dhw/settemp) comes before the selected temperature (dhw/seltemp)
+  {
+    // Bosch Compress in Eco+, the ids and values of a real installation (EMS-ESP MQTT discovery, short names).
+    const base = {
+      'sensor.boiler_hpactivity': 'Heizen', 'sensor.boiler_hptc1': ['28.2', '°C'], 'sensor.boiler_hptc0': ['25.4', '°C'],
+      'sensor.boiler_dhw_curtemp': ['49.8', '°C'],
+    };
+    const resolve = (extra) => {
+      const states = toStates({ ...base, ...extra });
+      const registry = Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'mqtt' }]));
+      return { hass: hassOf(states, registry), e: C._resolve({ preset: 'emsesp' }, hassOf(states, registry)).entities };
+    };
+    const eco = resolve({ 'sensor.boiler_dhw_settemp': ['50.0', '°C'], 'number.boiler_dhw_seltemp': ['48', '°C'] });
+    check(eco.e.dhw_target === 'sensor.boiler_dhw_settemp', `EMS-ESP: the active hot-water setpoint before the selected temperature (${eco.e.dhw_target})`);
+    const card = mount({ preset: 'emsesp' }, eco.hass); await wait(20);
+    check(card._n('dhw_target') === 50, `EMS-ESP: the tank shows the setpoint of the active mode, 50 °C, not the selected 48 °C (${card._n('dhw_target')})`);
+    card.remove();
+    const older = resolve({ 'sensor.boiler_wwsettemp': ['50.0', '°C'], 'number.boiler_wwseltemp': ['48', '°C'] });
+    check(older.e.dhw_target === 'sensor.boiler_wwsettemp', `EMS-ESP: older ww names, the active setpoint wwsettemp first (${older.e.dhw_target})`);
+    const selectedOnly = resolve({ 'number.boiler_dhw_seltemp': ['48', '°C'] });
+    check(selectedOnly.e.dhw_target === 'number.boiler_dhw_seltemp', `EMS-ESP: without settemp the selected temperature stays the target (${selectedOnly.e.dhw_target})`);
+  }
+
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');
   document.getElementById('result').textContent = fails.length ? 'FAIL' : 'PASS';
