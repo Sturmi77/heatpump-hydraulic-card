@@ -1627,7 +1627,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animation speed', source_spread: 'Show source spread',
     theme: 'Card theme', theme_auto: 'Automatic (dashboard)', theme_night: 'Night', theme_contrast: 'High contrast', fullscreen: 'Full-screen button', diagnostic: 'Diagnostic report button',
     wall_timeout: 'Hide controls after (seconds, 0 = never)',
-    hc_flow_label: 'Show circuit flow temperature', hc_return_label: 'Show circuit return temperature', dew_point_margin: 'Minimum dew-point margin (K)', narrow_values: 'Keep tank sub-values, hot-water target and circuit return on narrow cards', narrow_focus: 'Phone focus: larger key values on narrow cards, secondary values in one line below', flow_rate_unit: 'Unit for flow rates', buffer_values: 'Buffer temperature emphasis', buffer_values_default: 'Top value prominent (default)', buffer_values_equal: 'All configured values equal', storage: 'Storage', storage_separate: 'Separate hot-water tank and buffer', storage_combined: 'Combined storage (one tank, hot-water zone on top)', buffer: 'Parallel buffer (also without sensors)', dhw_type: 'Hot-water preparation', dhw_type_coil: 'Tank with heat-exchanger coil', dhw_type_fresh_water: 'Fresh-water station (on the buffer or the combined storage)', dhw_type_tank_in_tank: 'Tank in tank (combined storage)', series_buffer: 'Series buffer in the return', series_bypass: 'Series buffer with bypass valve (off: the circuits run in defrost)', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
+    hc_flow_label: 'Show circuit flow temperature', hc_return_label: 'Show circuit return temperature', dew_point_margin: 'Minimum dew-point margin (K)', narrow_values: 'Keep tank sub-values, hot-water target, circuit return and flow rates on narrow cards', narrow_focus: 'Phone focus: larger key values on narrow cards, secondary values in one line below', flow_rate_unit: 'Unit for flow rates', buffer_values: 'Buffer temperature emphasis', buffer_values_default: 'Top value prominent (default)', buffer_values_equal: 'All configured values equal', storage: 'Storage', storage_separate: 'Separate hot-water tank and buffer', storage_combined: 'Combined storage (one tank, hot-water zone on top)', buffer: 'Parallel buffer (also without sensors)', dhw_type: 'Hot-water preparation', dhw_type_coil: 'Tank with heat-exchanger coil', dhw_type_fresh_water: 'Fresh-water station (on the buffer or the combined storage)', dhw_type_tank_in_tank: 'Tank in tank (combined storage)', series_buffer: 'Series buffer in the return', series_bypass: 'Series buffer with bypass valve (off: the circuits run in defrost)', primary_pump: 'Primary pump', hc_name: 'Circuit 1 name', hc2_name: 'Circuit 2 name', hc3_name: 'Circuit 3 name', hc4_name: 'Circuit 4 name', hc5_name: 'Circuit 5 name', hc6_name: 'Circuit 6 name',
     sec_hc2: 'Heating circuit 2', sec_hc3: 'Heating circuit 3', sec_hc4: 'Heating circuit 4', sec_hc5: 'Heating circuit 5', sec_hc6: 'Heating circuit 6', sec_details: 'Details: operation', sec_refrigerant: 'Details: refrigerant circuit', sec_cutouts: 'Details: cut-out counters',
     controls: 'Quick controls (switch, button, select, number …)', details_open: 'Details open by default',
     from_preset: 'Found by the preset', more_fields: 'More fields',
@@ -1720,7 +1720,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animationsgeschwindigkeit', source_spread: 'Quellenspreizung anzeigen',
     theme: 'Kartendarstellung', theme_auto: 'Automatisch (Dashboard)', theme_night: 'Nacht', theme_contrast: 'Hoher Kontrast', fullscreen: 'Vollbild-Schaltfläche', diagnostic: 'Diagnosebericht-Schaltfläche',
     wall_timeout: 'Bedienelemente ausblenden nach (Sekunden, 0 = nie)',
-    hc_flow_label: 'Heizkreis-Vorlauf anzeigen', hc_return_label: 'Heizkreis-Rücklauf anzeigen', dew_point_margin: 'Mindestabstand zum Taupunkt (K)', narrow_values: 'Speicher-Unterwerte, WW-Soll und Heizkreis-Rücklauf auf schmalen Karten zeigen', narrow_focus: 'Handy-Fokus: Kernwerte auf schmalen Karten größer, Nebenwerte in einer Zeile darunter', flow_rate_unit: 'Einheit für Volumenströme', buffer_values: 'Gewichtung der Puffertemperaturen', buffer_values_default: 'Oberen Wert hervorheben (Standard)', buffer_values_equal: 'Alle vorhandenen Werte gleich', storage: 'Speicher', storage_separate: 'Getrennter Warmwasserspeicher und Puffer', storage_combined: 'Kombispeicher (ein Speicher, Warmwasserzone oben)', buffer: 'Parallelpuffer (auch ohne Sensoren)', dhw_type: 'Warmwasserbereitung', dhw_type_coil: 'Speicher mit Wärmetauscher-Wendel', dhw_type_fresh_water: 'Frischwasserstation (am Puffer oder Kombispeicher)', dhw_type_tank_in_tank: 'Tank im Tank (Kombispeicher)', series_buffer: 'Reihenpuffer im Rücklauf', series_bypass: 'Reihenpuffer mit Bypass-Ventil (aus: die Heizkreise laufen beim Abtauen)', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
+    hc_flow_label: 'Heizkreis-Vorlauf anzeigen', hc_return_label: 'Heizkreis-Rücklauf anzeigen', dew_point_margin: 'Mindestabstand zum Taupunkt (K)', narrow_values: 'Speicher-Unterwerte, WW-Soll, Heizkreis-Rücklauf und Volumenströme auf schmalen Karten zeigen', narrow_focus: 'Handy-Fokus: Kernwerte auf schmalen Karten größer, Nebenwerte in einer Zeile darunter', flow_rate_unit: 'Einheit für Volumenströme', buffer_values: 'Gewichtung der Puffertemperaturen', buffer_values_default: 'Oberen Wert hervorheben (Standard)', buffer_values_equal: 'Alle vorhandenen Werte gleich', storage: 'Speicher', storage_separate: 'Getrennter Warmwasserspeicher und Puffer', storage_combined: 'Kombispeicher (ein Speicher, Warmwasserzone oben)', buffer: 'Parallelpuffer (auch ohne Sensoren)', dhw_type: 'Warmwasserbereitung', dhw_type_coil: 'Speicher mit Wärmetauscher-Wendel', dhw_type_fresh_water: 'Frischwasserstation (am Puffer oder Kombispeicher)', dhw_type_tank_in_tank: 'Tank im Tank (Kombispeicher)', series_buffer: 'Reihenpuffer im Rücklauf', series_bypass: 'Reihenpuffer mit Bypass-Ventil (aus: die Heizkreise laufen beim Abtauen)', primary_pump: 'Primärpumpe', hc_name: 'Name Heizkreis 1', hc2_name: 'Name Heizkreis 2', hc3_name: 'Name Heizkreis 3', hc4_name: 'Name Heizkreis 4', hc5_name: 'Name Heizkreis 5', hc6_name: 'Name Heizkreis 6',
     sec_hc2: 'Heizkreis 2', sec_hc3: 'Heizkreis 3', sec_hc4: 'Heizkreis 4', sec_hc5: 'Heizkreis 5', sec_hc6: 'Heizkreis 6', sec_details: 'Details: Betrieb', sec_refrigerant: 'Details: Kältekreis', sec_cutouts: 'Details: Abschaltzähler',
     controls: 'Schnellbedienung (Schalter, Taste, Auswahl, Zahl …)', details_open: 'Details standardmäßig offen',
     from_preset: 'Von der Voreinstellung gefunden', more_fields: 'Weitere Felder',
@@ -1815,7 +1815,7 @@ const HFC_EDITOR = {
     flow_speed: 'Prędkość animacji', source_spread: 'Pokaż rozpiętość źródła',
     theme: 'Motyw karty', theme_auto: 'Automatyczny (panel)', theme_night: 'Nocny', theme_contrast: 'Wysoki kontrast', fullscreen: 'Przycisk pełnego ekranu', diagnostic: 'Przycisk raportu diagnostycznego',
     wall_timeout: 'Ukryj kontrolki po (sekundy, 0 = nigdy)',
-    narrow_values: 'Zachowaj podwartości zasobnika i powrót obiegu na wąskich kartach',
+    narrow_values: 'Zachowaj podwartości zasobnika, powrót obiegu i przepływy na wąskich kartach',
     narrow_focus: 'Skupienie na telefonie: większe kluczowe wartości na wąskich kartach, wartości pomocnicze w jednej linii pod schémou',
     flow_rate_unit: 'Jednostka natężenia przepływu', buffer_values: 'Wyróżnienie temperatury bufora', buffer_values_default: 'Górna wartość prominentna (domyślnie)', buffer_values_equal: 'Wszystkie skonfigurowane wartości równe',
     assistant_device: 'Znajdź encje na tym urządzeniu pompy ciepła',
@@ -1945,7 +1945,7 @@ const HFC_EDITOR = {
     flow_speed: 'Rýchlosť animácie', source_spread: 'Zobraziť rozpätie (spread) zdroja',
     theme: 'Téma karty', theme_auto: 'Automaticky (podľa panelu)', theme_night: 'Nočná', theme_contrast: 'Vysoký kontrast', fullscreen: 'Tlačidlo na celú obrazovku', diagnostic: 'Tlačidlo diagnostickej správy',
     wall_timeout: 'Skryť ovládacie prvky po (sekundy, 0 = nikdy)',
-    narrow_values: 'Ponechať podhodnoty akumulačnej nádrže a spiatočku okruhu na úzkych kartách',
+    narrow_values: 'Ponechať podhodnoty akumulačnej nádrže, spiatočku okruhu a prietoky na úzkych kartách',
     narrow_focus: 'Mobilné zobrazenie: hlavné hodnoty na úzkych kartách väčšie, vedľajšie v jednom riadku pod schémou',
     flow_rate_unit: 'Jednotka prietoku', buffer_values: 'Zvýraznenie teplôt akumulačnej nádrže', buffer_values_default: 'Zvýrazniť hornú hodnotu (predvolené)', buffer_values_equal: 'Všetky nakonfigurované hodnoty rovnocenné',
     assistant_device: 'Nájsť entity na tomto zariadení tepelného čerpadla',
@@ -2075,7 +2075,7 @@ const HFC_EDITOR = {
     flow_speed: 'Rychlost animace', source_spread: 'Zobrazit rozpětí (spread) zdroje',
     theme: 'Téma karty', theme_auto: 'Automaticky (podle panelu)', theme_night: 'Noční', theme_contrast: 'Vysoký kontrast', fullscreen: 'Tlačítko na celou obrazovku', diagnostic: 'Tlačítko diagnostické zprávy',
     wall_timeout: 'Skrýt ovládací prvky po (sekundy, 0 = nikdy)',
-    narrow_values: 'Ponechat podhodnoty akumulační nádrže a zpátečku okruhu na úzkých kartách',
+    narrow_values: 'Ponechat podhodnoty akumulační nádrže, zpátečku okruhu a průtoky na úzkých kartách',
     narrow_focus: 'Mobilní zobrazení: hlavní hodnoty na úzkých kartách větší, vedlejší v jednom řádku pod schématem',
     flow_rate_unit: 'Jednotka průtoku', buffer_values: 'Zvýraznění teplot akumulační nádrže', buffer_values_default: 'Zvýraznit horní hodnotu (výchozí)', buffer_values_equal: 'Všechny nakonfigurované hodnoty rovnocenné',
     assistant_device: 'Najít entity na tomto zařízení tepelného čerpadla',
@@ -2204,7 +2204,7 @@ const HFC_EDITOR = {
     flow_speed: 'Animatiesnelheid', source_spread: 'ΔT van de bron tonen',
     theme: 'Kaartthema', theme_auto: 'Automatisch (dashboard)', theme_night: 'Nacht', theme_contrast: 'Hoog contrast', fullscreen: 'Knop volledig scherm', diagnostic: 'Knop diagnoserapport',
     wall_timeout: 'Bediening verbergen na (seconden, 0 = nooit)',
-    hc_flow_label: 'Aanvoertemperatuur per groep tonen', hc_return_label: 'Retourtemperatuur per groep tonen', dew_point_margin: 'Minimale dauwpuntsmarge (K)', narrow_values: 'Vat-subwaarden, warmwaterdoel en groepsretour op smalle kaarten tonen', narrow_focus: 'Telefoonweergave: kernwaarden groter op smalle kaarten, bijwaarden in één regel eronder', flow_rate_unit: 'Eenheid voor debiet', buffer_values: 'Nadruk buffertemperaturen', buffer_values_default: 'Bovenste waarde prominent (standaard)', buffer_values_equal: 'Alle ingestelde waarden gelijk', storage: 'Opslag', storage_separate: 'Apart warmwatervat en buffervat', storage_combined: 'Combivat (één vat, warmwaterzone bovenin)', buffer: 'Parallel buffervat (ook zonder sensoren)', dhw_type: 'Warmwaterbereiding', dhw_type_coil: 'Vat met warmtewisselaarspiraal', dhw_type_fresh_water: 'Verswaterstation (op het buffervat of het combivat)', dhw_type_tank_in_tank: 'Tank in tank (combivat)', series_buffer: 'Seriebuffer in de retour', series_bypass: 'Seriebuffer met bypassklep (uit: de groepen draaien door bij ontdooien)', primary_pump: 'Primaire pomp', hc_name: 'Naam groep 1', hc2_name: 'Naam groep 2', hc3_name: 'Naam groep 3', hc4_name: 'Naam groep 4', hc5_name: 'Naam groep 5', hc6_name: 'Naam groep 6',
+    hc_flow_label: 'Aanvoertemperatuur per groep tonen', hc_return_label: 'Retourtemperatuur per groep tonen', dew_point_margin: 'Minimale dauwpuntsmarge (K)', narrow_values: 'Vat-subwaarden, warmwaterdoel, groepsretour en debieten op smalle kaarten tonen', narrow_focus: 'Telefoonweergave: kernwaarden groter op smalle kaarten, bijwaarden in één regel eronder', flow_rate_unit: 'Eenheid voor debiet', buffer_values: 'Nadruk buffertemperaturen', buffer_values_default: 'Bovenste waarde prominent (standaard)', buffer_values_equal: 'Alle ingestelde waarden gelijk', storage: 'Opslag', storage_separate: 'Apart warmwatervat en buffervat', storage_combined: 'Combivat (één vat, warmwaterzone bovenin)', buffer: 'Parallel buffervat (ook zonder sensoren)', dhw_type: 'Warmwaterbereiding', dhw_type_coil: 'Vat met warmtewisselaarspiraal', dhw_type_fresh_water: 'Verswaterstation (op het buffervat of het combivat)', dhw_type_tank_in_tank: 'Tank in tank (combivat)', series_buffer: 'Seriebuffer in de retour', series_bypass: 'Seriebuffer met bypassklep (uit: de groepen draaien door bij ontdooien)', primary_pump: 'Primaire pomp', hc_name: 'Naam groep 1', hc2_name: 'Naam groep 2', hc3_name: 'Naam groep 3', hc4_name: 'Naam groep 4', hc5_name: 'Naam groep 5', hc6_name: 'Naam groep 6',
     sec_hc2: 'Verwarmingsgroep 2', sec_hc3: 'Verwarmingsgroep 3', sec_hc4: 'Verwarmingsgroep 4', sec_hc5: 'Verwarmingsgroep 5', sec_hc6: 'Verwarmingsgroep 6', sec_details: 'Details: bedrijf', sec_refrigerant: 'Details: koudemiddelcircuit', sec_cutouts: 'Details: uitschakeltellers',
     controls: 'Snelbediening (schakelaar, knop, keuzelijst, getal …)', details_open: 'Details standaard open',
     from_preset: 'Gevonden door de preset', more_fields: 'Meer velden',
@@ -5766,7 +5766,7 @@ class HeatpumpFlowCard extends HTMLElement {
     // flow and return for a heat estimate.
     const units = Array.isArray(this._config.units) && this._config.units.length ? this._config.units : null;
     const idsOf = (k) => this._sums?.[k] || [this._e[k]];
-    const energyIds = [...['power', 'heat', 'volume', 'flow', 'return'].filter((k) => this._has(k)).flatMap(idsOf),
+    const energyIds = [...['power', 'heat', 'volume', 'flow', 'return'].filter((k) => this._has(k) && !(units && k === 'heat')).flatMap(idsOf),
       ...(units || []).flatMap((u) => [u.power, u.heat].flat())];
     if (!keys.length && !energyIds.length) return [];
     const list = [...new Set([...keys.map((k) => this._e[k]), ...energyIds])];
@@ -5882,7 +5882,8 @@ class HeatpumpFlowCard extends HTMLElement {
   // when its data hold a valid value for at least HFC_RUN_COVER of the run, and the COP only when both do.
   // - Electricity: `power` with every member of its sum valid at the same time, else the power of the units (#173).
   // - Heat: the units' pairs (a running unit's heat counts up to its age limit after it was written, a standing unit adds
-  //   none), else `heat`, else flow rate × spread × 1.163 Wh/(l·K), marked ≈.
+  //   none), else `heat`, else flow rate × spread × 1.163 Wh/(l·K), marked ≈. With units, `heat` is not used: a preset maps
+  //   it to the first unit only (#173).
   // Energy counters and hourly long-term statistics are not used, so a counter reset or an hourly value is never split onto a run.
   _runEnergy(run, hist, { time, nums, combine, units, idsOf }) {
     const i = this._i;
@@ -5909,7 +5910,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const elec = this._has('power') ? integrate(sumW(idsOf('power')))
       : units ? integrate(sumW(units.flatMap((u) => [u.power].flat()))) : NaN;
     let estimated = false; let heat = NaN;
-    if (units && !this._has('heat')) {
+    if (units) {
       heat = integrate(combine(units.map((u) => combine([sumW([u.power].flat()), combine([u.heat].flat().map((id) => fresh(watts(id, 1000), hfcUnitMaxAge(u))), total)],
         ([p, h]) => (!Number.isFinite(p) ? NaN : p <= 50 ? 0 : h))), total));
     } else if (this._has('heat')) heat = integrate(sumW(idsOf('heat'), 1000));
@@ -6359,16 +6360,17 @@ class HeatpumpFlowCard extends HTMLElement {
     const tCommonFlow = boilerRunning && Number.isFinite(tBoiler) ? tBoiler : tFlow;
     const spread = Number.isFinite(tFlow) && Number.isFinite(tRet) ? tFlow - tRet : NaN;
 
-    // Heat output: sensor, or estimated from flow rate × spread × 1.163 Wh/(l·K) for water.
-    let heat = this._kw('heat');
-    let heatEstimated = false;
-    // A cascade with `units` (#173): heat is the sum of the units' paired heat values, only when every pair is complete. Power
-    // stays the `power` key (it may include a hydraulic station), else the units' power.
+    // A cascade with `units` (#173): heat is the sum of the units' paired heat values, only when every pair is complete; the
+    // `heat` key is not used, as a preset maps it to the first unit only. Power stays the `power` key (it may include a
+    // hydraulic station), else the units' power.
     const units = this._units();
-    const unitHeat = units && !this._has('heat') && units.every((u) => u.complete) ? units.reduce((a, u) => a + u.heat, 0) : NaN;
+    // Heat output: sensor, or estimated from flow rate × spread × 1.163 Wh/(l·K) for water.
+    let heat = units ? NaN : this._kw('heat');
+    let heatEstimated = false;
+    const unitHeat = units && units.every((u) => u.complete) ? units.reduce((a, u) => a + u.heat, 0) : NaN;
     const hpPower = units && !this._has('power') ? units.reduce((a, u) => a + u.power, 0) : power;
     if (Number.isFinite(unitHeat)) heat = unitHeat;
-    else if (!this._has('heat') && loop && running && vol > 0 && spread > 0) { heat = (vol * spread * 1.163) / 1000; heatEstimated = true; }
+    else if ((units || !this._has('heat')) && loop && running && vol > 0 && spread > 0) { heat = (vol * spread * 1.163) / 1000; heatEstimated = true; }
 
     // Animation speed: fan, flow dashes and pumps follow the compressor modulation when the integration reports it,
     // the flow dashes the flow rate, the fan otherwise the electrical power.
@@ -6553,7 +6555,7 @@ class HeatpumpFlowCard extends HTMLElement {
       ? (Number.isFinite(hpPower) ? `${this._fmt(hpPower, 0)} W${heatTxt ? ` → ${heatTxt}` : ''}` : (heatTxt || i.running))
       : i.compressor_off);
     // With units, an estimated heat stands in for the display only; the COP needs every pair complete (#173).
-    const cop = running && hpPower > 50 && heat > 0 && this._sumComplete('power') && this._sumComplete('heat') && (!units || units.every((u) => u.complete))
+    const cop = running && hpPower > 50 && heat > 0 && this._sumComplete('power') && (units ? units.every((u) => u.complete) : this._sumComplete('heat'))
       ? (heat * 1000) / hpPower : NaN;
     this._txt('t-hp-cop', Number.isFinite(cop) ? `COP ${heatEstimated ? '≈' : ''}${this._fmt(cop, 1)}` : '');
     const hpHeat = this._$('t-hp-heat');
@@ -7088,7 +7090,7 @@ HeatpumpFlowCard.styles = `
   /* narrow schematic (phones, narrow columns): larger type, secondary labels hidden */
   .stage { container-type: inline-size; }
   @container (max-width: 640px) { #svg { --k: 1.2; --ku: 1.1; --kp: 1; --k2: 1; --ks: 1.2; --kt: 1.15; } }
-  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .vol-label, .tank-sub, .pre, #t-valve, #t-circ, #t-dhw-mode { display: none; } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values #t-dhw-middle, .narrow-values #t-dhw-bottom, .narrow-values #t-dhw-mode, .narrow-values [id^="t-hc-rl"] { display: block; font-size: calc(13px * var(--k2, 1)); } }
+  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .vol-label, .tank-sub, .pre, #t-valve, #t-circ, #t-dhw-mode { display: none; } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values #t-dhw-middle, .narrow-values #t-dhw-bottom, .narrow-values #t-dhw-mode, .narrow-values .vol-label { display: block; font-size: calc(13px * var(--k2, 1)); } }
   /* narrow_focus: below 500 px the key values grow to about the size of the tank temperature; the outdoor, air inlet and power
      source values move to one line under the schematic, and the secondary labels are hidden. Wins over narrow_values. */
   #t-hp-heat, .focus-line { display: none; }
