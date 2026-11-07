@@ -291,6 +291,9 @@ const HFC_PRESETS = {
     // Confirmed on a Vitocal 250 (#186, #196) and a Vitocal 200-S with combined storage and fresh-water station (#282).
     tested: true,
     unit_style: 'viessmann',
+    // Without a buffer and with one circuit, the circuit pump ViCare reports (circulation_pump) is the indoor unit's own pump in
+    // front of the diverter valve: it also runs for hot water, so it is drawn as the primary pump (#344).
+    shared_pump: true,
     // Gas boilers also report outside_temperature, so only compressor entities count as a heat pump.
     detect: (ctx) => (ctx.key('vicare', 'binary_sensor', 'compressor') || ctx.key('vicare', 'sensor', 'compressor_phase')
       || ctx.key('vicare', 'sensor', 'compressor_starts') ? '' : undefined),
@@ -2457,7 +2460,11 @@ const HFC_PROGRAM_PATTERNS = [
 // SG-Ready state 1 blocks the heat pump, 2 is normal operation, 3 raises targets and 4 forces operation. Text and binary
 // entities use sg_ready_map; only the standardized numbers and normalized names are interpreted without a map.
 const HFC_SG_READY_STATES = ['normal', 'blocked', 'boost', 'forced'];
-const HFC_SG_READY_MAP = { 1: 'blocked', 2: 'normal', 3: 'boost', 4: 'forced', normal: 'normal', blocked: 'blocked', boost: 'boost', forced: 'forced' };
+// OpenEMS / FEMS (integration ha_openems, #359): the status of the heat pump controller ctrlIoHeatPump and its manual state.
+const HFC_SG_READY_MAP = { 1: 'blocked', 2: 'normal', 3: 'boost', 4: 'forced', normal: 'normal', blocked: 'blocked', boost: 'boost', forced: 'forced',
+  blocks_everything_till_an_internal_maximum_time_of_default_two_hours: 'blocked', 'default_energy-efficient_operation': 'normal',
+  recommendation_to_use_more_available_power: 'boost', force_all_possible_consumption_of_the_heat_pump: 'forced',
+  lock: 'blocked', regular: 'normal', recommendation: 'boost', force_on: 'forced' };
 const HFC_SG_READY_ICONS = {
   blocked: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   boost: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V5M6 11l6-6 6 6"/></svg>',
@@ -3337,6 +3344,43 @@ class HeatpumpFlowCard extends HTMLElement {
       .filter(([m]) => isMap(m)).map(([m, from]) => `- ${name}: ${mapText(m)} (${from})`));
     const misplaced = HFC_MAP_KEYS.filter((name) => config.entities && typeof config.entities === 'object' && name in config.entities)
       .map((name) => `- ${name} under entities: ignored, it belongs at the top level of the card configuration`);
+    // Shared pump (#344): the same rule as the card's _sharedPump, from the configuration and the resolved entities.
+    const ownPump = config.entities?.hc_pump;
+    const sharedPump = !!r.preset?.shared_pump && hfcHcCount(config) === 1 && !!r.entities.hc_pump && (ownPump === undefined || ownPump === null)
+      && config.storage !== 'combined' && config.buffer !== true && !['buffer_top', 'buffer_mode'].some((k) => r.entities[k]);
+    // Power sources (#357): each PV, battery and grid source of the Energy dashboard with its power sensor and value. A source
+    // without a power sensor makes its share the remainder, and a battery with the opposite sign moves its share to PV.
+    const energyLines = (() => {
+      if (['pv', 'battery', 'grid'].some((key) => r.entities[key])) return ['- from the card configuration (pv, battery, grid)'];
+      if (config.power_sources === 'manual') return ['- off (power_sources: manual)'];
+      const prefs = HeatpumpFlowCard._energyPrefsValue;
+      if (!prefs) return ['- Energy dashboard not loaded yet'];
+      const sources = (prefs.energy_sources || []).filter((s) => ['solar', 'battery', 'grid'].includes(s.type));
+      if (!sources.length) return ['- Energy dashboard: no PV, battery or grid source'];
+      const value = (id) => {
+        const st = hass.states[id];
+        if (!st) return `${id} = unavailable (entity not found)`;
+        const unit = clean(st.attributes?.unit_of_measurement);
+        const bad = HeatpumpFlowCard._fit('power', id, st).verdict === 'bad';
+        return `${id} = ${clean(st.state) || '(empty)'}${unit ? ` ${unit}` : ''}${bad ? ' (not a power value, ignored)' : ''}`;
+      };
+      const count = {};
+      return [
+        '- Energy dashboard; its conventions: battery positive = discharging, grid positive = import',
+        ...(r.entities.power ? [] : ['- the split needs the heat pump power (power), which is not mapped']),
+        ...sources.map((s) => {
+          count[s.type] = (count[s.type] || 0) + 1;
+          const label = `${s.type} ${count[s.type]}`;
+          const pc = s.power_config;
+          if (pc && (pc.stat_rate_from || pc.stat_rate_to)) {
+            return `- ${label}: from ${pc.stat_rate_from ? value(pc.stat_rate_from) : 'none'}; to ${pc.stat_rate_to ? value(pc.stat_rate_to) : 'none'}`;
+          }
+          const id = pc?.stat_rate || s.stat_rate;
+          if (!id) return `- ${label}: no power sensor (energy ${clean(s.stat_energy_from) || 'none'} only)`;
+          return `- ${label}: ${value(id)}${pc?.stat_rate_inverted ? ' (inverted in the Energy dashboard)' : ''}`;
+        }),
+      ];
+    })();
     const lines = [
       'Heat Pump Hydraulic Card diagnostic report',
       'Privacy: entity ids can contain personal names. Review this text before sharing it.',
@@ -3354,7 +3398,7 @@ class HeatpumpFlowCard extends HTMLElement {
       `Source type: ${config.source_type || 'air'}`,
       `Heating circuits: ${hfcHcCount(config)}`,
       // The hydraulic options decide what the schematic draws, so a report of a storage or flow problem needs them.
-      `Storage: ${config.storage || 'separate'} · hot water: ${config.dhw_type || 'coil'} · parallel buffer: ${config.storage === 'combined' ? 'combined storage' : config.buffer ? 'yes, configured' : ['buffer_top', 'buffer_mode'].some((k) => r.entities[k]) ? 'yes, from entities' : 'no'} · series buffer: ${config.series_buffer ? (config.series_bypass === false ? 'yes, no bypass valve' : 'yes') : 'no'} · primary pump: ${(config.primary_pump ?? !!r.preset?.primary_pump) ? 'yes' : 'no'}`,
+      `Storage: ${config.storage || 'separate'} · hot water: ${config.dhw_type || 'coil'} · parallel buffer: ${config.storage === 'combined' ? 'combined storage' : config.buffer ? 'yes, configured' : ['buffer_top', 'buffer_mode'].some((k) => r.entities[k]) ? 'yes, from entities' : 'no'} · series buffer: ${config.series_buffer ? (config.series_bypass === false ? 'yes, no bypass valve' : 'yes') : 'no'} · primary pump: ${sharedPump && config.primary_pump !== false ? 'yes, the circuit pump of the preset (one circuit, no buffer)' : (config.primary_pump ?? !!r.preset?.primary_pump) ? 'yes' : 'no'}`,
       `Layout: ${config.layout || 'default'}`,
       `Flow rates shown in: ${String(config.flow_rate_unit || 'l/h').replace('m3/h', 'm³/h')}`,
       `Circuit labels: flow ${config.hc_flow_label === false ? 'hidden' : 'shown'} · return ${config.hc_return_label ? 'shown' : 'hidden'}`,
@@ -3369,6 +3413,9 @@ class HeatpumpFlowCard extends HTMLElement {
       `- Not mapped: ${unmapped.length ? unmapped.join(', ') : 'none'} (an empty key is fine when the installation does not have it)`,
       ...(r.preset?.valve_rule === 'flow_above_dhw' && !r.entities.valve && r.entities.flow && r.entities.dhw_top
         ? ['- Hot water without a valve entity: while the heat pump runs and flow is above dhw_top (preset rule)'] : []),
+      '',
+      'Power sources (PV, battery, grid):',
+      ...energyLines,
       '',
       // Plausibility checks (#192), in English like the rest of the report.
       'Checks:',
@@ -3462,6 +3509,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._energyReq = true;
     HeatpumpFlowCard._energyPrefs = HeatpumpFlowCard._energyPrefs || this._hass.callWS({ type: 'energy/get_prefs' });
     HeatpumpFlowCard._energyPrefs.then((prefs) => {
+      HeatpumpFlowCard._energyPrefsValue = prefs;
       const { energy, configured, missing } = HeatpumpFlowCard._energyInfo(prefs, this._hass);
       this._energy = energy.solar.length || energy.battery.length || energy.grid.length ? energy : null;
       this._energyConfigured = configured;
@@ -3884,7 +3932,7 @@ class HeatpumpFlowCard extends HTMLElement {
       let w = 0;
       try { w = sub.getComputedTextLength(); } catch (err) { w = 0; }
       if (!(w > 0)) return false;
-      if (w <= 800 - 648) return true;
+      if (w <= 800 - (parseFloat(el.getAttribute('x')) || 648)) return true;
     }
     return true;
   }
@@ -3990,7 +4038,7 @@ class HeatpumpFlowCard extends HTMLElement {
       hc: this._has('hc_flow') || this._has('hc_mode') || this._has('hc_pump') || buffer || this._has('flow') || this._has('return'),
       house: Array.from({ length: this._hcCount }, (_, n) => ['room', 'room_target', 'room_humidity'].some((key) => this._has(this._roomKey(n + 1, key)))).some(Boolean),
       circ: ['circulation', 'circulation_start', 'circulation_end', 'circulation_schedule'].some((key) => this._has(key)),
-      primaryPump: this._primaryPump(),
+      primaryPump: this._primaryPump(buffer),
       hcPump: this._has('hc_pump'),
       hcType: this._hcType,
       hcs: this._hcCount > 1 ? this._hcTypes.slice(0, this._hcCount).join() : '',
@@ -4888,11 +4936,15 @@ class HeatpumpFlowCard extends HTMLElement {
       ${e[k('curve_offset')]
     // With a heating curve shift the target and its parts stand above the pump, ending at the pump; the flow temperature goes below it.
     // Next to a buffer or combined storage (x 520–640) there is no room to the left: the label starts right of the tank in two lines.
-    ? `<g class="tap" ${de(k('curve_offset'))}>${this._parts.buffer
-      ? `<text class="pipe-label" id="t-hc${s}" x="648" y="316" text-anchor="start" data-lines="2"></text>`
+    // With several circuits the risers to circuits 2 to 6 run at x 660 and 676 and cross the labels of the lower circuits, so every
+    // circuit label starts right of them (#361), the same in each circuit.
+    ? `<g class="tap" ${de(k('curve_offset'))}>${this._parts.buffer || this._hcCount > 1
+      ? `<text class="pipe-label" id="t-hc${s}" x="${this._hcCount > 1 ? 688 : 648}" y="316" text-anchor="start" data-lines="2"></text>`
       : `<text class="pipe-label" id="t-hc${s}" x="736" y="334" text-anchor="end"></text>`}</g>
       <g class="tap" ${de(k('flow'))}><text class="pipe-label" id="t-hc-now${s}" x="720" y="396" text-anchor="middle"></text></g>`
-    : `<g class="tap" ${de(k('flow'))}><text class="pipe-label" id="t-hc${s}" x="740" y="334" text-anchor="middle"></text></g>`}
+    : `<g class="tap" ${de(k('flow'))}>${this._hcCount > 1
+      ? `<text class="pipe-label" id="t-hc${s}" x="688" y="334" text-anchor="start"></text>`
+      : `<text class="pipe-label" id="t-hc${s}" x="740" y="334" text-anchor="middle"></text>`}</g>`}
       <g class="tap" ${de(k('volume'))}><text class="vol-label" id="t-hc-vol${s}" x="720" y="${e[k('curve_offset')] ? 414 : 394}" text-anchor="middle"></text></g>
       ${this._config.hc_return_label ? `<g class="tap" ${de(k('return'))}><text class="vol-label" id="t-hc-rl${s}" x="690" y="515" text-anchor="start"></text></g>` : ''}
       ${n === 1 && e.hc_pressure
@@ -4910,7 +4962,14 @@ class HeatpumpFlowCard extends HTMLElement {
 
   // The heat pump has its own primary pump (`primary_pump`, default from the preset). It is drawn on the flow pipe next to the
   // heat pump block, centred between the flow temperature and the flow rate. A single direct circuit without its own pump sensor then has no pump of its own.
-  _primaryPump() { return this._config.primary_pump ?? !!this._preset?.primary_pump; }
+  _primaryPump(buffer = this._parts?.buffer) { return this._config.primary_pump ?? (!!this._preset?.primary_pump || this._sharedPump(buffer)); }
+  // A preset with `shared_pump` (#344): in a single circuit without a buffer, the circuit pump it found is the indoor unit's pump in
+  // front of the diverter valve. It is drawn as the primary pump and runs for heating and hot water; the circuit has no pump of its
+  // own then. A circuit pump set in the card configuration stays a circuit pump.
+  _sharedPump(buffer = this._parts?.buffer) {
+    const own = this._config.entities?.hc_pump;
+    return !!this._preset?.shared_pump && this._hcCount === 1 && !buffer && this._has('hc_pump') && (own === undefined || own === null);
+  }
   // narrow_focus (#4): below 500 px the key values grow and the secondary ones move to one line under the schematic. Only CSS
   // inside the narrow container query uses it, so wider schematics look the same with and without the option.
   _narrowFocus() { return this._config[HFC_NARROW_FOCUS] === true; }
@@ -4957,7 +5016,7 @@ class HeatpumpFlowCard extends HTMLElement {
     }
   }
 
-  _circuitPump(n) { return !(n === 1 && this._hcCount === 1 && this._primaryPump() && !this._parts.buffer && !this._e.hc_pump); }
+  _circuitPump(n) { return !(n === 1 && this._hcCount === 1 && this._primaryPump() && !this._parts.buffer && (!this._e.hc_pump || this._sharedPump())); }
 
   // Drawing of the outdoor unit inside the heat pump block (air source only; brine and water keep the loop symbol).
   // Manufacturer-inspired, logo-free outdoor units. `auto` takes the style of the preset.
@@ -6219,7 +6278,10 @@ class HeatpumpFlowCard extends HTMLElement {
     const loop = toDhw || toHeat;
     // The primary pump also runs without heating or hot water (Panasonic "sniffing", run-on): the water then circulates
     // slowly along the valve path (flow dashes 2000 / l/h seconds, 6 to 30 s). It only moves the water, so mode chip, valve text, spread and heat stay idle.
-    const circ = this._primaryPump() && !loop && Number.isFinite(vol) && vol > 0;
+    // A shared pump (#344) reports its own state, which stands in for a missing flow rate.
+    const sharedPump = this._primaryPump() && this._sharedPump();
+    const primaryRuns = Number.isFinite(vol) ? vol > 0 : sharedPump ? this._pumpOn('hc_pump') : null;
+    const circ = this._primaryPump() && !loop && primaryRuns === true;
     const flowDhw = toDhw || (circ && valveDhw && !!P.dhw);
     const flowHeat = toHeat || (circ && !flowDhw);
     const flowLoop = flowDhw || flowHeat;
@@ -6232,7 +6294,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const demand = showHc ? Array.from({ length: this._hcCount }, (_, x) => {
       const k = (key) => this._hk(x + 1, key);
       const mode = this._norm(this._maps.hc, this._s(k('mode')));
-      return { mode, own: this._has(k('pump')) ? this._pumpOn(k('pump')) : (this._has(k('mode')) ? ['heating', 'cooling'].includes(mode) : null) };
+      // A shared pump is the primary pump, not the circuit's: the circuit then follows its mode or the heating side.
+      const pump = this._has(k('pump')) && !(x === 0 && sharedPump);
+      return { mode, own: pump ? this._pumpOn(k('pump')) : (this._has(k('mode')) ? ['heating', 'cooling'].includes(mode) : null) };
     }) : [];
     // Without a parallel buffer the circuits and the heat pump are one water loop (#124). A running circuit pump moves the water
     // through the heat pump as well, unless the diverter valve stands on hot water and closes the heating side (also after a
@@ -6276,7 +6340,7 @@ class HeatpumpFlowCard extends HTMLElement {
       rawMode, status, hp, dhwMode, bufMode, power, vol, running, boilerRunning, generatorMode, generatorRunning, defrost, cooling, valveDhw,
       toDhw, toHeat, loop, circ, flowDhw, flowHeat, flowLoop, bypass, heatLoop,
       // The heat pump's own primary pump runs with a flow rate, else with the hot-water or heating loop.
-      primaryPump: Number.isFinite(vol) ? vol > 0 : loop,
+      primaryPump: primaryRuns ?? loop,
       // The DHW coil heats while the valve charges the tank.
       coil: toDhw,
       solar, circuits, pipes,
@@ -7128,6 +7192,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     this._energyReq = true;
     HeatpumpFlowCard._energyPrefs = HeatpumpFlowCard._energyPrefs || this._hass.callWS({ type: 'energy/get_prefs' });
     HeatpumpFlowCard._energyPrefs.then((prefs) => {
+      HeatpumpFlowCard._energyPrefsValue = prefs;
       this._energyMissing = HeatpumpFlowCard._energyInfo(prefs, this._hass).missing;
       this._render();
     }).catch(() => { this._energyMissing = []; });

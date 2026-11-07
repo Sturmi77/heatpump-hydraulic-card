@@ -47,7 +47,7 @@
     callService: () => Promise.resolve(),
   });
   const mount = (config, hass) => {
-    C._energyPrefs = null;
+    C._energyPrefs = null; C._energyPrefsValue = null;
     const card = document.createElement('heatpump-flow-card');
     card.setConfig(config);
     document.body.appendChild(card);
@@ -496,6 +496,33 @@
     const report = C._diagnosticReport({ preset: 'vicare' }, hassOf(state('ready', 'on', '29'), registry));
     check(report.includes('Hot water without a valve entity: while the heat pump runs and flow is above dhw_top'), 'ViCare: the report names the hot-water rule');
     card.remove();
+
+    // #344: without a buffer and with one circuit the reported circuit pump is the indoor unit's pump in front of the valve. It is
+    // drawn as the primary pump and runs for hot water too; the circuit has no pump of its own and no flow while the tank charges.
+    const pumps = async (states, config = {}, reg = registry) => {
+      const c = mount({ preset: 'vicare', ...config }, hassOf(states, reg)); await wait(20);
+      const sr = c.shadowRoot; const m = c._flowModel();
+      const out = { primary: !!sr.getElementById('impeller-primary'), primaryOn: !!sr.getElementById('impeller-primary')?.classList.contains('on'),
+        circuit: !!sr.getElementById('impeller'), hc: !!m.pipes['hc-vl'], dhw: m.toDhw };
+      c.remove(); return out;
+    };
+    let p = await pumps(state('ready', 'on', '48'));
+    check(p.primary && p.primaryOn && !p.circuit && p.dhw && !p.hc, `ViCare without buffer: the pump runs in front of the valve during a hot-water charge, the circuit stands (${JSON.stringify(p)})`);
+    p = await pumps(state('ready', 'on', '29'));
+    check(p.primary && p.primaryOn && !p.circuit && p.hc, `ViCare without buffer: heating moves the water through the circuit (${JSON.stringify(p)})`);
+    p = await pumps(state('ready', 'off', '30', { 'binary_sensor.v250_hc_pump': 'off' }));
+    check(p.primary && !p.primaryOn && !p.hc, `ViCare without buffer: pump off, nothing moves (${JSON.stringify(p)})`);
+    p = await pumps(state('ready', 'on', '48'), { primary_pump: false });
+    check(!p.primary && p.circuit, `primary_pump: false keeps the pump on the circuit (${JSON.stringify(p)})`);
+    p = await pumps(state('ready', 'on', '48'), { entities: { hc_pump: 'binary_sensor.v250_hc_pump' } });
+    check(!p.primary && p.circuit, 'a circuit pump set in the configuration stays a circuit pump');
+    const bufReg = { ...registry, 'sensor.v250_buffer': { platform: 'vicare', translation_key: 'buffer_top_temperature' } };
+    p = await pumps(state('ready', 'on', '48', { 'sensor.v250_buffer': ['35', '°C'] }), {}, bufReg);
+    check(!p.primary && p.circuit, `with a buffer the ViCare circuit pump stays on the circuit (${JSON.stringify(p)})`);
+    p = await pumps(state('ready', 'on', '48'), { hc_count: 2 });
+    check(!p.primary && p.circuit, 'with two circuits the ViCare circuit pump stays on the circuit');
+    const sharedReport = C._diagnosticReport({ preset: 'vicare' }, hassOf(state('ready', 'on', '48'), registry));
+    check(/primary pump: yes, the circuit pump of the preset \(one circuit, no buffer\)/.test(sharedReport), 'the report names the shared pump');
   }
   {
     // #324: runs of the timeline from the compressor; the operating periods inside a run are its phases.
@@ -1406,6 +1433,27 @@
     check(card._powerMode() === '' && /no power sensor for (PV|solar).*battery.*grid/i.test(card.shadowRoot.textContent),
       'the card explains when every automatic Energy-dashboard source lacks a power sensor');
     card.remove();
+  }
+  {
+    // #357: the report lists every Energy-dashboard source with its power sensor, so a source without one (its share becomes the
+    // remainder) and a battery with the opposite sign can be seen.
+    const prefs = { energy_sources: [
+      { type: 'solar', stat_energy_from: 'sensor.pv1_energy', stat_rate: 'sensor.pv1_power' },
+      { type: 'solar', stat_energy_from: 'sensor.pv2_energy' },
+      { type: 'battery', stat_energy_from: 'sensor.bat_out', power_config: { stat_rate: 'sensor.bat_power', stat_rate_inverted: true } },
+      { type: 'grid', stat_energy_from: 'sensor.grid_in', power_config: { stat_rate_from: 'sensor.grid_import', stat_rate_to: 'sensor.grid_export' } },
+    ] };
+    const hass = hassOf(toStates({ 'sensor.hp': ['955', 'W'], 'sensor.pv1_power': ['812', 'W'], 'sensor.bat_power': ['-1924', 'W'],
+      'sensor.grid_import': ['28', 'W'], 'sensor.grid_export': ['0', 'W'] }), {}, prefs);
+    const card = mount({ entities: { power: 'sensor.hp' } }, hass); await wait(20);
+    const report = C._diagnosticReport({ entities: { power: 'sensor.hp' } }, hass);
+    const part = report.split('Power sources (PV, battery, grid):')[1]?.split('Checks:')[0] || '';
+    check(/- solar 1: sensor\.pv1_power = 812 W\n/.test(part) && /- solar 2: no power sensor \(energy sensor\.pv2_energy only\)/.test(part)
+      && /- battery 1: sensor\.bat_power = -1924 W \(inverted in the Energy dashboard\)/.test(part)
+      && /- grid 1: from sensor\.grid_import = 28 W; to sensor\.grid_export = 0 W/.test(part), `report lists the Energy-dashboard power sensors (${part})`);
+    card.remove();
+    const own = C._diagnosticReport({ entities: { power: 'sensor.hp', pv: 'sensor.pv1_power' } }, hass);
+    check(/Power sources \(PV, battery, grid\):\n- from the card configuration/.test(own), 'with own PV, battery or grid sensors the report names the configuration');
   }
   {
     // #210: scaled power units are live power; energy units remain counters and cannot drive a live flow.
@@ -2350,6 +2398,12 @@
     o = await chip('3'); check(o.on && /boost/.test(o.kind) && /SG boost/.test(o.text), `SG state 3 shows raised operation (${JSON.stringify(o)})`);
     o = await chip('4'); check(o.on && /forced/.test(o.kind) && /forced on/.test(o.text), `SG state 4 shows forced operation (${JSON.stringify(o)})`);
     check(!(await chip('on')).on && !(await chip('unknown')).on, 'binary and unknown SG states are not guessed');
+    // OpenEMS / FEMS (#359): the controller status texts and the manual state need no map.
+    o = await chip('recommendation_to_use_more_available_power'); check(o.on && /boost/.test(o.kind), `OpenEMS switch-on recommendation is SG boost (${JSON.stringify(o)})`);
+    o = await chip('force_all_possible_consumption_of_the_heat_pump'); check(o.on && /forced/.test(o.kind), 'OpenEMS switch-on command is SG forced');
+    o = await chip('blocks_everything_till_an_internal_maximum_time_of_default_two_hours'); check(o.on && /blocked/.test(o.kind), 'OpenEMS lock is the utility lock');
+    check(!(await chip('default_energy-efficient_operation')).on, 'OpenEMS normal operation shows no chip');
+    o = await chip('FORCE_ON'); check(o.on && /forced/.test(o.kind), 'OpenEMS manual state FORCE_ON is SG forced');
     o = await chip('on', { sg_ready_map: { on: 'blocked', off: 'normal' } });
     check(o.on && /blocked/.test(o.kind), 'sg_ready_map gives a binary utility-lock entity explicit semantics');
     const cfg = { entities: ids, sg_ready_map: { EVU: 'blocked', Normal: 'normal', Raise: 'boost', Force: 'forced' } };
@@ -3386,6 +3440,9 @@
     check(txt(card, 't-dhw-top') === '49.6 °C' && txt(card, 't-dhw-mode') === 'Target 50 °C', `tank temperature and target from the DHW thermostat (${txt(card, 't-dhw-top')} / ${txt(card, 't-dhw-mode')})`);
     check(txt(card, 't-house-room') === '22.4 / 22.7 °C', `room and target (${txt(card, 't-house-room')})`);
     check(/^33\.2 °C/.test(txt(card, 't-hc')) && /^30\.5 °C/.test(txt(card, 't-hc2')), `circuit flows (${txt(card, 't-hc')} / ${txt(card, 't-hc2')})`);
+    // #361: the risers to circuit 2 run at x 660 and 676; the circuit labels start right of them, in every circuit alike.
+    const left = (id) => card.shadowRoot.getElementById(id).getBBox().x;
+    check(left('t-hc2') > 680 && left('t-hc') === left('t-hc2'), `circuit labels start right of the risers (${left('t-hc')} / ${left('t-hc2')})`);
     check(txt(card, 't-hp-cop') === 'COP 3.7' && txt(card, 't-hp-power') === '1,464 W → 5.5 kW', `live COP from heat output and power (${txt(card, 't-hp-cop')} / ${txt(card, 't-hp-power')})`);
     check(!errOn(card) && !card.shadowRoot.getElementById('chip-program').classList.contains('on'), 'no error and no program chip in auto mode');
     const tank = card.shadowRoot.querySelector('#svg [data-entity="climate.kronoterm_dhw_temperature"]');
