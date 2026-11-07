@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.19.0-beta.2 – 2026-11-07
+- EMS-ESP: the tiles and details use the energy counters with two decimals where they exist (CS5800/6800i, WLW176/186i), so the COP of a day no longer moves in whole-kWh steps (#346). Week, month and year then come from the statistics of these entities.
+- Several heating circuits: the circuit labels start right of the risers, which covered the flow temperature of the lower circuits on phones (#361).
+- ViCare: in a single circuit without a buffer, the circuit pump is drawn as the primary pump in front of the 3-way valve. It runs for heating and hot water, and the circuit stands still while hot water charges (#344). `primary_pump: false` keeps the old drawing.
+- SG-Ready: the states of the OpenEMS / FEMS heat pump controller (integration `ha_openems`) are understood without `sg_ready_map` (#359).
+- Diagnostic report: a section "Power sources" lists each PV, battery and grid source of the Energy dashboard with its power sensor and value, so a source without a power sensor or a battery with the opposite sign can be found (#357).
+- The return from the hot-water tank goes down beside the tank and joins the return under the valve. It crossed the flow and the hot-water flow before, and it went through the boiler box; now it crosses only the heating flow. The valve label moves above the valve, between the hot-water flow and the tank, and a long word is compressed to fit there.
+- EMS-ESP: the hot-water target under the tank is the setpoint the boiler currently works to (`dhw/settemp`), so it follows the comfort mode; before, it showed the selected temperature (`dhw/seltemp`), which stays the fallback. A Bosch Compress in Eco+ showed 48 °C while charging to 50 °C.
+
 ## 0.19.0-beta.1 – 2026-11-06
 - New option `units` for cascades (#173): power and heat are paired per unit. The drawer shows power, heat and COP of each unit, the status line how many units run. The system COP needs the heat of every running unit written within the last 10 minutes; an hourly heat value is shown as "heat not current" instead of being divided by the power of both units. A standing unit adds no heat, and a unit that runs counts as running also when the compressor entity belongs to the other unit. The diagnostic report lists the pairs with the age of each heat value.
 - `room`, `room_humidity` and the room keys of circuits 2 to 6 accept a list of entities and show their mean (#23). Members without a number are left out, °F and K are converted, climate entities count with their current temperature. The diagnostic report lists the members as "average 1", "average 2" ….
