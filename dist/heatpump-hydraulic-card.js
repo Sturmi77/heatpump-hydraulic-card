@@ -578,8 +578,10 @@ const HFC_PRESETS = {
         outdoor: s('boiler_outdoortemp', 'thermostat_outdoortemp', 'boiler_outside_temperature'),
         dhw_top: s('boiler_dhw_curtemp', 'boiler_wwcurtemp', 'boiler_dhw_storagetemp1').concat(hasIntern ? dhwIntern : dhwExtern),
         dhw_bottom: s('boiler_dhw_storagetemp2').concat(hasIntern ? [dhwExtern] : []),
-        dhw_target: s('boiler_dhw_seltemp', 'boiler_wwseltemp').concat(`number.${x}boiler_dhw_seltemp`, `number.${x}boiler_wwseltemp`,
-          `number.${x}boiler_dhw_selected_temperature`),
+        // dhw/settemp is the hot-water setpoint the boiler currently works to and follows the comfort mode (Eco+ on a Compress:
+        // settemp 50 °C, seltemp 48 °C); dhw/seltemp is the selected value and stays the fallback.
+        dhw_target: s('boiler_dhw_settemp', 'boiler_wwsettemp', 'boiler_dhw_seltemp', 'boiler_wwseltemp').concat(`number.${x}boiler_dhw_seltemp`,
+          `number.${x}boiler_wwseltemp`, `number.${x}boiler_dhw_selected_temperature`),
         circulation: circPump !== undefined && circPump !== 'on' ? undefined : b('dhw_circ', 'wwcirc').concat(sw('dhw_circ', 'wwcirc', 'dhw_circulation_active')),
         // The indoor unit's own circuit pump PC1 drives the first circuit (WLW, #224): on/off where reported, else its rate in %.
         hc_pump: [`binary_sensor.${x}mixer_${hc}_pumpstatus`, `sensor.${x}mixer_${hc}_pumpstatus`, `switch.${x}mixer_${hc}_pumpstatus`,
