@@ -1,0 +1,1 @@
+- myPyllant: `power` and the daily energy tiles (electricity and heat for heating and hot water) come from the heat pump, not from the hydraulic station. On an aroTHERM Split the integration may list the station first, and the card showed its few watts as the power of the heat pump (forum, 8 November). The station stays the fallback when no other device reports the value.
