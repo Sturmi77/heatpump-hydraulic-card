@@ -198,7 +198,7 @@ mode_map:
   Defrost: defrost
   Standby: idle
 ```
-Normalized modes: `heating`, `dhw`, `cooling`, `defrost`, `idle`, `blocked`, `frost`, `circulate`, `off` (plus `legionella`, `trailing` for the DHW tank). If your heat pump has a diverter-valve sensor, use `valve` (binary, on = DHW) instead of a DHW mode.
+Normalized modes: `heating`, `dhw`, `cooling`, `defrost`, `idle`, `blocked`, `frost`, `circulate`, `off` (plus `legionella`, `trailing` for the DHW tank). If your heat pump has a diverter-valve sensor, use `valve` (binary, on = DHW) instead of a DHW mode. While water flows, the valve arrow follows its path; at a standstill it shows the position the valve reports, for example on the tank before a charge starts or all summer.
 
 ## Troubleshooting
 

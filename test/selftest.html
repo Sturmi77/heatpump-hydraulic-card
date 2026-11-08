@@ -5175,6 +5175,30 @@
       && C._fit('percent', 'sensor.t', { state: '40', attributes: { unit_of_measurement: '°C' } }).verdict === 'bad', 'mixer keys are checked as a percentage and as on/off');
   }
 
+  // #367: at a standstill the valve arrow shows the position the valve reports; while water flows it follows the path
+  {
+    const ids = { mode: 'sensor.vm', compressor: 'binary_sensor.vc', flow: 'sensor.vf', return: 'sensor.vr', valve: 'sensor.vv', dhw_top: 'sensor.vd' };
+    const st = (mode, comp, valve) => toStates({ 'sensor.vm': mode, 'binary_sensor.vc': comp, 'sensor.vf': ['35', '°C'], 'sensor.vr': ['30', '°C'], 'sensor.vv': valve, 'sensor.vd': ['48', '°C'] });
+    const cfg = { mode_map: { Heating: 'heating', DHW: 'dhw', Standby: 'idle' }, entities: ids };
+    const card = mount(cfg, hassOf(st('Standby', 'off', 'Tank'))); await wait(20);
+    const arrow = () => card.shadowRoot.getElementById('valve-arrow').getAttribute('transform') || 'dhw';
+    const label = () => card.shadowRoot.getElementById('t-valve').textContent;
+    const seen = [];
+    for (const [mode, comp, valve, want] of [['Standby', 'off', 'Tank', 'dhw'], ['Standby', 'off', 'Room', 'heat'], ['Heating', 'on', 'Room', 'heat'], ['DHW', 'on', 'Tank', 'dhw'], ['Heating', 'on', 'Tank', 'dhw']]) {
+      card.hass = hassOf(st(mode, comp, valve)); await wait(10);
+      seen.push(`${mode}/${valve}: ${arrow() === 'dhw' ? 'dhw' : 'heat'}${label() ? ` "${label()}"` : ''}`);
+      if ((arrow() === 'dhw') !== (want === 'dhw')) seen.push('  ^ wrong');
+    }
+    check(!seen.some((s) => s.includes('wrong')) && card._flowModel().toDhw, `#367: the valve arrow follows the reported position at a standstill and the path while running (${seen.join(', ')})`);
+    card.hass = hassOf(st('Standby', 'off', 'Tank')); await wait(10);
+    check(label() === '' && !card._flowModel().loop && !card.shadowRoot.getElementById('f-vl-dhw').classList.contains('on'),
+      '#367: at a standstill on the tank, no water moves and the valve has no label');
+    card.remove();
+    const noValve = mount({ ...cfg, entities: { ...ids, valve: null } }, hassOf(st('Standby', 'off', 'Tank'))); await wait(20);
+    check(noValve.shadowRoot.getElementById('valve-arrow').getAttribute('transform') === 'rotate(180 420 250)', '#367: without a valve entity the arrow rests on heating at a standstill');
+    noValve.remove();
+  }
+
   // #51: a manually configured boiler is a separate heat generator in the common flow before the existing diverter valve
   {
     const ids = { mode: 'sensor.mode', compressor: 'binary_sensor.compressor', power: 'sensor.hp_power', flow: 'sensor.hp_flow', return: 'sensor.hp_return',
