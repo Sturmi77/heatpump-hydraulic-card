@@ -5195,10 +5195,10 @@
     for (const extra of [{}, { primary_pump: true }]) {
       const lc = mount({ ...cfg, ...extra }, hassOf(state(true, false))); lc.style.display = 'block'; lc.style.width = '900px'; await wait(30);
       const box = (sel) => (sel.startsWith('.') ? lc.shadowRoot.querySelector(sel) : lc.shadowRoot.getElementById(sel)).getBBox();
-      const vl = box('t-vl'); const hp = box('hp-box'); const bx = box('.boiler-box');
-      const pre = getComputedStyle(lc.shadowRoot.querySelector('#t-vl .pre')).display;
-      check(vl.x >= hp.x + hp.width && vl.x + vl.width <= bx.x && pre === 'none',
-        `with a boiler the flow label fits between the heat pump and the boiler box${extra.primary_pump ? ', also with a primary pump' : ''} (${Math.round(vl.x)}–${Math.round(vl.x + vl.width)}, box from ${bx.x})`);
+      // The right edge is exact (the label ends at the box); the left edge depends on the font, so it is only bounded loosely.
+      const vl = box('t-vl'); const hp = box('hp-box'); const bx = box('.boiler-box'); const t = lc.shadowRoot.getElementById('t-vl');
+      check(vl.x + vl.width <= bx.x + 0.5 && vl.x > hp.x + hp.width - 20 && !t.querySelector('.pre') && t.textContent === '36.0 °C',
+        `with a boiler the flow label ends in front of the boiler box, without its prefix${extra.primary_pump ? ', also with a primary pump' : ''} (${Math.round(vl.x)}–${Math.round(vl.x + vl.width)}, box from ${bx.x}, "${t.textContent}")`);
       lc.remove();
     }
 

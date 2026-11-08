@@ -3990,6 +3990,8 @@ class HeatpumpFlowCard extends HTMLElement {
     if (el._k === key) return;
     el._k = key; el.textContent = '';
     if (!text) return;
+    // A label that has no room for its prefix (the flow next to a boiler) shows the value alone.
+    if (el.classList.contains('no-pre')) { el.textContent = text; return; }
     const t = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
     t.setAttribute('class', 'pre'); t.textContent = `${pre} `;
     el.append(t, text);
@@ -6832,7 +6834,6 @@ HeatpumpFlowCard.styles = `
   /* With a boiler only 58 units are left between the heat pump and the boiler box: the flow label drops its VL prefix and ends
      in front of the box, so a longer value grows to the left (forum, 8 November). On a narrow card it reaches over the edge of the
      heat pump block, where a halo keeps it readable. */
-  .no-pre .pre { display: none; }
   .no-pre { paint-order: stroke; stroke: var(--card-background-color, #fff); stroke-width: 4px; stroke-linejoin: round; }
   .pipe-label.dew-warning { fill: var(--error-color, #db4437); font-weight: 750; }
   .vol-label { font-size: 13px; fill: var(--hfc-muted); }
