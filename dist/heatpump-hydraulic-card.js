@@ -486,7 +486,10 @@ const HFC_PRESETS = {
         mode: e('energy_manager_state'),
         flow: e('system_flow_temperature'),
         outdoor: e('outdoor_temperature'),
-        power: m(new RegExp(`^sensor\\.${p}_device_\\d+.*_current_power(?:_\\d+)?$`)),
+        // The heat pump's power, not the hydraulic station's (a few W for its electronics and pumps), which myPyllant may list
+        // first on a split unit (forum, 8 November); the station alone stays the fallback.
+        power: m(new RegExp(`^sensor\\.${p}_device_\\d+_(?!hydraulic_station)[^.]*_current_power(?:_\\d+)?$`))
+          || m(new RegExp(`^sensor\\.${p}_device_\\d+.*_current_power(?:_\\d+)?$`)),
         dhw_top: [e(`domestic_hot_water_${i.dhw}_tank_temperature`), e('top_dhw_cylinder_temperature')],
         dhw_bottom: e('bottom_dhw_cylinder_temperature'),
         dhw_target: e(`domestic_hot_water_${i.dhw}_setpoint`),
@@ -506,9 +509,11 @@ const HFC_PRESETS = {
         aux_hours: counters.aux_hours,
       };
     },
-    // Daily energy per device and mode ("Consumed Electrical Energy Heating", "Heat Generated Domestic Hot Water" …).
+    // Daily energy per device and mode ("Consumed Electrical Energy Heating", "Heat Generated Domestic Hot Water" …), of the
+    // heat pump before the hydraulic station, as for `power`.
     tiles: (p, i, ctx) => {
-      const d = (suffix) => ctx.match(new RegExp(`^sensor\\.${p}_device_\\d+.*_${suffix}(?:_\\d+)?$`), 'mypyllant');
+      const d = (suffix) => ctx.match(new RegExp(`^sensor\\.${p}_device_\\d+_(?!hydraulic_station)[^.]*_${suffix}(?:_\\d+)?$`), 'mypyllant')
+        || ctx.match(new RegExp(`^sensor\\.${p}_device_\\d+.*_${suffix}(?:_\\d+)?$`), 'mypyllant');
       const counters = HFC_PRESETS.vaillant.counters(p, ctx);
       return {
         energy_heating: { today: d('consumed_electrical_energy_heating') }, energy_dhw: { today: d('consumed_electrical_energy_domestic_hot_water') },

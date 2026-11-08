@@ -2661,6 +2661,17 @@
       'system water pressure as heating pressure; hours and starts tiles from the heat pump');
     r = resolve({ ...counters, 'sensor.home_device_2_flexotherm_operation_time': ['10', 'h'], 'sensor.home_device_2_flexotherm_current_power': ['1.2', 'kW'] });
     check(r.entities.hours === 'sensor.home_device_2_flexotherm_operation_time', `the device with a power sensor wins (${r.entities.hours})`);
+    // aroTHERM Split (forum, 8 November): myPyllant lists the hydraulic station's power first; power is the heat pump's.
+    const split = { ...counters, 'sensor.home_device_1_hydraulic_station_current_power': ['5', 'W'], 'sensor.home_device_0_arotherm_split_plus_current_power': ['699', 'W'] };
+    r = resolve(split);
+    check(r.entities.power === 'sensor.home_device_0_arotherm_split_plus_current_power', `power is the heat pump's, not the hydraulic station's (${r.entities.power})`);
+    r = resolve({ ...split, 'sensor.home_device_1_hydraulic_station_consumed_electrical_energy_heating': ['0', 'kWh'],
+      'sensor.home_device_0_arotherm_split_plus_consumed_electrical_energy_heating': ['2.6', 'kWh'], 'sensor.home_device_0_arotherm_split_plus_heat_generated_heating': ['9.1', 'kWh'] });
+    check(r.tiles.energy_heating.today === 'sensor.home_device_0_arotherm_split_plus_consumed_electrical_energy_heating'
+      && r.tiles.heat_heating.today === 'sensor.home_device_0_arotherm_split_plus_heat_generated_heating',
+    `the daily energy tiles take the heat pump's counters, not the station's (${r.tiles.energy_heating.today})`);
+    r = resolve({ ...counters, 'sensor.home_device_1_hydraulic_station_current_power': ['5', 'W'] });
+    check(r.entities.power === 'sensor.home_device_1_hydraulic_station_current_power', `with only the station reporting power, it stays the fallback (${r.entities.power})`);
   }
 
   // 14. outdoor unit drawings: style per preset, manufacturer variants, fans and snowflakes, loop symbol for ground sources
