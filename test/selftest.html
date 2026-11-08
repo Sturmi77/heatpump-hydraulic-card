@@ -5190,6 +5190,17 @@
     card.hass = hassOf(state(false, true, 'Tank')); await wait(10);
     check(el('f-vl-dhw').classList.contains('on') && !el('f-vl-buf').classList.contains('on'), 'boiler-only hot water follows the existing diverter valve');
     card.remove();
+    // Forum, 8 November: the flow label stood in the boiler box. Between the heat pump block and the box it drops its prefix and
+    // ends in front of the box, with and without a primary pump.
+    for (const extra of [{}, { primary_pump: true }]) {
+      const lc = mount({ ...cfg, ...extra }, hassOf(state(true, false))); lc.style.display = 'block'; lc.style.width = '900px'; await wait(30);
+      const box = (sel) => (sel.startsWith('.') ? lc.shadowRoot.querySelector(sel) : lc.shadowRoot.getElementById(sel)).getBBox();
+      const vl = box('t-vl'); const hp = box('hp-box'); const bx = box('.boiler-box');
+      const pre = getComputedStyle(lc.shadowRoot.querySelector('#t-vl .pre')).display;
+      check(vl.x >= hp.x + hp.width && vl.x + vl.width <= bx.x && pre === 'none',
+        `with a boiler the flow label fits between the heat pump and the boiler box${extra.primary_pump ? ', also with a primary pump' : ''} (${Math.round(vl.x)}–${Math.round(vl.x + vl.width)}, box from ${bx.x})`);
+      lc.remove();
+    }
 
     const noBoiler = mount({ entities: { flow: ids.flow, return: ids.return } }, hassOf(state(false, false))); await wait(10);
     check(!noBoiler.shadowRoot.getElementById('boiler') && JSON.parse(noBoiler._layoutSignature()).boiler === false, 'without boiler entities the existing geometry is unchanged');
