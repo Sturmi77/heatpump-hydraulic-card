@@ -19,7 +19,7 @@
 | [Field baseline (0.18.x)](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/13) | #298 (lead), #1, #282, #254 | Supported-preset cohort and field confirmations. Daikin is a separate exploratory pilot outside the cohort. |
 | [0.19.0](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/14) | #300 (lead), #290, #23, #173, #289, #4, #365 | Cycle details, circuit spread, complete heat/power pairs on a real cascade, display units and the phone readability trial. Moved ahead on 4 November, see [order](ROADMAP-DRAFT.md). |
 | [0.20.0](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/12) | #299 (lead) | Installation confirmation, chosen from the field baseline. |
-| [Later](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/15) | #12, #27, #31, #36, #82, #101, #114, #195, #224, #248, #250, #252, #253, #255, #256, #260, #261, #267, #276 | Open follow-ups with no release commitment. For analytics, take #27 before #114. |
+| [Later](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/15) | #12, #27, #31, #36, #82, #101, #114, #195, #224, #248, #250, #252, #253, #255, #256, #260, #261, #267, #276, #366 | Open follow-ups with no release commitment. For analytics, take #27 before #114. |
 
 ## Lead issues
 
