@@ -51,13 +51,16 @@ Agreed on 4 November after the mockup of the run details. One pull request per s
 
 ### Open before 0.19.0 final
 
-State on 9 November. The self-test (1973 checks), the coverage, i18n and link checks pass on `main`.
+State on 9 November. The self-test (1973 checks), the coverage, i18n and link checks pass on `main`. Decided: everything below goes into a `0.19.0-beta.3`, then the final after a few quiet days.
 
-1. **Bug from the beta cohort:** [#349](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/349) – EMS-ESP with long entity names: the heat total takes a counter that equals the heater rod's energy on a Nefit EnviLine, so the total COP reads 0.1; the split counters of heat and electricity are missing under their long names. The compressor hours of the same report are fixed since beta.1 (#333).
-2. **One rule for "compressor on":** the timeline segments, the runs and the live view read a compressor state each in their own way (for example `0.00`, or a text such as `standby`), so the timeline can show heating while the live view shows the compressor off.
-3. **Decide #365:** build `run_signal` for the final or move it to 0.20.0.
-4. **Second installation for #300**, or a decision to release with the Lambda and the cascade traces.
-5. Changes since beta.2 (#364, #368, #369, #371) in a third beta or directly in the final; release notes with the Polish translation (#342), which had no changelog line.
+| Item | Pull request |
+| --- | --- |
+| **Bug from the beta cohort** [#349](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/349): EMS-ESP with long entity names; the heat total equals the heater rod's energy on a Nefit EnviLine (total COP 0.1), the split counters are missing under their long names. The compressor hours are fixed since beta.1 (#333). | [#375](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/375) |
+| **One rule for "compressor on"** in the timeline segments, the runs and the live view (`0.00`, `-1`, `standby` …). | [#374](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/374) |
+| **Keyboard:** the arrow keys reach the periods between runs; the first period keeps its selection while the window moves. | [#376](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/376) |
+| **#365 `run_signal`** (opt-in), with one rule for "valve on hot water" in the live view and the timeline. Contains the commit of #374. | [#377](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/377) |
+| **Second installation for #300:** the cascade of #173 with `run_signal: units` on beta.3. | – |
+| Release PR `0.19.0-beta.3` with the changes since beta.2 (#364, #368, #369, #371) and the Polish changelog line (#342). | after the merges |
 
 ## Scope and follow-up by issue
 
@@ -68,7 +71,7 @@ The 0.18 items (#34, #283, #291) are closed; #282 confirmed ViCare with a chargi
 | Issue | Recommendation |
 | --- | --- |
 | [#344 · Vitocal shared pump](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/344), [#359 · OpenEMS SG-Ready](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/359), [#360 · Flow rates on phones](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/360) | Fixed in beta.2 or on `main`; close with the 0.19.0 release once the reporters had a chance to confirm. |
-| [#349 · EMS-ESP long names](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/349) | Fix before the final: no heat total that is smaller than one of its split counters (no wrong total COP), and the long names of the split counters for the tiles. The blank card without `preset` shows the start hint by design (#142); the card picker proposes the preset. |
+| [#349 · EMS-ESP long names](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/349) | Fix in #375: no heat total that is smaller than one of its split counters (no wrong total COP), and the long names of the split counters for the tiles. The blank card without `preset` shows the start hint by design (#142); the card picker proposes the preset. |
 | [#195 · Home Comfort pumps](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/195) | Keep evidence-dependent. Obtain the Home Comfort PC0/PC1 resource keys and compare WP and circuit flow when only PC1 runs. The EMS-ESP mapping in #297 covers a different integration. |
 
 ### Measure setup and simplify the editor
