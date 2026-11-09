@@ -3133,8 +3133,29 @@
     check(c.shadowRoot.querySelectorAll('#tl-bar .tick').length === edgeCount && !q('#tl-bar .seg.sel'),
       `compressor run boundaries are marked on the bar, the run outline replaces the period outline (${edgeCount} edges)`);
     const first = head();
-    q('#tl-bar').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, composed: true, cancelable: true }));
-    check(head() !== first && !!head(), `ArrowRight steps to the next run (${head()})`);
+    const press = (k) => q('#tl-bar').dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, composed: true, cancelable: true }));
+    press('ArrowRight');
+    check((head() || q('#tl-detail').textContent) && head() !== first, `ArrowRight steps to the next run or period (${head() || q('#tl-detail').textContent})`);
+    // The keys reach the runs and, between them, the periods no run covers (standby), in time order.
+    press('Home');
+    const steps = [];
+    for (let n = 0; n < c._tl.runs.length + c._tl.segs.length; n++) {
+      const run = c._tl.runs.find((r) => c._runId(r) === c._tlRun);
+      const seg = c._tl.segs.find((x) => c._segId(x) === c._tlSel);
+      steps.push(run ? { from: run.from, run: true } : { from: seg?.from, kind: seg?.kind });
+      press('ArrowRight');
+    }
+    const order = steps.every((x, n) => Number.isFinite(x.from) && (!n || x.from >= steps[n - 1].from));
+    check(order && steps.some((x) => x.run) && steps.some((x) => x.kind === 'idle'),
+      `arrow keys reach runs and standby periods in time order (${steps.map((x) => (x.run ? 'run' : x.kind)).join(',')}) dbg ${JSON.stringify([c._tlRun, c._tlSel, c._tl.runs.length, c._tl.segs.length, !!q("#tl-bar")])}`);
+    // The first period begins at the window start, which moves with every update: it stays selected (known by its end).
+    press('Home');
+    const firstSel = c._tlSel; const firstStart = c._tl.start;
+    await wait(5); c.shadowRoot.getElementById('timeline')._k = null; c._updateTimeline();
+    check(c._tl.start > firstStart && /^start-/.test(firstSel) && c._tlSel === firstSel && /\d\d:\d\d–\d\d:\d\d/.test(q('#tl-detail').textContent),
+      `the period at the window start stays selected while the window moves (${firstSel}: ${q('#tl-detail').textContent})`);
+    c._tlRun = null; c._tlSel = null; c.shadowRoot.getElementById('timeline')._k = null; c._updateTimeline();
+    c.shadowRoot.querySelector('#timeline .seg.k-heat').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
     q('#tl-bar').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true, cancelable: true }));
     check(!q('#tl-run') && !q('#tl-bar .run-sel'), 'Esc closes the panel');
     c.shadowRoot.querySelector('#timeline .seg.k-heat').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
