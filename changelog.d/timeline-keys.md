@@ -1,0 +1,2 @@
+- Timeline with run details: the arrow keys step through the runs and, in time order between them, the periods no run covers (standby, a utility lock, a gap). Before, they jumped from run to run, so the keyboard could not reach the periods a tap reaches.
+- Timeline: the first period, which begins at the window start, stays selected while the window moves. Before, it lost its selection at the next update, and the arrow keys stayed on it.
