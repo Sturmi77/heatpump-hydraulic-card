@@ -625,16 +625,25 @@ const HFC_PRESETS = {
       cooling: ['nrgcool', 'energy_cooling', 'nrgsuppcooling', 'total_energy_supplied_cooling'],
     },
     // The heat total candidates without those that read less than one of the parts (#349). A total cannot be smaller than a
-    // part; such a counter measures something else, and its COP would be wrong. Without readings of the parts every candidate
-    // stays; with them only existing totals do, so a candidate without an entity cannot stand in for the one that was left out.
+    // part; such a counter measures something else, and its COP would be wrong. The readings are compared in kWh, so a total
+    // shown in MWh next to parts in kWh is not taken for the smaller one. Without part counters every candidate stays. Part
+    // counters that exist but read no number yet (after a restart) map no total: the dynamic check only rebuilds for a mapping
+    // that appears, so a total mapped now could not be dropped once the parts report. With readings only existing totals stay,
+    // so a candidate without an entity cannot stand in for the one that was left out.
     heatTotals: (x, ctx) => {
       const id = (k) => `sensor.${x}boiler_${k}`;
-      const num = (k) => parseFloat(ctx?.state(id(k)));
+      const kwh = (k) => {
+        const v = parseFloat(ctx?.state(id(k)));
+        const u = String(ctx?.unit?.(id(k)) || '').trim().toLowerCase();
+        return u === 'wh' ? v / 1000 : u === 'mwh' ? v * 1000 : v;
+      };
       const totals = ['nrgtotal', 'total_energy', 'nrgsupptotal', 'total_energy_supplied'];
-      const parts = Object.values(HFC_PRESETS.emsesp.heatParts).flat().map(num).filter(Number.isFinite);
-      if (!parts.length) return totals.map(id);
+      const partKeys = Object.values(HFC_PRESETS.emsesp.heatParts).flat().filter((k) => ctx?.state(id(k)) !== undefined);
+      if (!partKeys.length) return totals.map(id);
+      const parts = partKeys.map(kwh).filter(Number.isFinite);
+      if (!parts.length) return [];
       const largest = Math.max(...parts);
-      return totals.filter((k) => ctx.state(id(k)) !== undefined && !(num(k) < largest)).map(id);
+      return totals.filter((k) => ctx.state(id(k)) !== undefined && !(kwh(k) < largest)).map(id);
     },
     // EMS-ESP only reports totals; today, month … come from their long-term statistics.
     tiles: (p, i, ctx) => {
@@ -2664,6 +2673,7 @@ class HeatpumpFlowCard extends HTMLElement {
       // Without a registry entry (YAML entities) the platform cannot be checked; accept the pattern match.
       match: (re, platform) => ids.find((e) => re.test(e) && (!reg[e] || !platform || reg[e].platform === platform) && onDevice(e)),
       state: (id) => states[id]?.state,
+      unit: (id) => states[id]?.attributes?.unit_of_measurement,
     };
   }
 
