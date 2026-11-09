@@ -2310,6 +2310,10 @@ const HFC_RUN_COVER = 0.95;
 // Keys whose list of entities is averaged (#23): room temperature and humidity of each circuit. Power, heat and the power
 // sources add up their lists instead; every other key takes the first entity of a list.
 const hfcMeanKey = (key) => /^(hc[2-6]_)?room(_humidity)?$/.test(key);
+// One rule for "the compressor runs", in the live view, the timeline segments and the runs: an on-word of a binary entity, or a
+// frequency, speed or load above 0. Every other text (off, standby, 0.00, -1 …) is off; unavailable and unknown are handled by the
+// caller (a gap in the timeline, the end of a run).
+const hfcCompressorOn = (s) => ['on', 'true', 'open', 'ein'].includes(String(s ?? '').trim().toLowerCase()) || parseFloat(s) > 0;
 
 const HFC_ENTITY_GROUPS = {
   sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost', 'sg_ready'],
@@ -5439,10 +5443,9 @@ class HeatpumpFlowCard extends HTMLElement {
     // A compressor without recorded history (excluded from the recorder) leaves the phases of the operating mode.
     const list = (ids.cycle || ids.comp) ? hist[ids.cycle || ids.comp] || [] : [];
     if (list.length) {
-      // The same on-states as the segments; a speed or frequency of 0 is off, unavailable ends the run.
-      const on = (s) => !['off', 'unavailable', 'unknown', 'none', ''].includes(String(s).toLowerCase()) && !(parseFloat(s) <= 0);
+      // The same rule as the segments and the live view (hfcCompressorOn); unavailable ends the run.
       list.forEach((e, n) => {
-        if (!on(e.s)) return;
+        if (!hfcCompressorOn(e.s)) return;
         const from = Math.max(e.t, start); const to = Math.min(list[n + 1] ? list[n + 1].t : end, end);
         if (to > from) add(from, to, 'run');
       });
@@ -5604,7 +5607,8 @@ class HeatpumpFlowCard extends HTMLElement {
       const held = (entries) => { let n = -1; return (t) => { while (n + 1 < entries.length && entries[n + 1].t <= t) n++; return entries[n]?.s; }; };
       const mode = held(list(ids.mode)); const comp = held(list(ids.comp)); const valve = held(list(ids.valve));
       const vflow = held(list(ids.vflow)); const vtank = held(list(ids.vtank));
-      const on = (s) => s !== undefined && !['off', 'unavailable', 'unknown', '0', '0.0'].includes(String(s).toLowerCase());
+      // Compressor on: the rule of the live view, so the timeline never shows heating while the heat pump block says off.
+      const on = (s) => s !== undefined && hfcCompressorOn(s);
       const dhw = (s) => s !== undefined && (this._valveMapped(s) ?? ['on', 'tank', 'dhw', 'hot water', 'warmwasser'].includes(String(s).toLowerCase()));
       const times = [...new Set([ids.mode, ids.comp, ids.valve, ids.vflow, ids.vtank].flatMap((id) => list(id).map((e) => e.t)))].sort((a, b) => a - b);
       times.forEach((t) => {
@@ -6253,8 +6257,8 @@ class HeatpumpFlowCard extends HTMLElement {
     const bufMode = this._norm(this._maps.buffer, this._s('buffer_mode'));
     const power = this._w('power');
     const vol = this._lh('volume');
-    // Compressor may be a binary sensor or a numeric one (frequency / speed > 0 means running).
-    const compOn = this._has('compressor') && (this._on('compressor') || this._n('compressor') > 0);
+    // Compressor may be a binary sensor or a numeric one (frequency / speed > 0 means running), the same rule as the timeline.
+    const compOn = this._has('compressor') && hfcCompressorOn(this._s('compressor'));
     // A unit of a cascade that runs (#173) also counts when the compressor entity belongs to the other unit.
     const running = compOn || power > this._threshold || this._runningStates.includes(status) || !!this._units()?.some((u) => u.running)
       // The mode alone decides only without any running signal; the power of cascade units is one (#173).

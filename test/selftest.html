@@ -565,6 +565,23 @@
     card.remove();
   }
   {
+    // One rule for "the compressor runs": the live view, the timeline segments and the runs agree on every state.
+    const M = 60000;
+    const states = ['on', 'off', '1', '0', '0.00', '-1', '42', '12.5 Hz', 'standby', 'Running', 'true', 'false'];
+    const card = mount({ entities: { compressor: 'sensor.c' } }, hassOf(toStates({ 'sensor.c': '0' }))); await wait(20);
+    const live = (s) => { card._hass.states['sensor.c'].state = s; return card._flowModel().running; };
+    const hist = { 'sensor.c': states.map((s, n) => ({ t: n * 10 * M, s })) };
+    const ids = card._timelineIds();
+    const segs = card._timelineSegments(hist, ids, 0, states.length * 10 * M);
+    const segAt = (n) => segs.find((x) => x.from <= n * 10 * M && x.to > n * 10 * M)?.kind;
+    const runs = card._timelineRuns(hist, { cycle: 'sensor.c' }, [], 0, states.length * 10 * M);
+    const runAt = (n) => runs.some((r) => r.from <= n * 10 * M && r.to > n * 10 * M);
+    const rows = states.map((s, n) => `${s}:${live(s) ? 1 : 0}${segAt(n) === 'heat' ? 1 : 0}${runAt(n) ? 1 : 0}`);
+    const expected = 'on:111 off:000 1:111 0:000 0.00:000 -1:000 42:111 12.5 Hz:111 standby:000 Running:000 true:111 false:000';
+    check(rows.join(' ') === expected, `compressor on: live view, timeline and runs follow one rule (${rows.join(' ')})`);
+    card.remove();
+  }
+  {
     // #326: values of a run from the recorder history of its window only.
     const M = 60000; const T0 = Date.parse('2030-01-01T10:00:00Z');
     const at = (min, s) => ({ s: String(s), lu: (T0 + min * M) / 1000 });
