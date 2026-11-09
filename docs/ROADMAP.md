@@ -4,7 +4,9 @@
 
 This plan keeps correctness and supportability ahead of new surface area. Impact is the expected benefit across installations; effort is relative (`S` local, `M` several code paths, `L` public API or data logic, `XL` architecture or a second layout).
 
-## Current status: 0.18.0
+## Current status: 0.18.0, 0.19.0 in beta
+
+Two pre-releases of 0.19.0 are out: [0.19.0-beta.1](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.19.0-beta.1) (6 November) and [0.19.0-beta.2](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.19.0-beta.2) (7 November). They add the run details under the timeline with the values, electricity, heat and COP of a run ([#300](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/300)), cascades with `units` ([#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173)), averages and sums of entity lists ([#23](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/23)), the circuit spread tiles ([#290](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/290)), `flow_rate_unit` ([#289](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/289)), `narrow_focus` for phones ([#4](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/4)) and Polish. What is left for the final is listed in the [issue plan](ISSUE-PLAN.md#open-before-0190-final).
 
 Version 0.18.0 is released (4 November 2026). It delivers the four planned features: a parallel buffer without sensors ([#266](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/266)), SG-Ready and utility lock ([#249](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/249)), room humidity and the dew-point margin for cooling ([#251](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/251)) and the circulation time window ([#34](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/34)). It also brings the ViCare hot-water inference for units without a charging entity ([#196](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/196)), the `espaltherma` preset ([#254](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/254)), ViCare and ebusd confirmed on real installations, and fixes for circuit pumps that report a state text or speed ([#295](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/295)), negative flow rates ([#312](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/312)), several circuits ([#302](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/302)) and the EMS-ESP preset ([#287](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/287), [#224](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/224)). The next step is the field baseline ([ROADMAP-DRAFT.md](ROADMAP-DRAFT.md)).
 
@@ -144,8 +146,8 @@ Combined/layered storage ([#50](https://github.com/Sturmi77/heatpump-hydraulic-c
 ## Deferred or demand-driven
 
 - [#3 History replay](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/3): benefit is unproven and implementation is XL.
-- [#23 Multiple entities per key](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/23): helpers cover the main cases; native sum/average support remains L–XL and is not a milestone priority.
-- [#4 Phone layouts](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/4): the existing responsive and full-screen layouts remain the default; a second portrait geometry is XL and demand-driven.
+- [#23 Multiple entities per key](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/23): sums and room averages ship in 0.19; minimum, maximum and a multi-entity picker remain demand-driven.
+- [#4 Phone layouts](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/4): `narrow_focus` ships in 0.19; a second portrait geometry is XL and demand-driven.
 - Remaining brand drawings in [#5](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/5): one brand per issue when original references are available.
 - [#36 wood-stove topology](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/36): phase 2 of the [storage topology plan](TOPOLOGY.md).
 - [#15 Video promotion](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/15): operational work after a stable patch release and HACS default listing.
