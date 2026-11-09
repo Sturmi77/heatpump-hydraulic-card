@@ -6361,7 +6361,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const i = this._i;
     const P = this._parts;
     const F = this._flowModel();
-    const { rawMode, status, hp, dhwMode, bufMode, power, vol, running, boilerRunning, generatorMode, defrost, cooling, toDhw, toHeat, loop, flowLoop, bypass } = F;
+    const { rawMode, status, hp, dhwMode, bufMode, power, vol, running, boilerRunning, generatorMode, defrost, cooling, valveDhw, toDhw, toHeat, loop, flowLoop, bypass } = F;
     const tFlow = this._n('flow'); const tRet = this._n('return');
     const tBoiler = this._n('boiler_flow');
     const tCommonFlow = boilerRunning && Number.isFinite(tBoiler) ? tBoiler : tFlow;
@@ -6588,7 +6588,9 @@ class HeatpumpFlowCard extends HTMLElement {
     // valve + tanks
     if (P.dhw) {
       const arrow = this._$('valve-arrow');
-      if (arrow) arrow.setAttribute('transform', toDhw ? '' : 'rotate(180 420 250)');
+      // While water flows the arrow follows its path. At a standstill it shows the position the valve reports: many units turn
+      // it to the tank before the compressor starts, or leave it there in summer (#367). Without a valve entity it rests on heating.
+      if (arrow) arrow.setAttribute('transform', toDhw || (!loop && valveDhw) ? '' : 'rotate(180 420 250)');
       const valveText = loop ? (toDhw ? i.valve_dhw : (cooling ? i.valve_cooling : i.valve_heating)) : '';
       this._txt('t-valve', valveText);
       // The valve label stands between the hot-water flow and the tank (x 432 to 520): a longer word is compressed to fit.
