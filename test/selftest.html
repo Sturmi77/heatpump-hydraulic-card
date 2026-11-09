@@ -645,6 +645,26 @@
     const report = (c) => C._diagnosticReport(c, hassOf(toStates(live)));
     check(report(cfg()).includes('Runs from: unit power above 50 W (run_signal: units)') && report(cfg({ units: undefined })).includes('run_signal: units, but no units are configured')
       && report({ entities: { power: 'sensor.p1' } }).includes('Runs from: compressor or operating mode'), 'the diagnostic report names the run source');
+    // Review of #377: a valve that reports 1 is on hot water in the timeline as it is live; a lock stays a lock above the
+    // threshold; `power` adds the members that report a number; the PV-share query gets flat entity ids.
+    const pcfg = (extra = {}) => cfg({ run_signal: 'power', units: undefined, power_threshold: 100,
+      entities: { mode: 'sensor.m', valve: 'binary_sensor.v', power: ['sensor.p1', 'sensor.p3'], pv_boost: 'binary_sensor.pv' }, ...extra });
+    const queries = [];
+    const ph = { ...hassOf(toStates({ ...live, 'sensor.p3': ['0', 'W'], 'binary_sensor.pv': 'off' })), callWS: (q) => { queries.push(q); return Promise.resolve({}); } };
+    card = mount(pcfg(), ph); await wait(20);
+    ids = card._timelineIds();
+    const one = { ...hist, 'binary_sensor.v': h([[0, '0'], [391, '1'], [415.5, '0'], [429, '1'], [449.5, '0']]) };
+    runs = card._timelineRuns(one, ids, segsOf(card, one, ids), 0, 600 * M);
+    check(fmt(runs) === 'heat:60-205 dhw:391-412 dhw:429-446', `run_signal power: a valve reporting 1 is hot water, a member without history leaves the sum of the others (${fmt(runs)})`);
+    card._pvShare('today');
+    const pvq = queries.find((q) => q.type === 'history/history_during_period');
+    check(!!pvq && pvq.entity_ids.every((id) => typeof id === 'string') && pvq.entity_ids.includes('sensor.p1'), `run_signal: the PV-share query has flat entity ids (${JSON.stringify(pvq?.entity_ids)})`);
+    card.remove();
+    card = mount(pcfg({ mode_map: { lock: 'blocked', standby: 'idle' } }), hassOf(toStates({ ...live, 'sensor.m': 'lock', 'sensor.p1': ['200', 'W'], 'sensor.p3': ['0', 'W'], 'binary_sensor.pv': 'off' })));
+    await wait(20);
+    m = card._flowModel();
+    check(m.hp === 'blocked', `run_signal power: a utility lock stays a lock while the power is above the threshold (${m.hp})`);
+    card.remove();
     let err = null;
     try { document.createElement('heatpump-flow-card').setConfig({ run_signal: 'fast' }); } catch (e) { err = e; }
     check(/run_signal must be one of: auto, units, power/.test(err?.message || ''), `run_signal: an unknown value is rejected (${err?.message})`);
@@ -2558,7 +2578,7 @@
       const kinds = [...card.shadowRoot.querySelectorAll('#timeline .seg')].map((x) => [...x.classList].find((k) => k.startsWith('k-'))); card.remove(); return kinds.join();
     };
     const plain = await hist({})(); const mapped = await hist(map)();
-    check(plain === 'k-heat' || plain === 'k-heat,k-heat', `timeline without a map: only "on" and Tank count as hot water (${plain})`);
+    check(plain === 'k-dhw,k-heat', `timeline without a map: 1 means hot water as in the live view, then 0 heating (${plain})`);
     check(mapped === 'k-heat,k-dhw', `timeline with valve_map: 1 = heating for 12 h, then 0 = hot water (${mapped})`);
   }
 

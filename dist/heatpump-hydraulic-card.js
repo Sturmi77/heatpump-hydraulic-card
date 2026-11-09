@@ -5445,6 +5445,14 @@ class HeatpumpFlowCard extends HTMLElement {
     return base ? { ...base, ...cycle, ...overlays } : null;
   }
 
+  // A valve state that means hot water: `valve_map` first, else an on-state (on, true, open, 1, ein) or a text such as Tank or
+  // DHW. The live view and the timeline use the same rule.
+  _valveDhwState(s) {
+    if (s === undefined || s === null) return false;
+    const v = String(s).trim().toLowerCase();
+    return this._valveMapped(s) ?? (['on', 'true', 'open', '1', 'ein'].includes(v) || ['tank', 'tank (dhw)', 'dhw', 'hot water', 'hot_water', 'warmwasser'].includes(v));
+  }
+
   // `run_signal` (#365): 'units' or 'power' when its source is configured, else null (the compressor and the mode decide).
   _runSignal() {
     const v = this._config?.run_signal;
@@ -5484,7 +5492,13 @@ class HeatpumpFlowCard extends HTMLElement {
       const times = [...new Set(members.flatMap((id) => series[id].map((p) => p.t)))].sort((a, b) => a - b);
       const points = [];
       times.forEach((t) => {
-        const sums = groups.map((g) => g.map((id) => value(id, t)).reduce((a, b) => a + b, 0));
+        // A unit counts only with every member of its list, as in _units(); `power` adds the members that report a number, as _w() does.
+        const sums = groups.map((g) => {
+          const vs = g.map((id) => value(id, t));
+          if (signal === 'units') return vs.reduce((a, b) => a + b, 0);
+          const ok = vs.filter(Number.isFinite);
+          return ok.length ? ok.reduce((a, b) => a + b, 0) : NaN;
+        });
         const state = sums.some((w) => w > limit) ? 'on' : sums.every((w) => !Number.isFinite(w)) || (signal === 'power' && !Number.isFinite(sums[0])) ? 'unavailable' : 'off';
         if (points[points.length - 1]?.s !== state) points.push({ t, s: state });
       });
@@ -5630,7 +5644,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const ids = this._timelineIds(); const range = this._periodRange(period);
     if (!ids?.pv || !range) return NaN;
     const shareIds = { ...ids, sg: null };
-    const idList = Object.values(shareIds).filter(Boolean);
+    const idList = [...new Set(Object.values(shareIds).flat().filter(Boolean))];
     const hist = this._wsCached(`pvshare|${idList.join(',')}|${period}`, {
       type: 'history/history_during_period', start_time: range[0], ...(range[1] ? { end_time: range[1] } : {}), entity_ids: idList,
       minimal_response: true, ...(!this._timelineNeedsAttributes(shareIds) ? { no_attributes: true } : {}), significant_changes_only: false,
@@ -5678,7 +5692,7 @@ class HeatpumpFlowCard extends HTMLElement {
     };
     const points = [];
     const signal = this._runSignalSeries(hist, ids);
-    const dhwOf = (s) => s !== undefined && (this._valveMapped(s) ?? ['on', 'tank', 'dhw', 'hot water', 'warmwasser'].includes(String(s).toLowerCase()));
+    const dhwOf = (s) => this._valveDhwState(s);
     if (signal.length) {
       // run_signal (#365): running from the power signal, hot water while the valve is on hot water, else heating. The mode
       // decides only cooling and a lock (and the kind where no valve exists); defrost comes from the defrost entity only.
@@ -5710,7 +5724,7 @@ class HeatpumpFlowCard extends HTMLElement {
       const vflow = held(list(ids.vflow)); const vtank = held(list(ids.vtank));
       // Compressor on: the rule of the live view, so the timeline never shows heating while the heat pump block says off.
       const on = (s) => s !== undefined && hfcCompressorOn(s);
-      const dhw = (s) => s !== undefined && (this._valveMapped(s) ?? ['on', 'tank', 'dhw', 'hot water', 'warmwasser'].includes(String(s).toLowerCase()));
+      const dhw = (s) => this._valveDhwState(s);
       const times = [...new Set([ids.mode, ids.comp, ids.valve, ids.vflow, ids.vtank].flatMap((id) => list(id).map((e) => e.t)))].sort((a, b) => a - b);
       times.forEach((t) => {
         const ms = mode(t); const cs = comp(t); const vs = valve(t); const fl = parseFloat(vflow(t)); const tk = parseFloat(vtank(t));
@@ -6376,13 +6390,13 @@ class HeatpumpFlowCard extends HTMLElement {
     // Valve: binary (on = DHW) or a state such as "Tank" / "DHW".
     // A `valve_map` (raw state → dhw | heating) decides first, for valves that report 1 for heating or other texts.
     const valveMapped = this._has('valve') ? this._valveMapped(this._s('valve')) : undefined;
-    const valveDhw = this._has('valve') ? (valveMapped ?? (this._on('valve') || ['tank', 'tank (dhw)', 'dhw', 'hot water', 'hot_water', 'warmwasser'].includes(String(this._s('valve')).toLowerCase())))
+    const valveDhw = this._has('valve') ? (valveMapped ?? this._valveDhwState(this._s('valve')))
       : this._valveByFlow() && running && this._n('flow') > this._n('dhw_top');
     // Integrations without an operating-mode entity: a running compressor means heating unless the valve says DHW.
     // Defrost wins over a stopped compressor: it pauses for about a minute while the 4-way valve switches (HeishaMon).
     // run_signal (#365): the mode decides only cooling and a lock; the valve decides hot water while the heat pump runs.
     if (signal) {
-      hp = defrost && running ? 'defrost' : !running ? (['blocked', 'off'].includes(hp) ? hp : 'idle')
+      hp = hp === 'blocked' ? 'blocked' : defrost && running ? 'defrost' : !running ? (hp === 'off' ? 'off' : 'idle')
         : hp === 'cooling' ? 'cooling' : this._has('valve') ? (valveDhw ? 'dhw' : 'heating') : (['heating', 'dhw', 'cooling'].includes(hp) ? hp : 'heating');
     } else if (!this._has('mode')) hp = defrost ? 'defrost' : !running ? 'idle' : (valveDhw ? 'dhw' : 'heating');
     // A defrost entity wins over an operating mode that keeps reporting heating while the unit defrosts (e.g. Kronoterm).
