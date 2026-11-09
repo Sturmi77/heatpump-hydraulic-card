@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | Released 4 November | 0.18.0 · Hydraulic correctness | Follow the active water path on the reported reference installations. |
 | 1 | Field baseline on 0.18.x | Tell how often a fresh preset produces the correct schematic, how long it takes, and where people need help. |
-| 2 | 0.19.0 · Understand a cycle | Select a heating or hot-water cycle and see its duration and the measurements that explain it. |
+| 2 · beta since 6 November | 0.19.0 · Understand a cycle | Select a heating or hot-water cycle and see its duration and the measurements that explain it. |
 | 3 | 0.20.0 · Confirm the installation | Resolve an ambiguous layout in the editor by answering a short question and seeing the result. |
 
 The field baseline is a research milestone and can start as soon as the trial protocol is ready. Use one recorded card version per cohort. The 0.18 release can ship fixes independently of tester recruitment. Each of the three product milestones has a lead issue and an acceptance criterion.
@@ -68,6 +68,6 @@ The field baseline is a research milestone and can start as soon as the trial pr
 
 ## Decisions for the existing backlog
 
-The three lead issues track [field measurement](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/298), [installation confirmation](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/299) and [cycle details](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/300). Take hydraulic regressions as they arise. Daikin/ESPAltherma is the first additional preset pilot: the `espaltherma` preset is built from the source and one installation's entity list and waits for a field confirmation. Progress other preset mappings when a tester and a reproducible mapping exist. Try mobile readability within the editor and cycle work before committing to another full schematic layout.
+The three lead issues track [field measurement](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/298), [installation confirmation](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/299) and [cycle details](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/300). Take hydraulic regressions as they arise. Daikin/ESPAltherma is the first additional preset pilot: the `espaltherma` preset is built from the source and one installation's entity list and is confirmed for heating and hot water on that installation since 0.19.0-beta.1. Progress other preset mappings when a tester and a reproducible mapping exist. Try mobile readability within the editor and cycle work before committing to another full schematic layout.
 
 The 0.19 tracker holds the cycle details with the circuit spread and the measurement rules for aggregation, tested on the real cascade; the flow-rate unit and the phone layout come along because they do not depend on the field test. The 0.20 tracker holds installation confirmation. In Later, the seasonal brine minimum is the first analytics follow-up, ahead of the DHW energy balance. [0.19 milestone](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/14) · [Issue plan](ISSUE-PLAN.md)
