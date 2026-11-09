@@ -2018,6 +2018,10 @@ const HFC_CONTROL_DOMAINS = ['switch', 'input_boolean', 'light', 'fan', 'automat
 // Heater rods of the tanks: the plain key keeps its place between the middle and the bottom sensor, a key with a position stands at
 // that height (a large tank can have a rod at the top, in the middle and at the bottom).
 const HFC_TANK_HEATERS = ['dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom'];
+// Right-wall port heights are shared by pipe routing, the coil and the heater mounts.
+const HFC_SOLAR_PORTS = { flow: 150, return: 166 };
+const HFC_STATION_PORTS = { flow: 206, return: 226 };
+const HFC_CIRCUIT_PITCH = 250;
 // What an entity key expects (#192). The plausibility checks, the entity picker of the editor (#194) and the unit in the field labels
 // follow this table. units: accepted units (lower case); device_class and domains: positive evidence for the picker; domains also
 // limit what the checks accept; numeric: the state is a number; extra: further units an on/off key accepts (power, speed).
@@ -3551,7 +3555,7 @@ class HeatpumpFlowCard extends HTMLElement {
   }
 
   /* ---------- render ---------- */
-  _emitter(type, title) {
+  _emitter(type) {
     if (type === 'column') {
       // Traditional column radiator: rounded joined sections, flow at the top and return at the bottom.
       const columns = Array.from({ length: 7 }, (_, n) => `<g transform="translate(${832 + n * 17} 0)"><rect class="column-rib" x="0" y="350" width="13" height="120" rx="6" style="fill:url(#g-rad__S__)"/><circle class="column-cap" cx="6.5" cy="356" r="6"/><circle class="column-cap" cx="6.5" cy="464" r="6"/></g>`).join('');
@@ -3559,7 +3563,6 @@ class HeatpumpFlowCard extends HTMLElement {
         vl: 'M640 360 H826',
         body: 'M826 360 H944 M944 460 H826',
         rl: 'M826 460 H805 Q785 460 785 478 Q785 495 765 495 H640',
-        title: `<text class="tank-title" x="888" y="296" text-anchor="middle">${title}</text>`,
         art: `<path class="column-link" d="M832 372 H947 M832 448 H947"/>${columns}<path class="column-foot" d="M846 470v8 M934 470v8"/>
           <g class="waves" id="waves__S__">${[854, 888, 922].map((x) => `<path class="wave" d="M${x} 338 q7 -7 0 -14 q-7 -7 0 -14"/>`).join('')}</g>`,
       };
@@ -3571,7 +3574,6 @@ class HeatpumpFlowCard extends HTMLElement {
         vl: 'M640 360 H826',
         body: 'M826 365 H940 M940 455 H826',
         rl: 'M826 455 H805 Q785 455 785 475 Q785 495 765 495 H640',
-        title: `<text class="tank-title" x="888" y="296" text-anchor="middle">${title}</text>`,
         art: `<rect class="radiator" x="826" y="345" width="126" height="130" rx="10"/>${ribs}
           <g class="waves" id="waves__S__">${[855, 888, 921].map((x) => `<path class="wave" d="M${x} 336 q7 -7 0 -14 q-7 -7 0 -14"/>`).join('')}</g>`,
       };
@@ -3580,7 +3582,6 @@ class HeatpumpFlowCard extends HTMLElement {
       vl: 'M640 360 H800',
       body: 'M800 360 H935 Q955 360 955 380 Q955 400 935 400 H825 Q805 400 805 420 Q805 440 825 440 H935 Q955 440 955 460 Q955 480 935 480 H800',
       rl: 'M800 480 Q785 480 785 490 Q785 495 775 495 H640',
-      title: `<text class="tank-title" x="880" y="320" text-anchor="middle">${title}</text>`,
       art: '<rect class="screed" x="795" y="490" width="170" height="10" rx="3"/>',
     };
   }
@@ -3616,7 +3617,7 @@ class HeatpumpFlowCard extends HTMLElement {
       .filter((s) => shown.includes(s[4]));
     const showHc = P.hc || this._hcCount > 1;
     const U = this._sourceType === 'air' ? this._unitArt() : null;
-    const H = 560 + (showHc ? (this._hcCount - 1) * 250 : 0);
+    const H = 560 + (showHc ? (this._hcCount - 1) * HFC_CIRCUIT_PITCH : 0);
     const equalBuffer = this._config.buffer_values === 'equal';
     const bufferKeys = ['buffer_top', 'buffer_middle', 'buffer_bottom'].filter((key) => this._has(key));
     const bufferY = equalBuffer && bufferKeys.length
@@ -3680,8 +3681,8 @@ class HeatpumpFlowCard extends HTMLElement {
             <circle class="pump" cx="${P.boiler ? 316 : 340}" cy="250" r="16"/>
             <g class="impeller" id="impeller-primary" style="transform-origin:${P.boiler ? 316 : 340}px 250px"><path d="M${P.boiler ? 316 : 340} 238 L${P.boiler ? 322 : 346} 250 L${P.boiler ? 310 : 334} 250Z M${P.boiler ? 316 : 340} 262 L${P.boiler ? 310 : 334} 250 L${P.boiler ? 322 : 346} 250Z" class="imp"/></g>
           </g>` : ''}
-          <g class="tap" ${de('flow')}><text class="pipe-label" id="t-vl" x="${P.boiler ? 316 : (this._primaryPump() ? 340 : 338)}" y="${this._primaryPump() ? 226 : 236}" text-anchor="middle"></text></g>
-          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${P.boiler ? 316 : (this._primaryPump() ? 340 : 346)}" y="${this._primaryPump() ? 284 : 275}" text-anchor="middle"></text></g>
+          <g class="tap" ${de('flow')}><text class="pipe-label" id="t-vl" x="${P.boiler ? 316 : (this._primaryPump() ? 340 : 338)}" y="${P.boiler ? 184 : this._primaryPump() ? 226 : 236}" text-anchor="middle"></text></g>
+          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${P.boiler ? 336 : (this._primaryPump() ? 340 : 346)}" y="${P.boiler ? 324 : this._primaryPump() ? 284 : 275}" text-anchor="middle"></text></g>
           <g class="tap" ${de('return')}><text class="pipe-label" id="t-rl" x="335" y="406" text-anchor="middle"></text></g>
 
           <g class="tap" ${de('mode')}>
@@ -3725,7 +3726,7 @@ class HeatpumpFlowCard extends HTMLElement {
               <rect class="tank" x="520" y="40" width="120" height="200" rx="26" fill="url(#g-dhw)"/>`}
               ${P.dhwType === 'coil' ? '<path class="coil" id="coil" d="M520 80 H600 L540 100 H600 L540 120 H600 L540 140 H600 L540 160 H600 L540 180 H600 L540 200 H520"/>' : ''}
               ${P.dhwType === 'tank_in_tank' ? '<rect class="inner-tank" id="inner-tank" x="540" y="72" width="80" height="188" rx="18"/>' : ''}
-              ${P.dhwType === 'fresh_water' ? `${pipePair('fws-a', 'M640 206 H654')}${pipePair('fws-b', 'M640 226 H654')}${this._stationArt(652, 196, 56, 40)}` : ''}
+              ${P.dhwType === 'fresh_water' ? `${pipePair('fws-a', `M640 ${HFC_STATION_PORTS.flow} H654`)}${pipePair('fws-b', `M640 ${HFC_STATION_PORTS.return} H654`)}${this._stationArt(652, HFC_STATION_PORTS.flow - 10, 56, HFC_STATION_PORTS.return - HFC_STATION_PORTS.flow + 20)}` : ''}
               <text class="tank-temp" id="t-dhw-top" x="580" y="112" text-anchor="middle"></text>
               <text class="small${P.combined ? ' on-tank' : ''}" id="t-dhw-mode" x="580" y="262" text-anchor="middle"></text>
             </g>
@@ -4360,13 +4361,13 @@ class HeatpumpFlowCard extends HTMLElement {
   _circuitSvg(n) {
     const i = this._i; const e = this._e;
     const s = n === 1 ? '' : String(n);
-    const dy = (n - 1) * 250;
+    const dy = (n - 1) * HFC_CIRCUIT_PITCH;
     const k = (key) => this._hk(n, key);
     const entity = (key) => e[key] || (n === 1 && !this._parts.buffer && key === k('flow') ? e.flow : '');
     const de = (key) => (entity(key) ? `data-entity="${this._esc(entity(key))}"` : '');
     const name = this._config[n === 1 ? 'hc_name' : `hc${n}_name`];
     const title = this._esc(name || (this._hcCount > 1 ? `${i.heating_circuit} ${n}` : i.heating_circuit));
-    const em = this._emitter(this._hcTypes[n - 1], title);
+    const em = this._emitter(this._hcTypes[n - 1]);
     let { vl, rl } = em;
     if (n > 1) { vl = vl.replace('M640 ', 'M660 '); rl = rl.replace(/H640$/, 'H676'); }
     const pp = (id, d) => `<path class="pipe" id="p-${id}" d="${d}"/><path class="flow" id="f-${id}" d="${d}"/>`;
@@ -4395,7 +4396,7 @@ class HeatpumpFlowCard extends HTMLElement {
       <g class="tap" ${de(e[k('pump')] ? k('pump') : k('mode'))}>
         ${this._circuitPump(n) ? `<circle class="pump" cx="720" cy="360" r="16"/>
         <g class="impeller" id="impeller${s}"><path d="M720 348 L726 360 L714 360Z M720 372 L714 360 L726 360Z" class="imp"/></g>` : ''}
-        ${em.title}
+        <text class="tank-title" x="880" y="302" text-anchor="middle">${title}</text>
         <text class="small" id="t-hc-mode${s}" x="880" y="524" text-anchor="middle"></text>
       </g>
     </g>`;
@@ -5117,7 +5118,14 @@ class HeatpumpFlowCard extends HTMLElement {
   // station, buffer return).
   _tankHeaters(tank, P = {}) {
     const dhw = tank === 'dhw';
-    const y = dhw ? { '': 186, top: 74, middle: P.solar ? 184 : 162, bottom: P.dhwType === 'fresh_water' ? 244 : 218 } : { '': 455, top: 340, middle: 442, bottom: 476 };
+    const y = dhw
+      ? { '': 186, top: 74, middle: P.solar ? HFC_SOLAR_PORTS.return + 18 : 162,
+          bottom: P.dhwType === 'fresh_water' ? HFC_STATION_PORTS.return + 18 : 218 }
+      : { '': 455, top: 340, middle: 442, bottom: 476 };
+    // Named heights and pipe ports take priority on the wall. Leave enough room
+    // for the 18-unit flange and the heat waves above an active neighbouring rod.
+    const occupied = ['top', 'middle', 'bottom'].filter((pos) => this._has(`${tank}_heater_${pos}`));
+    if (occupied.some((pos) => Math.abs(y[pos] - y['']) < 34)) y[''] = dhw ? 128 : 410;
     return Object.entries(y).map(([pos, h]) => [`${tank}_heater${pos ? `_${pos}` : ''}`, `${dhw ? 'dhw' : 'buf'}${pos ? `-${pos}` : ''}`, h, pos ? 612 : dhw ? 604 : 578]);
   }
 
@@ -5140,8 +5148,8 @@ class HeatpumpFlowCard extends HTMLElement {
   // Solar thermal loop into the right side of the DHW tank. Drawn before the tank, so the tank covers the pipe ends; at the
   // collector both pipes run along its axis into the lower end, where the opaque panel covers them.
   _solarPipes() {
-    const flow = 'M724.3 101.9 L704.9 116.1 Q690 126.9 690 134 Q690 150 674 150 H640';
-    const back = 'M640 166 H700 Q712 166 712 154 V136 Q712 125.7 718.4 121.1 L731.4 111.7';
+    const flow = `M724.3 101.9 L704.9 116.1 Q690 126.9 690 134 Q690 ${HFC_SOLAR_PORTS.flow} 674 ${HFC_SOLAR_PORTS.flow} H640`;
+    const back = `M640 ${HFC_SOLAR_PORTS.return} H700 Q712 ${HFC_SOLAR_PORTS.return} 712 154 V136 Q712 125.7 718.4 121.1 L731.4 111.7`;
     const pp = (id, d) => `<path class="pipe" id="p-${id}" d="${d}"/><path class="flow" id="f-${id}" d="${d}"/>`;
     return `${pp('sol', flow)}${pp('sol-rl', back)}`;
   }
@@ -5149,7 +5157,8 @@ class HeatpumpFlowCard extends HTMLElement {
   // Solar thermal collector on the roof edge of the house, with the coil of its loop in the DHW tank.
   _solarSvg() {
     const entity = this._e.solar_collector || this._e.solar_pump;
-    return `<path class="coil" id="coil-sol" d="M640 150 H612 Q602 150 602 158 Q602 166 612 166 H640"/>
+    const { flow, return: back } = HFC_SOLAR_PORTS;
+    return `<path class="coil" id="coil-sol" d="M640 ${flow} H612 Q602 ${flow} 602 ${(flow + back) / 2} Q602 ${back} 612 ${back} H640"/>
       <g class="tap solar" id="solar" data-entity="${this._esc(entity)}">
         <g transform="translate(728 124) rotate(-36)"><rect class="collector-base" x="0" y="-28" width="84" height="26" rx="3"/>
           <rect class="collector" x="0" y="-28" width="84" height="26" rx="3"/>
@@ -5585,6 +5594,13 @@ class HeatpumpFlowCard extends HTMLElement {
             this._txt(`t-hc${s}`, `${i.dew_point} ${this._t(dew)}`);
           } else this._hcTarget(n, set, this._n(k('curve_offset')), this._unit(k('curve_offset')));
         } else {
+          const label = this._$(`t-hc${s}`);
+          // The longer cooling readout uses the row between the storage and the
+          // emitter heading. Keep its left edge clear of the storage column.
+          if (label && P.buffer) {
+            label.setAttribute('x', dewKnown ? 648 : 740);
+            label.setAttribute('text-anchor', dewKnown ? 'start' : 'middle');
+          }
           this._txt(`t-hc${s}`, dewKnown ? `${i.flow_short} ${this._t(dewFlow)} · ${i.dew_point} ${this._t(dew)}`
             : showFlow ? `${this._t(tHc)}${Number.isFinite(set) ? ` · ${i.target} ${this._fmt(set)}` : ''}` : '');
         }
@@ -6165,6 +6181,12 @@ HeatpumpFlowCard.styles = `
   .stage { container-type: inline-size; }
   @container (max-width: 640px) { #svg { --k: 1.2; --ku: 1.1; --kp: 1; --k2: 1; --ks: 1.2; --kt: 1.15; } }
   @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .vol-label, .tank-sub, .pre, #t-valve, #t-circ, #t-dhw-mode { display: none; } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values #t-dhw-middle, .narrow-values #t-dhw-bottom, .narrow-values #t-dhw-mode, .narrow-values [id^="t-hc-rl"] { display: block; font-size: calc(13px * var(--k2, 1)); } }
+  @container (max-width: 500px) {
+    .src-val { transform: translateY(7px); }
+    .unit-val { font-size: 15px; }
+    .unit-val.strong { font-size: 18px; }
+    .house-row-value { font-size: 13px; }
+  }
   /* layout: compact – tighter spacing for narrow dashboard columns */
   ha-card.layout-compact { padding: 6px 6px 4px; }
   .layout-compact .head { margin: 0 2px 2px; }

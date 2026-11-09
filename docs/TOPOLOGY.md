@@ -15,6 +15,18 @@ It answers five questions: how the schematic should grow (fixed slots or an inte
 
 ## Current geometry and coupling
 
+### Collision checks
+
+Each column owns the space for the parts it draws. The distribution column places the emitter heading in a common row above the flow reading for every emitter type. That row also needs clearance from the preceding circuit's status. The generator column moves the primary flow and volume readings above and below the appliances when a boiler occupies the space next to the pump.
+
+The storage wall has fixed hydraulic ports and named heater heights. The unpositioned heater uses its usual height while there is clearance, then takes a free height between sensor rows. Placement depends on the installed parts, so switching a heater on leaves its tap target in place.
+
+When extending a column, identify which parts compete for the same space. Include the mounted hardware, the visible value and the pipe cap at a port. Record deliberate containment, such as the boiler's power value inside its body. Exercise the local combinations together, including the operating state that populates each label. In the browser, `test/drawing-collisions.js` measures the rendered geometry in SVG coordinates after layout and reports the offending elements. The storage matrix checks every subset of the four heater keys against the supported hot-water preparations and solar options. The wider topology matrix covers the other storage strategies and circuit counts.
+
+These checks cover label bounds, selected appliance bodies, heater flanges and pipe endpoints. The hydraulic continuity checks cover connections. Decorative artwork and arbitrary pipe crossings still require visual review.
+
+### Schematic dimensions
+
 The SVG is 1000 units wide; height grows by 250 per extra heating circuit.
 
 | Area | Position | Notes |

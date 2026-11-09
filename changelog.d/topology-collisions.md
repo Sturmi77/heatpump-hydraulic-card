@@ -1,0 +1,1 @@
+- Keep heater rods clear of each other on crowded storage walls and separate circuit headings, cooling readings and hybrid boiler labels. Browser tests now check visible label and mounting conflicts across operating states before accepting a new drawing snapshot.
