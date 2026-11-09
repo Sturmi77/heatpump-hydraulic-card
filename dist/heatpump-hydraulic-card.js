@@ -2543,6 +2543,9 @@ const HFC_LOSS = { hours: 48, minWindow: 3, settle: 0.5, drawOff: 1.5, rise: 1.0
 // Runs of the timeline (#300): a pause shorter than seriesGap minutes continues a series of runs, so short cycling shows as
 // "3rd run since 21:00"; a longer standstill starts a new series.
 const HFC_RUNS = { seriesGap: 60 };
+// Runs from fast signals (`run_signal`, #365): a unit of a cascade runs above `unitW`; a dip below the threshold shorter than
+// `dip` minutes does not end a run, and a stretch above it shorter than `min` minutes is no run (a short spike without the compressor).
+const HFC_RUN_SIGNAL = { values: ['auto', 'units', 'power'], unitW: 50, dip: 2, min: 1 };
 
 /* ------------------------------------------------------------------ */
 /* Card                                                                */
@@ -2982,6 +2985,9 @@ class HeatpumpFlowCard extends HTMLElement {
     }
     if (config.timeline !== undefined && config.timeline !== null && typeof config.timeline !== 'boolean') throw new Error('timeline must be true or false');
     if (config.timeline_hours !== undefined && config.timeline_hours !== null && !(+config.timeline_hours > 0)) throw new Error('timeline_hours must be a number of hours above 0 (3 to 72)');
+    if (config.run_signal !== undefined && config.run_signal !== null && !HFC_RUN_SIGNAL.values.includes(config.run_signal)) {
+      throw new Error(`run_signal must be one of: ${HFC_RUN_SIGNAL.values.join(', ')}`);
+    }
     if (config.timeline_details !== undefined && config.timeline_details !== null && typeof config.timeline_details !== 'boolean') {
       throw new Error('timeline_details must be true or false');
     }
@@ -3409,6 +3415,13 @@ class HeatpumpFlowCard extends HTMLElement {
       // The hydraulic options decide what the schematic draws, so a report of a storage or flow problem needs them.
       `Storage: ${config.storage || 'separate'} · hot water: ${config.dhw_type || 'coil'} · parallel buffer: ${config.storage === 'combined' ? 'combined storage' : config.buffer ? 'yes, configured' : ['buffer_top', 'buffer_mode'].some((k) => r.entities[k]) ? 'yes, from entities' : 'no'} · series buffer: ${config.series_buffer ? (config.series_bypass === false ? 'yes, no bypass valve' : 'yes') : 'no'} · primary pump: ${sharedPump && config.primary_pump !== false ? 'yes, the circuit pump of the preset (one circuit, no buffer)' : (config.primary_pump ?? !!r.preset?.primary_pump) ? 'yes' : 'no'}`,
       `Layout: ${config.layout || 'default'}`,
+      // Where runs and the running state come from (#365).
+      `Runs from: ${(() => {
+        const threshold = Number.isFinite(+config.power_threshold) && config.power_threshold !== '' && config.power_threshold !== undefined && config.power_threshold !== null ? +config.power_threshold : 100;
+        if (config.run_signal === 'units') return Array.isArray(config.units) && config.units.length ? `unit power above ${HFC_RUN_SIGNAL.unitW} W (run_signal: units)` : 'compressor or operating mode (run_signal: units, but no units are configured)';
+        if (config.run_signal === 'power') return r.entities.power ? `power above ${threshold} W (run_signal: power)` : 'compressor or operating mode (run_signal: power, but power is not mapped)';
+        return 'compressor or operating mode';
+      })()}`,
       `Flow rates shown in: ${String(config.flow_rate_unit || 'l/h').replace('m3/h', 'm³/h')}`,
       `Circuit labels: flow ${config.hc_flow_label === false ? 'hidden' : 'shown'} · return ${config.hc_return_label ? 'shown' : 'hidden'}`,
       '',
@@ -5310,7 +5323,7 @@ class HeatpumpFlowCard extends HTMLElement {
     // Grid instructions only annotate the public operating timeline. They must not replace a real DHW or gap segment while
     // deciding whether a tank cool-down happened in verified standby (for example SG forced-on during a DHW charge).
     // The compressor that only delimits the runs (`cycle`) does not decide the segments, so the loss analysis leaves it out too.
-    const run = timeline ? { ...timeline, sg: null, cycle: null } : null;
+    const run = timeline ? { ...timeline, sg: null, cycle: null, sig: null, thaw: null } : null;
     if (!temps.length || (configured ? !measured : sensors[0] !== keys[0]) || !run) return null;
     // A fresh-water station on the buffer has no tank of its own. In a combined storage the circuits draw heat from the same
     // tank, so the pump of every circuit must be known and every window with a running circuit pump is left out (docs/TOPOLOGY.md,
@@ -5421,7 +5434,84 @@ class HeatpumpFlowCard extends HTMLElement {
     // Presets without a compressor entity but with its speed (Lambda, Bosch/Buderus Home Comfort) delimit the runs by the speed.
     const runSignal = comp ? comp.comp : (this._has('compressor_speed') ? this._e.compressor_speed : null);
     const cycle = base && runSignal && !base.comp ? { cycle: runSignal } : {};
-    return base ? { ...base, ...cycle, ...(this._has('pv_boost') ? { pv: this._e.pv_boost } : {}), ...(this._has('sg_ready') ? { sg: this._e.sg_ready } : {}) } : null;
+    const overlays = { ...(this._has('pv_boost') ? { pv: this._e.pv_boost } : {}), ...(this._has('sg_ready') ? { sg: this._e.sg_ready } : {}) };
+    // run_signal (#365): the power entities that delimit the runs, the valve for the kind and a defrost entity. The ids of the
+    // compressor and the mode stay, so a window without recorded power falls back to them.
+    const signal = this._runSignal();
+    if (signal) {
+      return { ...(base || {}), ...(base ? cycle : {}), ...overlays, sig: this._runSignalIds(signal),
+        valve: this._has('valve') ? this._e.valve : (base?.valve ?? null), thaw: this._has('defrost') ? this._e.defrost : null };
+    }
+    return base ? { ...base, ...cycle, ...overlays } : null;
+  }
+
+  // A valve state that means hot water: `valve_map` first, else an on-state (on, true, open, 1, ein) or a text such as Tank or
+  // DHW. The live view and the timeline use the same rule.
+  _valveDhwState(s) {
+    if (s === undefined || s === null) return false;
+    const v = String(s).trim().toLowerCase();
+    return this._valveMapped(s) ?? (['on', 'true', 'open', '1', 'ein'].includes(v) || ['tank', 'tank (dhw)', 'dhw', 'hot water', 'hot_water', 'warmwasser'].includes(v));
+  }
+
+  // `run_signal` (#365): 'units' or 'power' when its source is configured, else null (the compressor and the mode decide).
+  _runSignal() {
+    const v = this._config?.run_signal;
+    if (v === 'units') return Array.isArray(this._config.units) && this._config.units.length ? 'units' : null;
+    if (v === 'power') return this._has('power') ? 'power' : null;
+    return null;
+  }
+
+  _runSignalIds(signal) {
+    return signal === 'units' ? this._config.units.flatMap((u) => [u.power].flat()) : (this._sums?.power || [this._e.power]);
+  }
+
+  // Running now by the run signal: a unit above HFC_RUN_SIGNAL.unitW, or `power` above power_threshold.
+  _runSignalNow(signal) {
+    return signal === 'units' ? !!this._units()?.some((u) => u.power > HFC_RUN_SIGNAL.unitW) : this._w('power') > this._threshold;
+  }
+
+  // The run signal over the recorder history as [{ t, s: 'on' | 'off' | 'unavailable' }], like the history of a compressor:
+  // on while a unit is above HFC_RUN_SIGNAL.unitW (or the summed power above power_threshold), a dip shorter than
+  // HFC_RUN_SIGNAL.dip minutes stays on, a stretch shorter than HFC_RUN_SIGNAL.min minutes is off. Empty without recorded power.
+  _runSignalSeries(hist, ids) {
+    const signal = this._runSignal();
+    if (!signal || !ids?.sig?.length) return [];
+    const memo = `${signal}|${this._threshold}|${ids.sig.join(',')}`;
+    if (this._sigMemo?.hist === hist && this._sigMemo.key === memo) return this._sigMemo.series;
+    const groups = signal === 'units' ? this._config.units.map((u) => [u.power].flat()) : [ids.sig];
+    const limit = signal === 'units' ? HFC_RUN_SIGNAL.unitW : this._threshold;
+    const members = [...new Set(groups.flat())];
+    const series = Object.fromEntries(members.map((id) => {
+      const attributes = this._hass?.states[id]?.attributes;
+      return [id, (hist[id] || []).map((e) => ({ t: e.t, v: hfcPowerW({ state: e.s, attributes }) }))];
+    }));
+    let out = [];
+    if (members.some((id) => series[id].length)) {
+      const pos = Object.fromEntries(members.map((id) => [id, -1]));
+      const value = (id, t) => { const x = series[id]; while (pos[id] + 1 < x.length && x[pos[id] + 1].t <= t) pos[id]++; return pos[id] >= 0 ? x[pos[id]].v : NaN; };
+      const times = [...new Set(members.flatMap((id) => series[id].map((p) => p.t)))].sort((a, b) => a - b);
+      const points = [];
+      times.forEach((t) => {
+        // A unit counts only with every member of its list, as in _units(); `power` adds the members that report a number, as _w() does.
+        const sums = groups.map((g) => {
+          const vs = g.map((id) => value(id, t));
+          if (signal === 'units') return vs.reduce((a, b) => a + b, 0);
+          const ok = vs.filter(Number.isFinite);
+          return ok.length ? ok.reduce((a, b) => a + b, 0) : NaN;
+        });
+        const state = sums.some((w) => w > limit) ? 'on' : sums.every((w) => !Number.isFinite(w)) || (signal === 'power' && !Number.isFinite(sums[0])) ? 'unavailable' : 'off';
+        if (points[points.length - 1]?.s !== state) points.push({ t, s: state });
+      });
+      // Stretches with their length; the last one is still going.
+      const spans = points.map((p, n) => ({ ...p, to: points[n + 1]?.t ?? Infinity }));
+      const merge = (list) => list.reduce((acc, p) => { const last = acc[acc.length - 1]; if (last && last.s === p.s) last.to = p.to; else acc.push({ ...p }); return acc; }, []);
+      let list = spans.map((p, n) => (p.s === 'off' && spans[n - 1]?.s === 'on' && spans[n + 1]?.s === 'on' && p.to - p.t < HFC_RUN_SIGNAL.dip * 60000 ? { ...p, s: 'on' } : p));
+      list = merge(list);
+      list = merge(list.map((p) => (p.s === 'on' && Number.isFinite(p.to) && p.to - p.t < HFC_RUN_SIGNAL.min * 60000 ? { ...p, s: 'off' } : p)));
+      out = list.map((p) => ({ t: p.t, s: p.s }));
+    }
+    this._sigMemo = { hist, key: memo, series: out };
+    return out;
   }
 
   // Runs of the heat pump between start and end, from the segments of _timelineSegments (#300, #324). With a compressor a run
@@ -5441,7 +5531,9 @@ class HeatpumpFlowCard extends HTMLElement {
       if (last && last.to === from) last.to = to; else runs.push({ from, to, source });
     };
     // A compressor without recorded history (excluded from the recorder) leaves the phases of the operating mode.
-    const list = (ids.cycle || ids.comp) ? hist[ids.cycle || ids.comp] || [] : [];
+    // With run_signal (#365) the power signal delimits the runs; without recorded power the compressor does.
+    const signal = this._runSignalSeries(hist, ids);
+    const list = signal.length ? signal : (ids.cycle || ids.comp) ? hist[ids.cycle || ids.comp] || [] : [];
     if (list.length) {
       // The same rule as the segments and the live view (hfcCompressorOn); unavailable ends the run.
       list.forEach((e, n) => {
@@ -5552,7 +5644,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const ids = this._timelineIds(); const range = this._periodRange(period);
     if (!ids?.pv || !range) return NaN;
     const shareIds = { ...ids, sg: null };
-    const idList = Object.values(shareIds).filter(Boolean);
+    const idList = [...new Set(Object.values(shareIds).flat().filter(Boolean))];
     const hist = this._wsCached(`pvshare|${idList.join(',')}|${period}`, {
       type: 'history/history_during_period', start_time: range[0], ...(range[1] ? { end_time: range[1] } : {}), entity_ids: idList,
       minimal_response: true, ...(!this._timelineNeedsAttributes(shareIds) ? { no_attributes: true } : {}), significant_changes_only: false,
@@ -5599,7 +5691,30 @@ class HeatpumpFlowCard extends HTMLElement {
       return { heating: 'heat', dhw: 'dhw', defrost: 'defrost', cooling: 'cool', blocked: 'blocked' }[m] || 'idle';
     };
     const points = [];
-    if (ids.mode && !ids.comp && !ids.vflow) hist[ids.mode].forEach((e) => points.push({ t: e.t, kind: kindOfMode(e.s), raw: e.s }));
+    const signal = this._runSignalSeries(hist, ids);
+    const dhwOf = (s) => this._valveDhwState(s);
+    if (signal.length) {
+      // run_signal (#365): running from the power signal, hot water while the valve is on hot water, else heating. The mode
+      // decides only cooling and a lock (and the kind where no valve exists); defrost comes from the defrost entity only.
+      const list = (id) => (id ? hist[id] || [] : []);
+      const held = (entries) => { let n = -1; return (t) => { while (n + 1 < entries.length && entries[n + 1].t <= t) n++; return entries[n]?.s; }; };
+      const sig = held(signal); const mode = held(list(ids.mode)); const valve = held(list(ids.valve)); const thaw = held(list(ids.thaw));
+      const times = [...new Set([signal, list(ids.mode), list(ids.valve), list(ids.thaw)].flatMap((l) => l.map((e) => e.t)))].sort((a, b) => a - b);
+      times.forEach((t) => {
+        const ss = sig(t); const ms = mode(t);
+        if (ss === undefined) return;
+        const modeKind = ids.mode && ms !== undefined ? kindOfMode(ms) : null;
+        let kind;
+        if (ss === 'unavailable') kind = 'gap';
+        else if (modeKind === 'blocked') kind = 'blocked';
+        else if (ss !== 'on') kind = 'idle';
+        else if (ids.thaw && hfcCompressorOn(thaw(t))) kind = 'defrost';
+        else if (modeKind === 'cool') kind = 'cool';
+        else if (ids.valve) kind = dhwOf(valve(t)) ? 'dhw' : 'heat';
+        else kind = ['heat', 'dhw', 'cool'].includes(modeKind) ? modeKind : 'heat';
+        points.push({ t, kind, raw: ms ?? ss });
+      });
+    } else if (ids.mode && !ids.comp && !ids.vflow) hist[ids.mode].forEach((e) => points.push({ t: e.t, kind: kindOfMode(e.s), raw: e.s }));
     else {
       // Compressor on = heating, with the valve on hot water = dhw. With a mode as well, the compressor only decides while the
       // mode is idle. The times are walked in order, so each list keeps a pointer to the state held at that time.
@@ -5609,7 +5724,7 @@ class HeatpumpFlowCard extends HTMLElement {
       const vflow = held(list(ids.vflow)); const vtank = held(list(ids.vtank));
       // Compressor on: the rule of the live view, so the timeline never shows heating while the heat pump block says off.
       const on = (s) => s !== undefined && hfcCompressorOn(s);
-      const dhw = (s) => s !== undefined && (this._valveMapped(s) ?? ['on', 'tank', 'dhw', 'hot water', 'warmwasser'].includes(String(s).toLowerCase()));
+      const dhw = (s) => this._valveDhwState(s);
       const times = [...new Set([ids.mode, ids.comp, ids.valve, ids.vflow, ids.vtank].flatMap((id) => list(id).map((e) => e.t)))].sort((a, b) => a - b);
       times.forEach((t) => {
         const ms = mode(t); const cs = comp(t); const vs = valve(t); const fl = parseFloat(vflow(t)); const tk = parseFloat(vtank(t));
@@ -5687,7 +5802,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (!box) return;
     const ids = this._timelineIds();
     const hours = Math.min(Math.max(+this._config.timeline_hours || 24, 3), 72);
-    const idList = ids ? Object.values(ids).filter(Boolean) : [];
+    const idList = ids ? [...new Set(Object.values(ids).flat().filter(Boolean))] : [];
     if (!idList.length) { box.hidden = true; return; }
     const now = Date.now(); const start = now - hours * 3600000;
     const marks = this._timelineMarks();
@@ -6266,21 +6381,30 @@ class HeatpumpFlowCard extends HTMLElement {
     // Compressor may be a binary sensor or a numeric one (frequency / speed > 0 means running), the same rule as the timeline.
     const compOn = this._has('compressor') && hfcCompressorOn(this._s('compressor'));
     // A unit of a cascade that runs (#173) also counts when the compressor entity belongs to the other unit.
-    const running = compOn || power > this._threshold || this._runningStates.includes(status) || !!this._units()?.some((u) => u.running)
+    // run_signal (#365): the unit power or `power` alone says whether the heat pump runs, so a compressor or status entity
+    // that updates only hourly cannot hold a stale state.
+    const signal = this._runSignal();
+    const running = signal ? this._runSignalNow(signal) : compOn || power > this._threshold || this._runningStates.includes(status) || !!this._units()?.some((u) => u.running)
       // The mode alone decides only without any running signal; the power of cascade units is one (#173).
       || (!this._has('compressor') && !this._has('power') && !this._has('status') && !this._units() && ['heating', 'dhw', 'cooling', 'defrost'].includes(hp));
     const boilerRunning = !!P.boiler && this._boilerOn();
     const generatorMode = running ? (boilerRunning ? 'both' : 'hp_only') : (boilerRunning ? 'boiler_only' : 'idle');
     const generatorRunning = running || boilerRunning;
-    const defrost = hp === 'defrost' || status.toUpperCase().includes('DEFROST') || (this._has('defrost') && this._on('defrost'));
+    // With run_signal only a defrost entity tells a defrost: an hourly mode or status can report one long after it ended (#365).
+    const defrost = signal ? this._has('defrost') && hfcCompressorOn(this._s('defrost'))
+      : hp === 'defrost' || status.toUpperCase().includes('DEFROST') || (this._has('defrost') && this._on('defrost'));
     // Valve: binary (on = DHW) or a state such as "Tank" / "DHW".
     // A `valve_map` (raw state → dhw | heating) decides first, for valves that report 1 for heating or other texts.
     const valveMapped = this._has('valve') ? this._valveMapped(this._s('valve')) : undefined;
-    const valveDhw = this._has('valve') ? (valveMapped ?? (this._on('valve') || ['tank', 'tank (dhw)', 'dhw', 'hot water', 'hot_water', 'warmwasser'].includes(String(this._s('valve')).toLowerCase())))
+    const valveDhw = this._has('valve') ? (valveMapped ?? this._valveDhwState(this._s('valve')))
       : this._valveByFlow() && running && this._n('flow') > this._n('dhw_top');
     // Integrations without an operating-mode entity: a running compressor means heating unless the valve says DHW.
     // Defrost wins over a stopped compressor: it pauses for about a minute while the 4-way valve switches (HeishaMon).
-    if (!this._has('mode')) hp = defrost ? 'defrost' : !running ? 'idle' : (valveDhw ? 'dhw' : 'heating');
+    // run_signal (#365): the mode decides only cooling and a lock; the valve decides hot water while the heat pump runs.
+    if (signal) {
+      hp = hp === 'blocked' ? 'blocked' : defrost && running ? 'defrost' : !running ? (hp === 'off' ? 'off' : 'idle')
+        : hp === 'cooling' ? 'cooling' : this._has('valve') ? (valveDhw ? 'dhw' : 'heating') : (['heating', 'dhw', 'cooling'].includes(hp) ? hp : 'heating');
+    } else if (!this._has('mode')) hp = defrost ? 'defrost' : !running ? 'idle' : (valveDhw ? 'dhw' : 'heating');
     // A defrost entity wins over an operating mode that keeps reporting heating while the unit defrosts (e.g. Kronoterm).
     else if (this._has('defrost') && this._on('defrost') && ['heating', 'cooling', 'dhw'].includes(hp)) hp = 'defrost';
     // An operating mode that stays idle while the compressor runs (preset flag compressor_over_idle, ViCare #196).
