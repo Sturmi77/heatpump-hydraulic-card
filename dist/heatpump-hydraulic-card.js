@@ -5722,7 +5722,7 @@ class HeatpumpFlowCard extends HTMLElement {
       if (m === 0 && h % step === 0) ticks.push([t, String(h).padStart(2, '0')]);
     }
     const kinds = [...new Set(segs.map((s) => s.kind))].filter((k) => k !== 'idle');
-    const sel = segs.findIndex((s) => s.from === this._tlSel);
+    const sel = segs.findIndex((s) => this._segId(s, start, now) === this._tlSel);
     const markDetail = (l, s) => `${l.label} · ${this._timelineTime(s.from)}–${this._timelineTime(s.to)} · ${this._timelineDuration(s.to - s.from)}`;
     let detail = sel >= 0 ? this._timelineDetail(segs[sel]) : '';
     lanes.forEach((l) => l.segs.forEach((s) => { if (`${l.n}:${s.from}` === this._tlMarkSel) detail = markDetail(l, s); }));
@@ -5743,6 +5743,8 @@ class HeatpumpFlowCard extends HTMLElement {
   // Identity of a run for the selection and its query. A run cut by the window starts at the window start, which moves with
   // every update, so it is known by its end; one that also still runs is the only run in the window.
   _runId(run) { return run.partial ? `partial-${run.ongoing ? 'now' : run.to}` : String(run.from); }
+  // Identity of a selected period, in the same way: the first period starts at the window start, which moves with every update.
+  _segId(seg, start = this._tl?.start, end = this._tl?.now) { return seg.from <= start ? `start-${seg.to >= end ? 'now' : seg.to}` : String(seg.from); }
 
   // "Hot water · 10:07–10:55 · 48 min" for a run.
   _runHead(run) {
@@ -5960,7 +5962,7 @@ class HeatpumpFlowCard extends HTMLElement {
       if (!seg) return;
       const near = (r) => (Number.isFinite(t) ? Math.max(r.from - t, t - r.to, 0) : 0);
       const run = (this._tl.runs || []).filter((r) => seg.from < r.to && seg.to > r.from).sort((a, b) => near(a) - near(b))[0];
-      if (run) { const id = this._runId(run); this._tlRun = this._tlRun === id ? null : id; this._tlSel = null; } else { this._tlSel = seg.from; this._tlRun = null; }
+      if (run) { const id = this._runId(run); this._tlRun = this._tlRun === id ? null : id; this._tlSel = null; } else { this._tlSel = this._segId(seg); this._tlRun = null; }
       this._tlMarkSel = null;
       redraw(true);
     };
@@ -5980,14 +5982,18 @@ class HeatpumpFlowCard extends HTMLElement {
     box.addEventListener('keydown', (ev) => {
       if (ev.target.id !== 'tl-bar' || !this._tl) return;
       if (ev.key === 'Escape' && (this._tlRun !== null && this._tlRun !== undefined)) { ev.preventDefault(); this._tlRun = null; redraw(true); return; }
+      // The keys step through the runs and, in time order between them, the periods no run covers (standby, a lock, a gap), so
+      // the keyboard reaches every period a tap reaches.
       const runs = this._tl.runs || [];
-      const list = runs.length ? runs : this._tl.segs;
-      const cur = list.findIndex((s) => (runs.length ? this._runId(s) === this._tlRun : s.from === this._tlSel));
+      const list = [...runs.map((r) => ({ run: r, from: r.from })),
+        ...this._tl.segs.filter((s) => !runs.some((r) => s.from < r.to && s.to > r.from)).map((s) => ({ seg: s, from: s.from }))]
+        .sort((a, b) => a.from - b.from);
+      const cur = list.findIndex((x) => (x.run ? this._runId(x.run) === this._tlRun : this._segId(x.seg) === this._tlSel));
       const to = { ArrowRight: cur + 1, ArrowDown: cur + 1, ArrowLeft: cur < 0 ? list.length - 1 : cur - 1, ArrowUp: cur < 0 ? list.length - 1 : cur - 1, Home: 0, End: list.length - 1 }[ev.key];
-      if (to === undefined) return;
+      if (to === undefined || !list.length) return;
       ev.preventDefault();
       const item = list[Math.min(Math.max(to, 0), list.length - 1)];
-      if (runs.length) { this._tlRun = this._runId(item); this._tlSel = null; } else this._tlSel = item.from;
+      if (item.run) { this._tlRun = this._runId(item.run); this._tlSel = null; } else { this._tlSel = this._segId(item.seg); this._tlRun = null; }
       this._tlMarkSel = null;
       redraw(true);
     });
