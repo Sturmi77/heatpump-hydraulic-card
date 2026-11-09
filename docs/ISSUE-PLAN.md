@@ -68,7 +68,7 @@ The 0.18 items (#34, #283, #291) are closed; #282 confirmed ViCare with a chargi
 | Issue | Recommendation |
 | --- | --- |
 | [#344 · Vitocal shared pump](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/344), [#359 · OpenEMS SG-Ready](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/359), [#360 · Flow rates on phones](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/360) | Fixed in beta.2 or on `main`; close with the 0.19.0 release once the reporters had a chance to confirm. |
-| [#349 · EMS-ESP long names](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/349) | Fix before the final: heat total from the split counters, the long names of the split counters for the tiles. The blank card without `preset` shows the start hint by design (#142); the card picker proposes the preset. |
+| [#349 · EMS-ESP long names](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/349) | Fix before the final: no heat total that is smaller than one of its split counters (no wrong total COP), and the long names of the split counters for the tiles. The blank card without `preset` shows the start hint by design (#142); the card picker proposes the preset. |
 | [#195 · Home Comfort pumps](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/195) | Keep evidence-dependent. Obtain the Home Comfort PC0/PC1 resource keys and compare WP and circuit flow when only PC1 runs. The EMS-ESP mapping in #297 covers a different integration. |
 
 ### Measure setup and simplify the editor
