@@ -40,4 +40,5 @@ Run `npm run check` before opening a pull request. CI requires `HACS validation`
 - Units and states: W/kW, Wh/kWh, °C/°F, and `unknown`/`unavailable` must not turn into zeros or crashes.
 - Is there a test that would have failed before the fix?
 - Did the drawing change without a matching topology baseline update, or the baseline change without a reason in the pull request?
+- Does a new or moved label whose text depends on the language, a name or a value have a width budget (`data-fit`) up to the next pipe or part? Do not loosen the collision checks to make a test pass.
 - Are entity ids backed by evidence, or guessed?

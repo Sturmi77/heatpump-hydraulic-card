@@ -3802,7 +3802,14 @@ class HeatpumpFlowCard extends HTMLElement {
     const value = this._pressure(key); const state = this._pressureState(kind, value);
     group.classList.toggle('warning', state === 'warning'); group.classList.toggle('critical', state === 'critical');
     const glyph = state === 'critical' ? '⚠ ' : state === 'warning' ? '! ' : '';
-    this._txt(textId, `${glyph}${label} ${this._pressureText(key)}`);
+    // The name is a prefix that a label with too little room leaves out (_fitText); the warning glyph and the value stay.
+    const el = this._$(textId); const shown = this._pressureText(key); const k = `${glyph}|${label}|${shown}`;
+    if (el && el._k !== k) {
+      el._k = k; el.textContent = glyph;
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+      t.setAttribute('class', 'fit-pre'); t.textContent = `${label} `;
+      el.append(t, shown);
+    }
     group.dataset.a11y = `${label}: ${this._pressureText(key)}, ${this._i[`pressure_${state}`]}`;
   }
   _on(key) { return ['on', 'true', 'open', '1', 'ein'].includes(String(this._s(key)).toLowerCase()); }
@@ -4060,6 +4067,37 @@ class HeatpumpFlowCard extends HTMLElement {
     el.append(t, text);
   }
   _txt(id, text) { const el = this._$(id); if (el && el.textContent !== text) el.textContent = text; }
+  // Labels whose length depends on the language, a configured name or a value carry a width budget in schematic units
+  // (data-fit). After each update a label that is wider first leaves out its prefix (a value without "Brine out") and is then
+  // shortened with "…". Measured after layout, so the theme font and the larger type of a narrow schematic count.
+  _fitLabels() {
+    const svg = this._rendered && this._$('svg'); if (!svg) return;
+    for (const el of svg.querySelectorAll('text[data-fit]')) this._fitText(el, parseFloat(el.dataset.fit));
+  }
+  _fitText(el, max) {
+    const pre = el.querySelector('.pre, .fit-pre');
+    const font = getComputedStyle(el).fontSize;
+    const text = el.textContent;
+    // A plain label that still shows its last fitted text keeps it; an update that wrote the full text again is fitted again. A label
+    // with a prefix is rebuilt by _txtPre and measured each time.
+    if (!pre && el._fit && el._fit.font === font && el._fit.max === max && text === el._fit.shown) return;
+    const full = el._fit && text === el._fit.shown ? el._fit.full : text;
+    const width = () => { try { return el.getComputedTextLength(); } catch (err) { return 0; } };
+    if (pre) pre.classList.remove('fit-off'); else if (text !== full) el.textContent = full;
+    let w = width();
+    if (!(w > 0)) { el._fit = null; return; }
+    if (w > max && pre) { pre.classList.add('fit-off'); w = width(); }
+    if (w > max && !el.children.length) {
+      let lo = 0; let hi = full.length;
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2);
+        el.textContent = `${full.slice(0, mid).trimEnd()}…`;
+        if (width() <= max) lo = mid; else hi = mid - 1;
+      }
+      el.textContent = `${full.slice(0, Math.max(lo, 1)).trimEnd()}…`;
+    }
+    el._fit = { font, max, full, shown: el.textContent };
+  }
   // Label whose tail (for example the humidity after the room target) the narrow focus view hides; a narrow schematic also hides
   // the humidity after the room target, which is wider than the house there.
   _txtTail(id, main, tail) {
@@ -4293,17 +4331,17 @@ class HeatpumpFlowCard extends HTMLElement {
               <text class="small" id="t-valve" x="432" y="198"></text>
             </g>
             <g class="tap" ${de(['dhw_top', 'dhw_middle', 'dhw_bottom'].find((k) => e[k]) || 'dhw_top')}>
-              ${P.combined ? `<text class="tank-title" x="580" y="30" text-anchor="middle">${this._esc(i.combined_tank)}</text>
+              ${P.combined ? `<text class="tank-title" x="580" y="30" text-anchor="middle" data-fit="220">${this._esc(i.combined_tank)}</text>
               <rect class="tank" id="cs-tank" x="520" y="40" width="120" height="480" rx="26" fill="url(#g-cs)"/>
               <path class="zone-line" d="M528 280 H632"/>
               <text class="small zone-title on-tank" x="580" y="62" text-anchor="middle">${this._esc(i.dhw)}</text>`
-    : `<text class="tank-title" x="580" y="30" text-anchor="middle">${this._esc(i.dhw)}</text>
+    : `<text class="tank-title" x="580" y="30" text-anchor="middle" data-fit="220">${this._esc(i.dhw)}</text>
               <rect class="tank" x="520" y="40" width="120" height="200" rx="26" fill="url(#g-dhw)"/>`}
               ${P.dhwType === 'coil' ? '<path class="coil" id="coil" d="M520 80 H600 L540 100 H600 L540 120 H600 L540 140 H600 L540 160 H600 L540 180 H600 L540 200 H520"/>' : ''}
               ${P.dhwType === 'tank_in_tank' ? '<rect class="inner-tank" id="inner-tank" x="540" y="72" width="80" height="188" rx="18"/>' : ''}
               ${P.dhwType === 'fresh_water' ? `${pipePair('fws-a', `M640 ${HFC_STATION_PORTS.flow} H654`)}${pipePair('fws-b', `M640 ${HFC_STATION_PORTS.return} H654`)}${this._stationArt(652, HFC_STATION_PORTS.flow - 10, 56, HFC_STATION_PORTS.return - HFC_STATION_PORTS.flow + 20)}` : ''}
               <text class="tank-temp" id="t-dhw-top" x="580" y="112" text-anchor="middle"></text>
-              <text class="small${P.combined ? ' on-tank' : ''}" id="t-dhw-mode" x="580" y="262" text-anchor="middle"></text>
+              <text class="small${P.combined ? ' on-tank' : ''}" id="t-dhw-mode" x="580" y="262" text-anchor="middle" data-fit="164"></text>
             </g>
             ${this._has('dhw_middle') ? `<g class="tap" ${de('dhw_middle')}><text class="tank-sub" id="t-dhw-middle" x="580" y="166" text-anchor="middle"></text></g>` : ''}
             <g class="tap" ${de('dhw_bottom')}><text class="tank-sub" id="t-dhw-bottom" x="580" y="222" text-anchor="middle"></text></g>
@@ -4313,7 +4351,7 @@ class HeatpumpFlowCard extends HTMLElement {
           ${P.buffer ? `
             <g class="tap" ${de(P.combined ? (['buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode'].find((k) => e[k]) || 'buffer_top') : 'buffer_top')}>
               ${P.combined ? `<text class="small zone-title on-tank" x="580" y="304" text-anchor="middle">${this._esc(i.heating_zone)}</text>`
-    : `<text class="tank-title" x="${P.station ? 512 : 580}" y="310" text-anchor="${P.station ? 'end' : 'middle'}">${this._esc(i.buffer)}</text>
+    : `<text class="tank-title" x="${P.station ? 512 : 580}" y="310" text-anchor="${P.station ? 'end' : 'middle'}" data-fit="${P.station ? 84 : 128}">${this._esc(i.buffer)}</text>
               <rect class="tank" x="520" y="320" width="120" height="200" rx="26" fill="url(#g-buf)"/>`}
               <text class="tank-temp${equalBuffer ? ' buffer-value' : ''}" id="t-buf-top" x="580" y="${bufferY.buffer_top ?? 392}" text-anchor="middle"></text>
               <text class="small" id="t-buf-mode" x="580" y="542" text-anchor="middle"></text>
@@ -4915,13 +4953,13 @@ class HeatpumpFlowCard extends HTMLElement {
     if (this._noBypass()) {
       return `${pp('byp-vl', 'M520 360 H600')}${pp('sb-vl', 'M600 360 H640')}${pp('sb-b', 'M640 495 H582')}${pp('byp-rl', 'M582 495 H520')}
       <rect class="tank" id="sb-tank" x="450" y="452" width="116" height="86" rx="20"/>
-      <text class="small series-title" x="508" y="499" text-anchor="middle">${this._esc(i.series_tank)}</text>`;
+      <text class="small series-title" x="508" y="499" text-anchor="middle" data-fit="104">${this._esc(i.series_tank)}</text>`;
     }
     // The branches leave the flow line under its end, so the round cap of the idle branch does not cover the flowing pipe.
     return `${pp('sb-a', 'M600 360 V477')}${pp('sb-vl', 'M600 360 H640')}${pp('byp-vl', 'M520 360 H600')}${pp('sb-b', 'M640 495 H618')}${pp('byp-rl', 'M582 495 H520')}
       <g class="tap" ${de(e.bypass_valve ? 'bypass_valve' : 'defrost')}>
         <rect class="tank" id="sb-tank" x="450" y="452" width="116" height="86" rx="20"/>
-        <text class="small series-title" x="508" y="499" text-anchor="middle">${this._esc(i.series_tank)}</text>
+        <text class="small series-title" x="508" y="499" text-anchor="middle" data-fit="104">${this._esc(i.series_tank)}</text>
         <circle class="valve" cx="600" cy="495" r="18"/>
         <path class="valve-arrow" id="sb-arrow" d="M614 495 H586 M593 488 L586 495 L593 502"/>
         <text class="small" id="t-bypass" x="600" y="534" text-anchor="middle"></text>
@@ -5011,12 +5049,13 @@ class HeatpumpFlowCard extends HTMLElement {
       ${this._config.hc_return_label ? `<g class="tap" ${de(k('return'))}><text class="vol-label" id="t-hc-rl${s}" x="690" y="515" text-anchor="start"></text></g>` : ''}
       ${n === 1 && e.hc_pressure
     // Starts right of the storage column (and right of the risers of further circuits), so a long text such as
-    // "Heizungsdruck 1,8 bar" is not covered by the buffer (#129); low enough to pass between the pipes of the emitter.
-    ? `<g class="tap pressure" id="pressure-hc" ${de('hc_pressure')}><text class="pressure-label" id="t-hc-pressure" x="${this._hcCount > 1 ? 684 : 650}" y="458" text-anchor="start"></text></g>` : ''}
+    // "Heizungsdruck 1,8 bar" is not covered by the buffer (#129); low enough to pass between the pipes of the emitter. With a
+    // mixer it ends before the mixer's bypass (x 760); a longer text then shows the value alone.
+    ? `<g class="tap pressure" id="pressure-hc" ${de('hc_pressure')}><text class="pressure-label" id="t-hc-pressure" x="${this._hcCount > 1 ? 684 : 650}" y="458" text-anchor="start" data-fit="${(this._mixerSvg(n) ? 752 : 860) - (this._hcCount > 1 ? 684 : 650)}"></text></g>` : ''}
       <g class="tap" ${de(e[k('pump')] ? k('pump') : k('mode'))}>
         ${this._circuitPump(n) ? `<circle class="pump" cx="720" cy="360" r="16"/>
         <g class="impeller" id="impeller${s}"><path d="M720 348 L726 360 L714 360Z M720 372 L714 360 L726 360Z" class="imp"/></g>` : ''}
-        <text class="tank-title" x="880" y="302" text-anchor="middle">${title}</text>
+        <text class="tank-title" x="880" y="302" text-anchor="middle" data-fit="230">${title}</text>
         <text class="small" id="t-hc-mode${s}" x="880" y="524" text-anchor="middle"></text>
       </g>
     </g>`;
@@ -6217,11 +6256,11 @@ class HeatpumpFlowCard extends HTMLElement {
     const ground = '<path class="ground" d="M60 478 H280"/>';
     const out = this._e.source_out ? `data-entity="${this._esc(this._e.source_out)}"` : '';
     const inn = this._e.source_in ? `data-entity="${this._esc(this._e.source_in)}"` : '';
-    const labels = `<g class="tap" ${out}><text class="small" id="t-src-out" x="130" y="462" text-anchor="end"></text></g>
-      <g class="tap" ${inn}><text class="small" id="t-src-in" x="210" y="462"></text></g>
-      <g class="tap" ${inn}><text class="small source-spread" id="t-src-spread" x="96" y="512" text-anchor="middle"></text></g>
+    const labels = `<g class="tap" ${out}><text class="small" id="t-src-out" x="130" y="462" text-anchor="end" data-fit="126"></text></g>
+      <g class="tap" ${inn}><text class="small" id="t-src-in" x="210" y="462" data-fit="120"></text></g>
+      <g class="tap" ${inn}><text class="small source-spread" id="t-src-spread" x="128" y="512" text-anchor="end" data-fit="124"></text></g>
       <g class="tap" ${this._e.source_volume ? `data-entity="${this._esc(this._e.source_volume)}"` : ''}><text class="vol-label" id="t-src-vol" x="212" y="512"></text></g>
-      ${this._sourceType === 'brine' && this._e.brine_pressure ? `<g class="tap pressure" id="pressure-brine" data-entity="${this._esc(this._e.brine_pressure)}"><text class="pressure-label" id="t-brine-pressure" x="170" y="532" text-anchor="middle"></text></g>` : ''}`;
+      ${this._sourceType === 'brine' && this._e.brine_pressure ? `<g class="tap pressure" id="pressure-brine" data-entity="${this._esc(this._e.brine_pressure)}"><text class="pressure-label" id="t-brine-pressure" x="212" y="532" data-fit="300"></text></g>` : ''}`;
     if (this._sourceType === 'brine') {
       return `${ground}${pp('src', 'M140 425 V528 Q140 548 170 548 Q200 548 200 528 V425')}${labels}`;
     }
@@ -6537,6 +6576,11 @@ class HeatpumpFlowCard extends HTMLElement {
 
   /* ---------- update ---------- */
   _update() {
+    this._updateDrawing();
+    this._fitLabels();
+  }
+
+  _updateDrawing() {
     if (!this._rendered || !this._hass || this._startState()) return;
     const i = this._i;
     const P = this._parts;
@@ -7040,6 +7084,7 @@ HeatpumpFlowCard.styles = `
   .unit.on.dhw { stroke: ${hfcVar('hot')}; } .unit.on.defrost, .unit.on.cool { stroke: ${hfcVar('cool-strong')}; }
   .unit.on { stroke: ${hfcVar('heat')}; filter: url(#glow); }
   .unit-title, .tank-title { font-size: calc(17px * var(--k, 1)); font-weight: 600; }
+  .fit-off { display: none; }
   .unit-status { font-size: calc(16px * var(--ku, 1)); font-weight: 600; }
   .unit-status .status2 { font-size: .88em; font-weight: 500; fill: var(--hfc-muted); }
   .unit-val { font-size: calc(15px * var(--ku, 1)); fill: var(--hfc-muted); }

@@ -77,6 +77,26 @@ function drawingCollisions(svg) {
       if ((!inside || !label.el.matches(inside)) && boxesOverlap(b, label.b)) hits.push(`${name(label.el)} overlaps ${name(el)}`);
     }
   }
+  // Labels must not lie on a pipe: sample every visible pipe every 4 units along its stroke (the flow overlay runs on the same path).
+  // A pipe runs under the appliances it connects (tank, series buffer, valve, pump); there it is hidden, and a label inside the
+  // appliance does not lie on it.
+  const covers = [...svg.querySelectorAll('#hp-box, rect.tank, rect.boiler-box, rect.fws, circle.valve, circle.pump, rect.radiator, rect.column-rib, rect.collector')]
+    .filter(visible).map((el) => rootBox(el, svg));
+  const covered = (x, y) => covers.some((c) => x > c.l && x < c.r && y > c.t && y < c.b);
+  for (const pipe of svg.querySelectorAll('path.pipe')) {
+    if (!visible(pipe)) continue;
+    const m = schematicMatrix(pipe, svg);
+    const r = parseFloat(getComputedStyle(pipe).strokeWidth) / 2 || 2;
+    let len = 0; try { len = pipe.getTotalLength(); } catch (err) { continue; }
+    const hitBy = new Set();
+    for (let at = 0; at <= len; at += 4) {
+      const { x, y } = pipe.getPointAtLength(at).matrixTransform(m);
+      if (covered(x, y)) continue;
+      const dot = { l: x - r, r: x + r, t: y - r, b: y + r };
+      for (const label of labels) if (!hitBy.has(label) && boxesOverlap(label.b, dot)) hitBy.add(label);
+    }
+    for (const label of hitBy) hits.push(`${name(label.el)} lies on pipe ${name(pipe)}`);
+  }
   const flanges = [...svg.querySelectorAll('.heater-flange')].filter(visible).map((el) => ({ el, b: rootBox(el, svg) }));
   for (const [n, rod] of flanges.entries()) {
     for (const other of flanges.slice(n + 1)) {

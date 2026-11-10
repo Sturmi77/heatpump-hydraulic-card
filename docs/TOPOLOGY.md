@@ -23,7 +23,9 @@ The storage wall has fixed hydraulic ports and named heater heights. The unposit
 
 When extending a column, identify which parts compete for the same space. Include the mounted hardware, the visible value and the pipe cap at a port. Record deliberate containment, such as the boiler's power value inside its body. Exercise the local combinations together, including the operating state that populates each label. In the browser, `test/drawing-collisions.js` measures the rendered geometry in SVG coordinates after layout and reports the offending elements. The storage matrix checks every subset of the four heater keys against the supported hot-water preparations and solar options. The wider topology matrix covers the other storage strategies and circuit counts.
 
-These checks cover label bounds, selected appliance bodies, heater flanges and pipe endpoints. The hydraulic continuity checks cover connections. Decorative artwork and arbitrary pipe crossings still require visual review.
+These checks cover label bounds, selected appliance bodies, heater flanges, pipe endpoints and visible pipe strokes (a pipe under an appliance is hidden and does not count). The hydraulic continuity checks cover connections. Decorative artwork still requires visual review.
+
+The snapshot runs in English with short values. A second pass draws every demo and combination again with the longest translation of each text over all built-in languages, wide values (`-13.3 °C`, `1,444 l/h`, kW) and long circuit names, and runs the collision checks only (#395). A label whose length depends on the language, a name or a value carries a width budget in schematic units (`data-fit`): wider text first leaves out its prefix, then ends in "…". In English every label must fit its budget without shortening, so the budgets stay honest. `test/topology.html?only=<regular expression>` draws only the matching cases and leaves them on the page.
 
 ### Schematic dimensions
 
