@@ -1,9 +1,8 @@
 {
   "preset": "stiebel_isg",
   "reviewed": {
-    "date": "2026-11-01",
-    "version": "2026.9",
-    "note": "main 32e8a67 (unreleased refactor) checked: no translation key removed; *_thz select/number variants mapped as fallbacks for program and quick controls."
+    "date": "2026-11-10",
+    "version": "2026.11"
   },
   "unmapped": {
     "heat": "The ISG reports produced heat only as daily and total counters, no live heat output; the card estimates it from flow rate and spread.",
