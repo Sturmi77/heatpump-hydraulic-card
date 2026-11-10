@@ -2,6 +2,8 @@
 
 Preset `vicare`. Back to the [README](../../README.md#supported-heat-pumps).
 
+Confirmed on a Vitocal 250 (#186, #196) and on a Vitocal 200-S with combined storage and fresh-water station, heating and hot-water charging (#282). Other Vitocal models remain welcome test coverage.
+
 ## Setup
 
 ```yaml
@@ -33,6 +35,12 @@ Limits:
 - A tank that has cooled below the heating flow reads as hot water for that time.
 
 A mapped `valve` (for example your own template sensor) or a reported "DHW charging" entity replaces the rule. The diagnostic report says when the rule is in use. Confirmed on a Vitocal 250 by the reporter of #186: the compressor is on while heating and while charging hot water, and the flow rises above the tank during a charge.
+
+## Circuit pump without a buffer
+
+Without a buffer and with one heating circuit, the pump ViCare reports as the circuit pump (`circulation_pump`) is the indoor unit's own pump in front of the 3-way valve. It also runs while hot water charges. The card therefore draws it as the primary pump on the flow next to the heat pump: it turns for heating and for hot water, and the circuit has no pump of its own. During a charge the circuit stands still, as the valve closes the heating side (#344).
+
+With a buffer, with several circuits or with your own `hc_pump` in the configuration, the pump stays in the circuit. `primary_pump: false` keeps it there as well.
 
 ## Notes
 

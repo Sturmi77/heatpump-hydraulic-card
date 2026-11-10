@@ -17,13 +17,18 @@ Only the keys below are accepted. Every leaf must be a string. Values are render
 
 - `{sources}` in `energy_missing`
 - `{h}` in `timeline_title` and `timeline_aria`
+- `{n}` and `{t}` in `run_series`, `{d}` in `run_pause` and `run_missed`, `{n}` and `{m}` in `units_running`
 
 ## Top-level keys
 
 ```text
 not_found
+start
+start_link
 title
 heat_pump
+boiler
+boiler_off
 dhw
 buffer
 series_tank
@@ -39,6 +44,9 @@ dew_point
 dew_margin
 dew_warning
 flow_short
+comfort_below
+comfort_on
+comfort_above
 running
 compressor_off
 source_in
@@ -60,26 +68,46 @@ diagnostic_failed
 fullscreen_open
 fullscreen_close
 source_flow
-return_short
 target
 curve_offset
 curve_shift
-middle
-bottom
-brine_pressure
-hc_pressure
-pressure_normal
-pressure_warning
-pressure_critical
+mixer
+mixer_opening
+mixer_closing
+return_short
 error
 circulation
 circulation_from
 circulation_until
 valve_dhw
 solar
+brine_pressure
+hc_pressure
+pressure_normal
+pressure_warning
+pressure_critical
 timeline_title
 timeline_gap
 timeline_aria
+run_series
+run_pause
+run_partial
+run_ongoing
+run_phase
+run_close
+run_electricity
+run_heat
+sec_units
+unit
+units_running
+unit_off
+unit_stale
+run_flow
+run_reached
+run_missed
+run_heater
+run_on
+run_off
 valve_heating
 valve_cooling
 bypass
@@ -185,6 +213,7 @@ dhw_top
 room
 brine_pressure
 hc_pressure
+hc_spread
 pv_share
 pv_boost_share
 pv_production

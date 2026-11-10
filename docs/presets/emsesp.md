@@ -18,19 +18,32 @@ What you get:
 - heat output ("compressor power output", `hppower` / `boiler_compressor_power_output`, kW)
 - fan speed (long names: `boiler_fan_speed`)
 - heat carrier flow and return (TC1/TC0, falling back to the boiler flow and return)
-- flow rate PC0
+- flow rate PC0 (`pc0flow` / `boiler_flow_pc0`)
 - air inlet (TL2), or brine inlet and outlet for ground source heat pumps (`source_type: brine`)
 - auxiliary heater status as the backup heater
 - outdoor temperature
 - DHW temperature, target and circulation
 - circuit 1 flow: the mixer module flow, or with TC1 the boiler's current flow temperature (T0, flow to the heating side)
 - circuit target flow from the thermostat (`hc_setpoint`), circuit pump
+- with TC1, circuit 1 pump and flow rate from PC1 (`pc1on`, else `pc1rate`; `pc1flow`)
 - thermostat room temperature and target
-- details: compressor operating time and starts, total energy consumed and supplied, compressor speed, refrigerant temperatures (PL1 or evaporator inlet TR4, PH1, TR3, TR5, TR6), expansion valve (VR1)
+- details: compressor operating time (`uptimecontrol`, "total operating time heat") and starts, total energy consumed and supplied, compressor speed, refrigerant temperatures (PL1 or evaporator inlet TR4, PH1, TR3, TR5, TR6), expansion valve (VR1)
 
 **Compressor:** with long names the compressor speed comes before `binary_sensor.boiler_hp_compressor`, which read off while the compressor ran on a WLW166i with EMS-ESP 3.9.0-dev (#287).
 
-**Heating circuit:** the thermostat's flow temperature is a target, so it is the circuit target, not its flow. On WLW indoor units TC1 is the flow from the outdoor unit and T0 (`boiler_current_flow_temperature`) the flow to the heating side; there is no return sensor of the heating circuit (#224). The heater stages `el_heater_step_1` … `_3` are stages of the electric flow heater, not tank heater rods at three heights.
+**Operating time:** the compressor hours and the hours tile come from `uptimecontrol` (long name `total_operating_time_heat`), the operating time of all modes. `uptimetotal` ("heatpump total uptime") also counts standby, and `uptimecomp` belongs to hot water (`dhw_uptimecomp`), so neither is used (#333).
+
+**Heating circuit:** the thermostat's flow temperature is a target, so it is the circuit target, not its flow. On WLW indoor units TC1 is the flow from the outdoor unit and T0 (`boiler_current_flow_temperature`) the flow to the heating side; there is no return sensor of the heating circuit (#224). A return sensor fitted later can be added with `entities: { hc_return: … }`. The indoor unit has two pumps: PC0 for the heat pump circuit (flow rate as `volume`) and PC1 for the first heating circuit (`hc_pump`, `hc_volume`). Below about 50 % speed PC0 reports no flow rate; a template sensor that estimates it from `hpcircspd` can be set as `volume`. The heater stages `el_heater_step_1` … `_3` are stages of the electric flow heater, not tank heater rods at three heights.
+
+**Tank sensor TW1:** towers with an integrated hot-water tank (Buderus T180, #224) have a second tank sensor: TW2 at the top is the current hot-water temperature (`wwcurtemp`), TW1 (`boiler_hptw1`, long name `boiler_reservoir_temp_tw1`) sits in the middle. On the T180 the two are separate sensors that differ a lot: TW1 drops sooner when hot water is drawn and shows a defrost from the tank, TW2 above the coil does not (#224). On units with one tank sensor TW1 can be the same sensor as the current temperature, and the entities do not tell a tower from such a unit, so the preset does not map it on its own. On a tower it can be added with `entities: { dhw_middle: sensor.boiler_hptw1 }`.
+
+**Valve and expansion valve:** the 3-way valve comes from the heat pump's `hp3way` (binary sensor, else the switch) before the boiler's DHW valve flag: on a WLW indoor unit only `hp3way` also switches when hot water is used for defrosting (#224). The expansion valve is VR1 (`expvalve`, long name `expansion_valve_vr1`); larger outdoor units also report VR0 (`recvalve`), which is not mapped.
+
+**Energy counters:** the counters with two decimals of CS5800/6800i and WLW176/186i come first: `metertotal`, `meterheat`, `dhw_meter`, `metercool`, `metereheat` for electricity and `nrgtotal`, `nrgheat`, `dhw_nrg`, `nrgcool` for heat (#346). Other units keep the whole-kWh counters (`nrgcons…`, `nrgsupp…`), and the COP of a day moves in coarser steps there. Week, month and year come from the long-term statistics of the entity in use, so an entity recorded for a shorter time shows less history at first.
+
+**Writable values with short names:** EMS-ESP publishes values that can be changed as `number` and `switch` entities, so the preset also looks for the hot-water target `number.boiler_dhw_seltemp` (older `wwseltemp`), the room target `number.thermostat_hc1_seltemp`, circulation `switch.boiler_dhw_circ` (older `wwcirc`) and the mixer circuit pump `switch.mixer_hc1_pumpstatus`. The 3-way valve is also found as `dhw_3wayvalve` (older `ww3wayvalve`), the boiler heating pump of a direct circuit as `heatingpump`, and the "circulation pump fitted" switch as `dhw_circpump`. Taken from a Bosch Compress with mixer module and EMS-ESP MQTT discovery.
+
+**Hot-water target:** the tank shows the setpoint the boiler currently works to, `sensor.boiler_dhw_settemp` (older `wwsettemp`). It follows the comfort mode: a Bosch Compress in Eco+ charges to 50 °C while the selected temperature `dhw_seltemp` reads 48 °C. The selected temperature (sensor, then number, long name `dhw_selected_temperature`) stays the fallback. The long-name counterpart of `settemp` is not mapped, because no installation with long names has confirmed its id yet.
 
 Without a heat output sensor, the heat output is estimated from flow rate × spread. With `hc_count: 2` (up to 6) the mixer and thermostat entities of the further circuits are added; `index: {hc: 2}` starts at circuit 2 instead.
 

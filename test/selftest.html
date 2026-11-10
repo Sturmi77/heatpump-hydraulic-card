@@ -13,6 +13,13 @@
 <body>
 <pre id="result">RUNNING</pre>
 <pre id="log"></pre>
+<script>
+  // Without Home Assistant the editor falls back to the browser language. The checks expect English texts, so the browser
+  // language is fixed here: a self-test run in a German (or any other) browser gives the same result as the English CI.
+  // Checks of the language fallback set the Home Assistant locale themselves.
+  Object.defineProperty(navigator, 'language', { get: () => 'en-US', configurable: true });
+  Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'], configurable: true });
+</script>
 <script src="../dist/heatpump-hydraulic-card.js"></script>
 <script src="../demo/setups.js"></script>
 <script src="drawing-collisions.js"></script>
@@ -42,7 +49,7 @@
     callService: () => Promise.resolve(),
   });
   const mount = (config, hass) => {
-    C._energyPrefs = null;
+    C._energyPrefs = null; C._energyPrefsValue = null;
     const card = document.createElement('heatpump-flow-card');
     card.setConfig(config);
     document.body.appendChild(card);
@@ -151,6 +158,8 @@
 
   // 5. detection: the right preset for each installation, nothing for gas boilers or foreign entities
   check(HFC_PRESETS.heishamon.tested === true, 'HeishaMon preset is marked real-installation tested');
+  check(HFC_PRESETS.vicare.tested === true && HFC_PRESETS.ebusd.tested === true, 'ViCare (#282) and ebusd (#295) presets are marked real-installation tested');
+  check(HFC_PRESETS.espaltherma.tested === true, 'ESPAltherma preset is marked real-installation tested on an EPRA12EAV3 (#254)');
 
   // 5-00. Two integrations for one heat pump (#143): the preset with more live core entities wins, a tie keeps the order
   {
@@ -327,6 +336,32 @@
     check(grouped.prefix === 'ebusd_arotherm_ebusd_arotherm'
       && ['mode', 'flow', 'return', 'power', 'heat'].every((key) => grouped.entities[key]?.startsWith(`sensor.${grouped.prefix}_`)),
     `ebusd selects one most-complete daemon for every mapping (${grouped.prefix})`);
+    // #338: CurrentYieldPower is the environmental yield, so heat is yield + consumed power; RunDataHeatOutput comes first.
+    const gp = `sensor.${grouped.prefix}_hmu_`;
+    check(JSON.stringify(grouped.sums.heat) === JSON.stringify([`${gp}currentyieldpower`, `${gp}currentconsumedpower`]),
+      `#338: ebusd heat is the sum of yield and consumed power (${JSON.stringify(grouped.sums.heat)})`);
+    const yc = mount({ preset: 'ebusd' }, hassOf(multi, multiReg)); await wait(20);
+    check(yc._kw('heat') === 6 && /COP 5\.0/.test(yc.shadowRoot.getElementById('t-hp-cop')?.textContent || ''), `#338: heat 4.8 + 1.2 kW, COP 5.0 (${yc._kw('heat')} kW)`);
+    yc.remove();
+    const withOutput = C._resolve({ preset: 'ebusd' }, hassOf({ ...multi, ...toStates({ [`${gp}rundataheatoutput`]: ['6.1', 'kW'] }) }, { ...multiReg, [`${gp}rundataheatoutput`]: { platform: 'mqtt' } }));
+    const own = C._resolve({ preset: 'ebusd', entities: { heat: 'sensor.my_heat' } }, hassOf(multi, multiReg));
+    check(withOutput.entities.heat === `${gp}rundataheatoutput` && !withOutput.sums.heat && own.entities.heat === 'sensor.my_heat' && !own.sums.heat,
+      '#338: RunDataHeatOutput is taken directly, and an own heat entity replaces the preset sum');
+    // Review of #350: an entity that reports no value does not take the place of the sum, also on a running card.
+    const outReg = { ...multiReg, [`${gp}rundataheatoutput`]: { platform: 'mqtt' } };
+    const outHass = (state) => hassOf({ ...multi, ...toStates({ [`${gp}rundataheatoutput`]: [state, 'kW'] }) }, outReg);
+    const gone = C._resolve({ preset: 'ebusd' }, outHass('unavailable'));
+    const onlyOutput = C._resolve({ preset: 'ebusd' }, hassOf(Object.fromEntries(Object.entries({ ...multi, ...toStates({ [`${gp}rundataheatoutput`]: ['unavailable', 'kW'] }) })
+      .filter(([id]) => !id.endsWith('_currentyieldpower'))), outReg));
+    check(gone.entities.heat === `${gp}currentyieldpower` && gone.sums.heat?.length === 2 && onlyOutput.entities.heat === `${gp}rundataheatoutput` && !onlyOutput.sums.heat,
+      `#338: without a value of RunDataHeatOutput the sum takes over, without the sum the direct entity stays (${gone.entities.heat} / ${onlyOutput.entities.heat})`);
+    const live = mount({ preset: 'ebusd' }, outHass('6.1')); await wait(20);
+    const direct = live._kw('heat');
+    live._checkedAt = 0; live.hass = outHass('unavailable'); await wait(20);
+    const back = live._kw('heat');
+    live._checkedAt = 0; live.hass = outHass('6.2'); await wait(20);
+    check(direct === 6.1 && back === 6 && live._kw('heat') === 6.2, `#338: a running card follows the value of RunDataHeatOutput (${direct} / ${back} / ${live._kw('heat')})`);
+    live.remove();
     const explicit = C._resolve({ preset: 'ebusd', prefix: 'ebus_arotherm' }, hassOf(multi, multiReg));
     check(explicit.prefix === 'ebus_arotherm' && ['mode', 'flow', 'return'].every((key) => explicit.entities[key]?.startsWith('sensor.ebus_arotherm_'))
       && explicit.entities.power === undefined, 'a full ebusd prefix selects one instance explicitly without falling back to another');
@@ -511,6 +546,382 @@
     const report = C._diagnosticReport({ preset: 'vicare' }, hassOf(state('ready', 'on', '29'), registry));
     check(report.includes('Hot water without a valve entity: while the heat pump runs and flow is above dhw_top'), 'ViCare: the report names the hot-water rule');
     card.remove();
+
+    // #344: without a buffer and with one circuit the reported circuit pump is the indoor unit's pump in front of the valve. It is
+    // drawn as the primary pump and runs for hot water too; the circuit has no pump of its own and no flow while the tank charges.
+    const pumps = async (states, config = {}, reg = registry) => {
+      const c = mount({ preset: 'vicare', ...config }, hassOf(states, reg)); await wait(20);
+      const sr = c.shadowRoot; const m = c._flowModel();
+      const out = { primary: !!sr.getElementById('impeller-primary'), primaryOn: !!sr.getElementById('impeller-primary')?.classList.contains('on'),
+        circuit: !!sr.getElementById('impeller'), hc: !!m.pipes['hc-vl'], dhw: m.toDhw };
+      c.remove(); return out;
+    };
+    let p = await pumps(state('ready', 'on', '48'));
+    check(p.primary && p.primaryOn && !p.circuit && p.dhw && !p.hc, `ViCare without buffer: the pump runs in front of the valve during a hot-water charge, the circuit stands (${JSON.stringify(p)})`);
+    p = await pumps(state('ready', 'on', '29'));
+    check(p.primary && p.primaryOn && !p.circuit && p.hc, `ViCare without buffer: heating moves the water through the circuit (${JSON.stringify(p)})`);
+    p = await pumps(state('ready', 'off', '30', { 'binary_sensor.v250_hc_pump': 'off' }));
+    check(p.primary && !p.primaryOn && !p.hc, `ViCare without buffer: pump off, nothing moves (${JSON.stringify(p)})`);
+    p = await pumps(state('ready', 'on', '48'), { primary_pump: false });
+    check(!p.primary && p.circuit, `primary_pump: false keeps the pump on the circuit (${JSON.stringify(p)})`);
+    p = await pumps(state('ready', 'on', '48'), { entities: { hc_pump: 'binary_sensor.v250_hc_pump' } });
+    check(!p.primary && p.circuit, 'a circuit pump set in the configuration stays a circuit pump');
+    const bufReg = { ...registry, 'sensor.v250_buffer': { platform: 'vicare', translation_key: 'buffer_top_temperature' } };
+    p = await pumps(state('ready', 'on', '48', { 'sensor.v250_buffer': ['35', '°C'] }), {}, bufReg);
+    check(!p.primary && p.circuit, `with a buffer the ViCare circuit pump stays on the circuit (${JSON.stringify(p)})`);
+    p = await pumps(state('ready', 'on', '48'), { hc_count: 2 });
+    check(!p.primary && p.circuit, 'with two circuits the ViCare circuit pump stays on the circuit');
+    const sharedReport = C._diagnosticReport({ preset: 'vicare' }, hassOf(state('ready', 'on', '48'), registry));
+    check(/primary pump: yes, the circuit pump of the preset \(one circuit, no buffer\)/.test(sharedReport), 'the report names the shared pump');
+  }
+  {
+    // #324: runs of the timeline from the compressor; the operating periods inside a run are its phases.
+    const M = 60000;
+    const card = mount({ entities: { mode: 'sensor.m', compressor: 'sensor.c' } }, hassOf(toStates({ 'sensor.m': 'idle', 'sensor.c': ['0', 'Hz'] }))); await wait(20);
+    check(card._timelineIds().cycle === 'sensor.c' && !card._timelineIds().comp, 'with a mode the runs read the compressor as `cycle`, the segments stay on the mode');
+    const speedOnly = mount({ entities: { mode: 'sensor.m', compressor_speed: 'sensor.cs' } }, hassOf(toStates({ 'sensor.m': 'idle', 'sensor.cs': ['0', '%'] }))); await wait(20);
+    check(speedOnly._timelineIds().cycle === 'sensor.cs', 'without a compressor entity the compressor speed delimits the runs (Lambda)');
+    speedOnly.remove();
+    const h = (pairs) => pairs.map(([t, s]) => ({ t: t * M, s }));
+    const hist = {
+      'sensor.m': h([[0, 'idle'], [10, 'heating'], [22, 'dhw'], [40, 'idle'], [50, 'heating'], [52, 'defrost'], [55, 'heating'], [70, 'idle']]),
+      'sensor.c': h([[0, '0'], [10, '45'], [40, '0'], [50, '30'], [70, '0.0'], [75, '20'], [80, 'unavailable'], [82, '20'], [90, '0']]),
+    };
+    const ids = { mode: 'sensor.m', cycle: 'sensor.c' };
+    const runsOf = (hh, ii, s, e) => card._timelineRuns(hh, ii, card._timelineSegments(hh, ii, s * M, e * M), s * M, e * M);
+    const fmt = (runs) => runs.map((r) => `${r.kind}:${r.from / M}-${r.to / M}:s${r.series}${r.pause !== null ? `:p${r.pause / M}` : ''}${r.partial ? ':partial' : ''}${r.ongoing ? ':ongoing' : ''}`).join(' ');
+    const runs = runsOf(hist, ids, 0, 100);
+    check(fmt(runs) === 'heat:10-22:s1 dhw:22-40:s1 heat:50-70:s2:p10 heat:75-80:s3:p5 heat:82-90:s4:p2',
+      `runs: heating and hot water divide a run, defrost stays in its part, unavailable ends a run, short pauses continue the series (${fmt(runs)})`);
+    check(runs[2].phases.map((p) => `${p.kind}:${p.from / M}-${p.to / M}`).join() === 'heat:50-52,defrost:52-55,heat:55-70' && runs[0].seriesFrom === 10 * M && runs[4].seriesFrom === 10 * M,
+      `a run keeps its phases and the start of its series (${runs[2].phases.map((p) => p.kind).join()})`);
+    // A modulating heat pump runs for a day with hot-water charges inside; a defrost between them stays with the period before it.
+    const day = runsOf({ 'sensor.m': h([[0, 'heating'], [30, 'dhw'], [50, 'defrost'], [55, 'heating'], [100, 'pv'], [110, 'dhw'], [120, 'heating']]), 'sensor.c': h([[0, '40'], [130, '0']]) }, ids, 5, 125);
+    check(fmt(day) === 'heat:5-30:s1:partial dhw:30-55:s1 heat:55-110:s1 dhw:110-120:s1 heat:120-125:s1:ongoing' && day[1].phases.map((p) => p.kind).join() === 'dhw,defrost' && day[2].pause === null,
+      `a long run is divided at hot water, defrost stays in its period, pv counts as heating, only the first part is partial (${fmt(day)})`);
+    // An SG-Ready overlay replaces the kind of a segment; a boost during a charge does not cut the charge into three periods.
+    const sgSegs = [['dhw', 0, 20], ['sg-boost', 20, 30], ['dhw', 30, 60], ['heat', 60, 80]].map(([kind, from, to]) => ({ kind, from: from * M, to: to * M }));
+    const sgRuns = card._timelineRuns({ 'sensor.c': h([[0, 'on'], [80, 'off']]) }, { cycle: 'sensor.c' }, sgSegs, 0, 90 * M);
+    check(fmt(sgRuns) === 'dhw:0-60:s1:partial heat:60-80:s1', `an SG-Ready overlay does not divide a run (${fmt(sgRuns)})`);
+    const cut = runsOf({ 'sensor.m': h([[0, 'heating'], [40, 'idle'], [55, 'heating']]), 'sensor.c': h([[0, 'on'], [40, 'off'], [55, 'on']]) }, ids, 20, 60);
+    check(fmt(cut) === 'heat:20-40:s1:partial heat:55-60:s2:p15:ongoing', `runs cut by the window are partial or ongoing (${fmt(cut)})`);
+    const apart = runsOf({ 'sensor.m': h([[0, 'heating']]), 'sensor.c': h([[0, 'off'], [10, 'on'], [20, 'off'], [100, 'on'], [110, 'off']]) }, ids, 0, 120);
+    check(fmt(apart) === 'heat:10-20:s1 heat:100-110:s1:p80', `a standstill of an hour or more starts a new series (${fmt(apart)})`);
+    // Without a compressor, a stretch of operating periods without a pause is one phase run.
+    const phase = runsOf({ 'sensor.m': h([[0, 'idle'], [10, 'heating'], [20, 'defrost'], [22, 'heating'], [30, 'idle'], [40, 'dhw'], [50, 'idle']]) }, { mode: 'sensor.m' }, 0, 60);
+    check(fmt(phase) === 'heat:10-30:s1 dhw:40-50:s2:p10' && phase.every((r) => r.source === 'phase'), `without a compressor the runs are phases (${fmt(phase)})`);
+    const unrecorded = runsOf({ 'sensor.m': h([[0, 'idle'], [10, 'heating'], [30, 'idle']]) }, ids, 0, 60);
+    check(fmt(unrecorded) === 'heat:10-30:s1' && unrecorded[0].source === 'phase', `a compressor without recorded history leaves the mode phases (${fmt(unrecorded)})`);
+    card.remove();
+  }
+  {
+    // One rule for "the compressor runs": the live view, the timeline segments and the runs agree on every state.
+    const M = 60000;
+    const states = ['on', 'off', '1', '0', '0.00', '-1', '42', '12.5 Hz', 'standby', 'Running', 'true', 'false'];
+    const card = mount({ entities: { compressor: 'sensor.c' } }, hassOf(toStates({ 'sensor.c': '0' }))); await wait(20);
+    const live = (s) => { card._hass.states['sensor.c'].state = s; return card._flowModel().running; };
+    const hist = { 'sensor.c': states.map((s, n) => ({ t: n * 10 * M, s })) };
+    const ids = card._timelineIds();
+    const segs = card._timelineSegments(hist, ids, 0, states.length * 10 * M);
+    const segAt = (n) => segs.find((x) => x.from <= n * 10 * M && x.to > n * 10 * M)?.kind;
+    const runs = card._timelineRuns(hist, { cycle: 'sensor.c' }, [], 0, states.length * 10 * M);
+    const runAt = (n) => runs.some((r) => r.from <= n * 10 * M && r.to > n * 10 * M);
+    const rows = states.map((s, n) => `${s}:${live(s) ? 1 : 0}${segAt(n) === 'heat' ? 1 : 0}${runAt(n) ? 1 : 0}`);
+    const expected = 'on:111 off:000 1:111 0:000 0.00:000 -1:000 42:111 12.5 Hz:111 standby:000 Running:000 true:111 false:000';
+    check(rows.join(' ') === expected, `compressor on: live view, timeline and runs follow one rule (${rows.join(' ')})`);
+    card.remove();
+  }
+  {
+    // #365: run_signal on the ebusd cascade of #173. Status code and compressor speed update only hourly; the unit power and the
+    // station's hot-water flag within a minute. Times in minutes from 04:00.
+    const M = 60000;
+    const h = (pairs) => pairs.map(([t, s]) => ({ t: t * M, s: String(s) }));
+    const cfg = (extra = {}) => ({
+      entities: { mode: 'sensor.m', compressor: 'sensor.c', valve: 'binary_sensor.v' },
+      mode_map: { heat: 'heating', hwc: 'dhw', deicing_active: 'defrost', standby: 'idle' },
+      units: [{ power: 'sensor.p1', heat: 'sensor.h1' }, { power: 'sensor.p2', heat: 'sensor.h2' }], run_signal: 'units', ...extra,
+    });
+    const live = { 'sensor.m': 'standby', 'sensor.c': ['0', '%'], 'binary_sensor.v': 'off', 'sensor.p1': ['20', 'W'], 'sensor.p2': ['10', 'W'],
+      'sensor.h1': ['0', 'kW'], 'sensor.h2': ['0', 'kW'] };
+    const hist = {
+      'sensor.m': h([[0, 'standby'], [103, 'heat'], [223, 'standby'], [402, 'hwc'], [462, 'standby']]),
+      'sensor.c': h([[0, '0'], [103, '40'], [223, '0']]),
+      'binary_sensor.v': h([[0, 'off'], [391, 'on'], [415.5, 'off'], [429, 'on'], [449.5, 'off']]),
+      // Heating 05:00–07:25 with a one-minute dip at 05:30; hot water 10:31–10:52 and 11:09–11:26; a 20-second spike at 12:20.
+      'sensor.p1': h([[0, 20], [60, 1500], [90, 30], [91, 1400], [205, 25], [391, 1800], [412, 20], [429, 1700], [446, 20], [500, 60], [500 + 1 / 3, 20]]),
+      'sensor.p2': h([[0, 10]]),
+    };
+    const fmt = (runs) => runs.map((r) => `${r.kind}:${Math.round(r.from / M)}-${Math.round(r.to / M)}`).join(' ');
+    const segsOf = (c, hh, ids) => c._timelineSegments(hh, ids, 0, 600 * M);
+    let card = mount(cfg(), hassOf(toStates(live))); await wait(20);
+    let ids = card._timelineIds();
+    check(JSON.stringify(ids.sig) === '["sensor.p1","sensor.p2"]' && ids.valve === 'binary_sensor.v' && ids.mode === 'sensor.m' && ids.cycle === 'sensor.c',
+      `run_signal units: the timeline asks for the unit power and keeps mode and compressor for the fallback (${JSON.stringify(ids)})`);
+    let segs = segsOf(card, hist, ids);
+    let runs = card._timelineRuns(hist, ids, segs, 0, 600 * M);
+    check(fmt(runs) === 'heat:60-205 dhw:391-412 dhw:429-446',
+      `run_signal units: heating 05:00–07:25 despite the hourly status, two hot-water runs from the valve, a short dip keeps one run, a spike is no run (${fmt(runs)})`);
+    check(segs.map((s) => `${s.kind}:${Math.round(s.from / M)}`).join(' ') === 'idle:0 heat:60 idle:205 dhw:391 idle:412 dhw:429 idle:446',
+      `run_signal units: the timeline bar follows the same signal (${segs.map((s) => `${s.kind}:${Math.round(s.from / M)}`).join(' ')})`);
+    // Without recorded power the compressor and the mode decide as before.
+    const noPower = { ...hist }; delete noPower['sensor.p1']; delete noPower['sensor.p2'];
+    runs = card._timelineRuns(noPower, ids, segsOf(card, noPower, ids), 0, 600 * M);
+    check(fmt(runs) === 'heat:103-223', `run_signal: without recorded power the timeline falls back to the compressor and the mode (${fmt(runs)})`);
+    card.remove();
+    // Live: WP1 charges hot water while the hourly status still says deicing_active and the compressor speed 0.
+    const charging = { ...live, 'sensor.m': 'deicing_active', 'binary_sensor.v': 'on', 'sensor.p1': ['1600', 'W'], 'sensor.h1': ['5', 'kW'] };
+    card = mount(cfg(), hassOf(toStates(charging))); await wait(20);
+    let m = card._flowModel();
+    check(m.running && m.hp === 'dhw' && !m.defrost, `run_signal units: live hot water from the valve, not defrost from a stale status (${m.hp} / ${m.running} / ${m.defrost})`);
+    card.remove();
+    card = mount(cfg({ run_signal: undefined }), hassOf(toStates(charging))); await wait(20);
+    m = card._flowModel();
+    check(m.hp === 'defrost', `without run_signal the status still decides (${m.hp})`);
+    card.remove();
+    card = mount(cfg(), hassOf(toStates({ ...charging, 'sensor.p1': ['30', 'W'] }))); await wait(20);
+    m = card._flowModel();
+    check(!m.running && m.hp === 'idle' && !m.toDhw, `run_signal units: below 50 W the valve on hot water counts for nothing (${m.hp} / ${m.running})`);
+    card.remove();
+    // run_signal power: the same runs from the summed power above power_threshold.
+    card = mount(cfg({ run_signal: 'power', units: undefined, power_threshold: 100, entities: { mode: 'sensor.m', compressor: 'sensor.c', valve: 'binary_sensor.v', power: 'sensor.p1' } }),
+      hassOf(toStates(live))); await wait(20);
+    ids = card._timelineIds(); segs = segsOf(card, hist, ids); runs = card._timelineRuns(hist, ids, segs, 0, 600 * M);
+    check(JSON.stringify(ids.sig) === '["sensor.p1"]' && fmt(runs) === 'heat:60-205 dhw:391-412 dhw:429-446', `run_signal power: runs from power above power_threshold (${fmt(runs)})`);
+    card.remove();
+    // Without its source the option does nothing, and the report says so.
+    card = mount(cfg({ units: undefined }), hassOf(toStates(live))); await wait(20);
+    check(!card._timelineIds().sig && !card._runSignal(), 'run_signal units without units: the compressor and the mode decide');
+    card.remove();
+    const report = (c) => C._diagnosticReport(c, hassOf(toStates(live)));
+    check(report(cfg()).includes('Runs from: unit power above 50 W (run_signal: units)') && report(cfg({ units: undefined })).includes('run_signal: units, but no units are configured')
+      && report({ entities: { power: 'sensor.p1' } }).includes('Runs from: compressor or operating mode'), 'the diagnostic report names the run source');
+    // Review of #377: a valve that reports 1 is on hot water in the timeline as it is live; a lock stays a lock above the
+    // threshold; `power` adds the members that report a number; the PV-share query gets flat entity ids.
+    const pcfg = (extra = {}) => cfg({ run_signal: 'power', units: undefined, power_threshold: 100,
+      entities: { mode: 'sensor.m', valve: 'binary_sensor.v', power: ['sensor.p1', 'sensor.p3'], pv_boost: 'binary_sensor.pv' }, ...extra });
+    const queries = [];
+    const ph = { ...hassOf(toStates({ ...live, 'sensor.p3': ['0', 'W'], 'binary_sensor.pv': 'off' })), callWS: (q) => { queries.push(q); return Promise.resolve({}); } };
+    card = mount(pcfg(), ph); await wait(20);
+    ids = card._timelineIds();
+    const one = { ...hist, 'binary_sensor.v': h([[0, '0'], [391, '1'], [415.5, '0'], [429, '1'], [449.5, '0']]) };
+    runs = card._timelineRuns(one, ids, segsOf(card, one, ids), 0, 600 * M);
+    check(fmt(runs) === 'heat:60-205 dhw:391-412 dhw:429-446', `run_signal power: a valve reporting 1 is hot water, a member without history leaves the sum of the others (${fmt(runs)})`);
+    card._pvShare('today');
+    const pvq = queries.find((q) => q.type === 'history/history_during_period');
+    check(!!pvq && pvq.entity_ids.every((id) => typeof id === 'string') && pvq.entity_ids.includes('sensor.p1'), `run_signal: the PV-share query has flat entity ids (${JSON.stringify(pvq?.entity_ids)})`);
+    card.remove();
+    card = mount(pcfg({ mode_map: { lock: 'blocked', standby: 'idle' } }), hassOf(toStates({ ...live, 'sensor.m': 'lock', 'sensor.p1': ['200', 'W'], 'sensor.p3': ['0', 'W'], 'binary_sensor.pv': 'off' })));
+    await wait(20);
+    m = card._flowModel();
+    check(m.hp === 'blocked', `run_signal power: a utility lock stays a lock while the power is above the threshold (${m.hp})`);
+    card.remove();
+    let err = null;
+    try { document.createElement('heatpump-flow-card').setConfig({ run_signal: 'fast' }); } catch (e) { err = e; }
+    check(/run_signal must be one of: auto, units, power/.test(err?.message || ''), `run_signal: an unknown value is rejected (${err?.message})`);
+  }
+  {
+    // #326: values of a run from the recorder history of its window only.
+    const M = 60000; const T0 = Date.parse('2030-01-01T10:00:00Z');
+    const at = (min, s) => ({ s: String(s), lu: (T0 + min * M) / 1000 });
+    const series = {
+      'sensor.tank': [at(0, 41.2), at(20, 47), at(40, 52.0)], 'sensor.tgt': [at(0, 52)], 'binary_sensor.rod': [at(0, 'off'), at(25, 'on'), at(35, 'off')],
+      'binary_sensor.aux': [at(0, 'on'), at(10, 'off'), at(30, 'on'), at(32, 'off')], 'binary_sensor.df': [at(0, 'off')],
+      'sensor.f': [at(0, 33), at(20, 35)], 'sensor.r': [at(0, 30), at(20, 31)], 'sensor.hf': [at(0, 31)], 'sensor.hr': [at(0, 29)], 'sensor.set': [at(0, 34)],
+      'sensor.mod': [at(0, 30), at(20, 50)], 'sensor.vol': [at(0, 18), at(10, -1), at(20, 24)], 'sensor.out': [at(0, 3)],
+    };
+    const queries = [];
+    const st = toStates({ 'sensor.tank': ['52', '°C'], 'sensor.tgt': ['52', '°C'], 'binary_sensor.rod': 'off', 'binary_sensor.aux': 'off', 'binary_sensor.norec': 'off',
+      'binary_sensor.df': 'off', 'sensor.f': ['35', '°C'],
+      'sensor.r': ['31', '°C'], 'sensor.hf': ['31', '°C'], 'sensor.hr': ['29', '°C'], 'sensor.set': ['34', '°C'], 'sensor.mod': ['50', '%'], 'sensor.vol': ['18', 'L/min'],
+      'sensor.out': ['3', '°C'], 'sensor.c': ['50', '%'] });
+    const hass = { ...hassOf(st), callWS: (m) => {
+      queries.push(m);
+      return m.type === 'history/history_during_period' ? Promise.resolve(Object.fromEntries(m.entity_ids.map((id) => [id, series[id] || []]))) : Promise.reject(new Error('not simulated'));
+    } };
+    const card = mount({ timeline: true, entities: { compressor: 'sensor.c', dhw_top: 'sensor.tank', dhw_target: 'sensor.tgt', dhw_heater: 'binary_sensor.rod', heater: 'binary_sensor.aux',
+      dhw_heater_top: 'binary_sensor.norec', defrost: 'binary_sensor.df',
+      flow: 'sensor.f', return: 'sensor.r', hc_flow: 'sensor.hf', hc_return: 'sensor.hr', hc_setpoint: 'sensor.set', compressor_speed: 'sensor.mod', volume: 'sensor.vol', outdoor: 'sensor.out' } }, hass);
+    await wait(30);
+    const base = { from: T0, to: T0 + 40 * M, source: 'run', partial: false, ongoing: false, pause: null, series: 1, seriesFrom: T0 };
+    const dhwRun = { ...base, kind: 'dhw', phases: [{ kind: 'dhw', from: T0, to: T0 + 40 * M }] };
+    check(card._runValues(dhwRun).length === 0, 'run values: nothing while the history loads');
+    await wait(20);
+    const q = queries.find((m) => m.type === 'history/history_during_period' && m.end_time);
+    check(q && q.start_time === new Date(T0).toISOString() && q.end_time === new Date(T0 + 40 * M).toISOString(), 'run values: one query for the window of the run');
+    const text = (rows) => rows.map(([k, v]) => `${k}: ${v.replace(/<[^>]+>/g, '')}`).join(' | ');
+    const dhwRows = text(card._runValues(dhwRun));
+    check(/DHW tank: 41\.2 °C → 52\.0 °C \(\+10\.8 K\)/.test(dhwRows) && /Target 52\.0 °C: reached/.test(dhwRows) && /Heater rod: on · 20 min/.test(dhwRows) && /Defrosts: 0/.test(dhwRows),
+      `run values, hot water: tank, target, heaters one after the other add up, an overlap counts once, a heater without history is left out, defrosts (${dhwRows})`);
+    // A run that starts before the first tank sample has no start value: the later sample is not moved back to the start.
+    const early = { ...dhwRun, from: T0 - 10 * M };
+    card._runValues(early); await wait(20);
+    const earlyRows = text(card._runValues(early));
+    check(!/DHW tank/.test(earlyRows) && /Target 52\.0 °C: reached/.test(earlyRows), `run values: no tank start without a sample at or before the start (${earlyRows})`);
+    const heatRun = { ...base, kind: 'heat', phases: [{ kind: 'heat', from: T0, to: T0 + 40 * M }] };
+    card._runValues(heatRun); await wait(20);
+    const heatRows = text(card._runValues(heatRun));
+    check(/Flow Ø: 34\.0 °C \(Target 34\.0\)/.test(heatRows) && /Spread Ø: 3\.5 K · Heating circuit 2\.0 K/.test(heatRows) && /Compressor Ø: 40 %/.test(heatRows)
+      && /Flow rate Ø: 1,?320 l\/h/.test(heatRows) && /Outdoor Ø: 3\.0 °C/.test(heatRows),
+      `run values, heating: time-weighted means, -1 l/min ends the value before it and its gap is left out (${heatRows})`);
+    const html = card._runPanel(heatRun, card._runValues(heatRun));
+    check(/<dl><dt>Flow Ø<\/dt><dd>/.test(html), 'the panel lists the values');
+    // A run that is still going ends "now", which moves with every update: one open-ended query, not one per update.
+    const before = queries.length;
+    card._runValues({ ...heatRun, ongoing: true, to: T0 + 41 * M }); card._runValues({ ...heatRun, ongoing: true, to: T0 + 42 * M }); await wait(20);
+    card._runValues({ ...heatRun, ongoing: true, to: T0 + 43 * M });
+    const open = queries.slice(before);
+    check(open.length === 1 && !open[0].end_time, `an ongoing run asks once, without an end time (${open.length} queries)`);
+    // A run cut by the window starts at the window start, which moves with every update: one identity, one query.
+    const cutBefore = queries.length;
+    card._runValues({ ...heatRun, partial: true, from: T0 + 1 * M }); card._runValues({ ...heatRun, partial: true, from: T0 + 2 * M }); await wait(20);
+    card._runValues({ ...heatRun, partial: true, from: T0 + 3 * M });
+    check(queries.length - cutBefore === 1 && card._runId({ partial: true, from: 5, to: 20 }) === card._runId({ partial: true, from: 9, to: 20 }) && card._runId({ from: 5 }) === '5',
+      `a run cut by the window keeps its identity as the window moves (${queries.length - cutBefore} queries)`);
+    check(card._runId({ partial: true, from: 5, to: 20 }) !== card._runId({ partial: true, from: 30, to: 50 }),
+      'the next run cut by the window is another run, so a selection does not pass to it');
+    card.remove();
+  }
+  {
+    // #327: electricity, heat and COP of a run, integrated from the history of its window, only where the data cover the run.
+    const M = 60000; const T0 = Date.parse('2030-01-01T10:00:00Z');
+    const at = (min, s) => ({ s: String(s), lu: (T0 + min * M) / 1000 });
+    const series = {
+      'sensor.pw': [at(0, 1000), at(20, 1500)], 'sensor.ht': [at(0, 4), at(20, 5)],
+      'sensor.gap': [at(0, 1000), at(10, 'unavailable'), at(30, 1000)],
+      'sensor.vol': [at(0, 900)], 'sensor.f': [at(0, 35)], 'sensor.r': [at(0, 30)],
+      'sensor.u1': [at(0, 600)], 'sensor.h1': [0, 5, 10, 15, 20, 25, 30, 35].map((m) => at(m, 2.4)),
+      'sensor.u2': [at(0, 500)], 'sensor.h2old': [at(-50, 2.0)], 'sensor.h2': [0, 5, 10, 15, 20, 25, 30, 35].map((m) => at(m, 2.0)),
+      'sensor.st': [at(0, 100)],
+    };
+    const st = toStates({ 'sensor.pw': ['1500', 'W'], 'sensor.ht': ['5', 'kW'], 'sensor.gap': ['1000', 'W'], 'sensor.vol': ['900', 'L/h'], 'sensor.f': ['35', '°C'],
+      'sensor.r': ['30', '°C'], 'sensor.c': 'on', 'sensor.u1': ['600', 'W'], 'sensor.h1': ['2.4', 'kW'], 'sensor.u2': ['500', 'W'], 'sensor.h2old': ['2.0', 'kW'],
+      'sensor.h2': ['2.0', 'kW'], 'sensor.st': ['100', 'W'] });
+    const hass = { ...hassOf(st), callWS: (m) => (m.type === 'history/history_during_period'
+      ? Promise.resolve(Object.fromEntries(m.entity_ids.map((id) => [id, series[id] || []]))) : Promise.reject(new Error('not simulated'))) };
+    const run = { from: T0, to: T0 + 40 * M, kind: 'heat', source: 'run', partial: false, ongoing: false, pause: null, series: 1, seriesFrom: T0, phases: [{ kind: 'heat', from: T0, to: T0 + 40 * M }] };
+    const text = (rows) => rows.filter(([k]) => ['Electricity', 'Heat', 'COP'].includes(k)).map(([k, v]) => `${k}: ${v}`).join(' | ');
+    const rowsOf = async (entities, extra = {}) => {
+      const card = mount({ entities: { compressor: 'sensor.c', ...entities }, ...extra }, hass); await wait(20);
+      card._runValues(run); await wait(20);
+      const out = text(card._runValues(run)); card.remove(); return out;
+    };
+    const dense = await rowsOf({ power: 'sensor.pw', heat: 'sensor.ht' });
+    check(dense === 'Electricity: 0.83 kWh | Heat: 3.00 kWh | COP: 3.6', `#327: power and heat integrated over the run, COP from both (${dense})`);
+    const sparse = await rowsOf({ power: 'sensor.gap', heat: 'sensor.ht' });
+    check(sparse === 'Heat: 3.00 kWh', `#327: power valid for 75 % of the run gives no electricity and no COP (${sparse})`);
+    const est = await rowsOf({ power: 'sensor.pw', volume: 'sensor.vol', flow: 'sensor.f', return: 'sensor.r' });
+    check(est === 'Electricity: 0.83 kWh | Heat: ≈3.49 kWh | COP: ≈4.2', `#327: without a heat entity flow rate × spread, marked ≈ (${est})`);
+    const sum = await rowsOf({ power: ['sensor.pw', 'sensor.gap'], heat: 'sensor.ht' });
+    check(sum === 'Heat: 3.00 kWh', `#327: a sum with a member missing for part of the run gives no electricity (${sum})`);
+    const units = (h2) => ({ units: [{ power: 'sensor.u1', heat: 'sensor.h1' }, { power: 'sensor.u2', heat: h2 }] });
+    const cascade = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units('sensor.h2'));
+    check(cascade === 'Electricity: 0.80 kWh | Heat: 2.93 kWh | COP: 3.7', `#327: a cascade with both units' heat covered (${cascade})`);
+    const stale = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units('sensor.h2old'));
+    check(stale === 'Electricity: 0.80 kWh', `#327: an hour-old heat value of a running unit gives no heat and no COP for the run (${stale})`);
+    const noLimit = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, { units: [{ power: 'sensor.u1', heat: 'sensor.h1' }, { power: 'sensor.u2', heat: 'sensor.h2old', heat_max_age: 0 }] });
+    check(noLimit === 'Electricity: 0.80 kWh | Heat: 2.93 kWh | COP: 3.7', `#327: heat_max_age 0 counts an unchanged heat value over the run (${noLimit})`);
+    // Review of #347: freshness applies to each member of a unit's heat list, so a fresh member does not renew a stale one.
+    const member = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units(['sensor.h2', 'sensor.h2old']));
+    check(member === 'Electricity: 0.80 kWh', `#327: a stale member of a unit's heat list leaves the run without heat (${member})`);
+    // #173 beta feedback: a heat key (from a preset, mapped to the first unit only) does not replace the units' heat of a run.
+    const withHeat = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'], heat: 'sensor.ht' }, units('sensor.h2'));
+    check(withHeat === cascade, `#173: with units the run heat comes from the units, not from the heat key (${withHeat})`);
+    const withHeatStale = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'], heat: 'sensor.ht' }, units('sensor.h2old'));
+    check(withHeatStale === 'Electricity: 0.80 kWh', `#173: with units and a heat key, a running unit without current heat leaves the run without heat and COP (${withHeatStale})`);
+    // A flow temperature read from a climate entity: the query asks for attributes, so the hot-water estimate still works.
+    series['climate.fl'] = [{ s: 'heat', a: { current_temperature: 35 }, lu: T0 / 1000 }];
+    hass.states['climate.fl'] = { entity_id: 'climate.fl', state: 'heat', attributes: { current_temperature: 35 } };
+    const asked = [];
+    const askHass = { ...hass, callWS: (m) => { asked.push(m); return hass.callWS(m); } };
+    const dc = mount({ entities: { compressor: 'sensor.c', power: 'sensor.pw', volume: 'sensor.vol', flow: 'climate.fl', return: 'sensor.r' } }, askHass); await wait(20);
+    const dhwRun = { ...run, kind: 'dhw', phases: [{ kind: 'dhw', from: T0, to: T0 + 40 * M }] };
+    dc._runValues(dhwRun); await wait(20);
+    const dhwRows = text(dc._runValues(dhwRun));
+    const q = asked.find((m) => m.type === 'history/history_during_period' && m.end_time);
+    check(q && !q.no_attributes && /Heat: ≈3\.49 kWh/.test(dhwRows), `#327: a climate flow sensor is read from its attribute in a hot-water run (${dhwRows})`);
+    check(dc._runValues(dhwRun) === dc._runValues(dhwRun), '#327: the rows of a run are computed once per history and minute');
+    dc.remove();
+  }
+  {
+    // #173: a cascade of two units with power and heat paired per unit; the hydraulic station's power is part of `power` only.
+    const ago = (min) => new Date(Date.now() - min * 60000).toISOString();
+    const v = (state, unit, min = 0) => ({ state, attributes: { unit_of_measurement: unit }, last_updated: ago(min), last_reported: ago(min) });
+    const base = { 'sensor.m': 'heating', 'binary_sensor.c': 'on', 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.st': ['100', 'W'],
+      'sensor.u1': ['600', 'W'], 'sensor.u2': ['500', 'W'], 'sensor.h1': v('2.8', 'kW'), 'sensor.h2': v('2000', 'W') };
+    const cfg = { entities: { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r', power: ['sensor.u1', 'sensor.u2', 'sensor.st'] },
+      units: [{ name: 'WP 1', power: 'sensor.u1', heat: 'sensor.h1' }, { power: 'sensor.u2', heat: 'sensor.h2' }] };
+    const card = mount(cfg, hassOf(toStates(base))); await wait(20);
+    const txt = (id) => card.shadowRoot.getElementById(id)?.textContent || '';
+    const unitRows = () => (card._drawerRows().find(([title]) => title === 'Units')?.[1] || []).map(([, label, , value]) => `${label}: ${value()}`);
+    check(txt('t-hp-power') === '1,200 W → 4.8 kW' && txt('t-hp-cop') === 'COP 4.0' && /2 of 2 units/.test(txt('t-hp-status')),
+      `#173: both units fresh, heat summed, COP against the whole power (${txt('t-hp-power')} / ${txt('t-hp-cop')} / ${txt('t-hp-status')})`);
+    check(JSON.stringify(unitRows()) === JSON.stringify(['WP 1: 600 W → 2.8 kW · COP 4.7', 'Unit 2: 500 W → 2.0 kW · COP 4.0']), `#173: power, heat and COP per unit (${unitRows().join(' | ')})`);
+    card.hass = hassOf(toStates({ ...base, 'sensor.h2': v('2000', 'W', 61) })); await wait(10);
+    check(txt('t-hp-cop') === '' && txt('t-hp-power') === '1,200 W' && unitRows()[1] === 'Unit 2: 500 W · heat not current' && /COP 4\.7/.test(unitRows()[0]),
+      `#173: a heat value written an hour ago is not paired: no system COP, unit 1 keeps its own (${txt('t-hp-cop')} / ${unitRows().join(' | ')})`);
+    card.hass = hassOf(toStates({ ...base, 'sensor.u2': ['0', 'W'], 'sensor.h2': v('2000', 'W', 61) })); await wait(10);
+    check(txt('t-hp-cop') === 'COP 4.0' && unitRows()[1] === 'Unit 2: off' && /1 of 2 units/.test(txt('t-hp-status')),
+      `#173: a standing unit adds no heat, its old heat value does not matter (${txt('t-hp-cop')} / ${unitRows()[1]} / ${txt('t-hp-status')})`);
+    card.remove();
+    // Review of #347: with a flow rate the heat can be estimated for the display, but an incomplete pair still gives no COP.
+    const est = mount({ ...cfg, entities: { ...cfg.entities, volume: 'sensor.v' } }, hassOf(toStates({ ...base, 'sensor.v': ['900', 'L/h'], 'sensor.h2': v('2000', 'W', 61) }))); await wait(20);
+    const et = (id) => est.shadowRoot.getElementById(id)?.textContent || '';
+    check(/≈5\.2 kW/.test(et('t-hp-power')) && et('t-hp-cop') === '', `#173: an estimated heat does not form a COP while a running unit's heat is not current (${et('t-hp-power')} / "${et('t-hp-cop')}")`);
+    est.remove();
+    // #173 beta feedback: a heat key (a preset maps it to the first unit only) is not used for the system heat with units.
+    const keyed = mount({ ...cfg, entities: { ...cfg.entities, heat: 'sensor.hk' } }, hassOf(toStates({ ...base, 'sensor.hk': ['2.8', 'kW'] }))); await wait(20);
+    const kt = (id) => keyed.shadowRoot.getElementById(id)?.textContent || '';
+    check(kt('t-hp-power') === '1,200 W → 4.8 kW' && kt('t-hp-cop') === 'COP 4.0', `#173: with units the system heat is the units' sum, not the heat key (${kt('t-hp-power')} / ${kt('t-hp-cop')})`);
+    keyed.hass = hassOf(toStates({ ...base, 'sensor.hk': ['2.8', 'kW'], 'sensor.h2': v('2000', 'W', 61) })); await wait(10);
+    check(kt('t-hp-power') === '1,200 W' && kt('t-hp-cop') === '', `#173: with units and a heat key, a running unit without current heat gives no system heat and COP (${kt('t-hp-power')} / "${kt('t-hp-cop')}")`);
+    keyed.remove();
+    // Only the units: power is their sum, and a unit that runs while the compressor entity is off still counts as running.
+    const only = mount({ entities: { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r' }, units: cfg.units },
+      hassOf(toStates({ ...base, 'binary_sensor.c': 'off', 'sensor.u1': ['0', 'W'] }))); await wait(20);
+    const ot = (id) => only.shadowRoot.getElementById(id)?.textContent || '';
+    check(ot('t-hp-power') === '500 W → 2.0 kW' && ot('t-hp-cop') === 'COP 4.0', `#173: without a power key the units' power counts (${ot('t-hp-power')} / ${ot('t-hp-cop')})`);
+    only.remove();
+    // Units alone are a configuration (no onboarding), and their power decides the running state instead of the mode alone.
+    const bare = mount({ units: cfg.units }, hassOf(toStates({ ...base, 'sensor.u1': ['0', 'W'] }))); await wait(20);
+    check(!bare._startState() && (bare.shadowRoot.getElementById('t-hp-power')?.textContent || '') === '500 W → 2.0 kW', '#173: units alone render the card');
+    bare.remove();
+    const still = mount({ entities: { mode: 'sensor.m' }, units: cfg.units }, hassOf(toStates({ ...base, 'sensor.u1': ['0', 'W'], 'sensor.u2': ['0', 'W'] }))); await wait(20);
+    check(!still._flowModel().running, '#173: with every unit at 0 W a mode that stays on heating does not count as running');
+    still.remove();
+    // An MQTT sensor is not written when the same value arrives again, so the limit follows the source: heat_max_age in minutes, 0 for none.
+    const aged = async (limit) => {
+      const k = mount({ ...cfg, units: [cfg.units[0], { ...cfg.units[1], heat_max_age: limit }] }, hassOf(toStates({ ...base, 'sensor.h2': v('2000', 'W', 61) }))); await wait(20);
+      const out = k.shadowRoot.getElementById('t-hp-cop')?.textContent || ''; k.remove(); return out;
+    };
+    const limits = [await aged(30), await aged(90), await aged(0)];
+    check(limits[0] === '' && limits[1] === 'COP 4.0' && limits[2] === 'COP 4.0', `#173: heat_max_age sets the limit of a unit, 0 removes it (${limits.join(' / ')})`);
+    check(/\(written 61 min ago, no age limit\)/.test(C._diagnosticReport({ ...cfg, units: [cfg.units[0], { ...cfg.units[1], heat_max_age: 0 }] }, hassOf(toStates({ ...base, 'sensor.h2': v('2000', 'W', 61) })))),
+      '#173: the report names the age limit');
+    const report = C._diagnosticReport(cfg, hassOf(toStates({ ...base, 'sensor.h2': v('2000', 'W', 61) })));
+    check(report.includes('Units (power and heat per unit):') && report.includes('- unit 2 power: sensor.u2') && /- unit 2 heat: sensor\.h2 .*\(written 61 min ago, limit 10 min\)/.test(report),
+      '#173: the diagnostic report lists the pairs and the age of each heat value');
+    let err = '';
+    try { C.prototype.setConfig.call(Object.create(C.prototype), { units: [{ power: 'sensor.u1' }] }); } catch (e) { err = e.message; }
+    check(/every unit needs a power and a heat entity/.test(err), `#173: a unit without heat is rejected (${err})`);
+    err = '';
+    try { C.prototype.setConfig.call(Object.create(C.prototype), { units: [{ power: 'sensor.u1', heat: 'sensor.h1', heat_max_age: -1 }] }); } catch (e) { err = e.message; }
+    check(/heat_max_age must be a number of minutes/.test(err), `#173: a negative heat_max_age is rejected (${err})`);
+  }
+  {
+    // #346: the counters with two decimals come first where they exist, the whole-kWh counters stay the fallback.
+    const base = { 'sensor.boiler_hpactivity': 'heating', 'sensor.boiler_hptc1': ['30', '°C'], 'sensor.boiler_nrgsuppheating': ['100', 'kWh'], 'sensor.boiler_nrgconstotal': ['50', 'kWh'],
+      'sensor.boiler_nrgsupptotal': ['120', 'kWh'] };
+    const precise = { ...base, 'sensor.boiler_nrgheat': ['100.25', 'kWh'], 'sensor.boiler_metertotal': ['50.31', 'kWh'], 'sensor.boiler_nrgtotal': ['120.75', 'kWh'] };
+    const resolved = (st) => { const s = toStates(st); return C._resolve({ preset: 'emsesp' }, hassOf(s, Object.fromEntries(Object.keys(s).map((id) => [id, { platform: 'mqtt' }])))); };
+    const fine = resolved(precise); const coarse = resolved(base);
+    check(fine.tiles.heat_heating.total === 'sensor.boiler_nrgheat' && fine.tiles.energy.total === 'sensor.boiler_metertotal' && fine.tiles.heat.total === 'sensor.boiler_nrgtotal'
+      && fine.entities.energy_total === 'sensor.boiler_metertotal' && fine.entities.heat_total === 'sensor.boiler_nrgtotal',
+    `#346: EMS-ESP takes the counters with two decimals first (${fine.tiles.heat_heating.total} / ${fine.tiles.energy.total})`);
+    check(coarse.tiles.heat_heating.total === 'sensor.boiler_nrgsuppheating' && coarse.tiles.energy.total === 'sensor.boiler_nrgconstotal' && coarse.entities.energy_total === 'sensor.boiler_nrgconstotal',
+      '#346: without them the whole-kWh counters stay');
+    const gap = resolved({ ...precise, 'sensor.boiler_nrgheat': 'unavailable' });
+    check(gap.tiles.heat_heating.total === 'sensor.boiler_nrgsuppheating' && gap.tiles.energy.total === 'sensor.boiler_metertotal',
+      `#346: a counter that reports no value yields to the next one (${gap.tiles.heat_heating.total})`);
   }
   {
     // #257: the complete "long names" entity list of a Nefit EnviLine (EMS-ESP 3.8.6).
@@ -572,7 +983,7 @@
       'sensor.boiler_heat_carrier_forward_tc1': ['36.3', '°C'], 'sensor.boiler_heat_carrier_return_tc0': ['30.1', '°C'],
       'sensor.boiler_current_flow_temperature': ['32.9', '°C'], 'sensor.boiler_return_temperature': ['30', '°C'],
       'sensor.thermostat_hc1_target_flow_temperature': ['30', '°C'], 'sensor.boiler_outside_temperature': ['6', '°C'],
-      'sensor.boiler_heatpump_total_uptime': ['1122401', 'min'], 'sensor.boiler_total_energy_supplied': ['66061', 'kWh'],
+      'sensor.boiler_heatpump_total_uptime': ['1122401', 'min'], 'sensor.boiler_total_operating_time_heat': ['421700', 'min'], 'sensor.boiler_total_energy_supplied': ['66061', 'kWh'],
       'sensor.boiler_total_energy_consumption': ['15513', 'kWh'], 'sensor.boiler_evaporator_inlet_temperature_tr4': ['2.9', '°C'],
       'sensor.boiler_expansion_valve_vr1': ['20', '%'],
     });
@@ -584,11 +995,11 @@
       `EMS-ESP 3.9 long names: compressor speed, heat output and fan (${e.compressor} / ${e.heat} / ${e.fan_speed})`);
     check(e.hc_flow === 'sensor.boiler_current_flow_temperature' && e.hc_setpoint === 'sensor.thermostat_hc1_target_flow_temperature'
       && e.hc_return === undefined, `EMS-ESP 3.9 long names: circuit flow T0, target as setpoint, no circuit return (${e.hc_flow} / ${e.hc_setpoint} / ${e.hc_return})`);
-    check(e.hours === 'sensor.boiler_heatpump_total_uptime' && e.heat_total === 'sensor.boiler_total_energy_supplied'
+    check(e.hours === 'sensor.boiler_total_operating_time_heat' && e.heat_total === 'sensor.boiler_total_energy_supplied'
       && e.evap_temp === 'sensor.boiler_evaporator_inlet_temperature_tr4' && e.eev === 'sensor.boiler_expansion_valve_vr1',
     `EMS-ESP 3.9 long names: hours, heat counter, evaporator inlet and expansion valve (${e.hours} / ${e.heat_total} / ${e.evap_temp} / ${e.eev})`);
     check(r.tiles.heat?.total === 'sensor.boiler_total_energy_supplied' && r.tiles.energy?.total === 'sensor.boiler_total_energy_consumption'
-      && r.tiles.hours?.total === 'sensor.boiler_heatpump_total_uptime', `EMS-ESP 3.9 long names: catalog tiles from the totals (${JSON.stringify(r.tiles.heat)})`);
+      && r.tiles.hours?.total === 'sensor.boiler_total_operating_time_heat', `EMS-ESP 3.9 long names: catalog tiles from the totals (${JSON.stringify(r.tiles.heat)})`);
     const findings = C._checks({ preset: 'emsesp' }, hass, r).map((f) => f.key);
     check(!['compressor', 'heat', 'fan_speed', 'hours', 'heat_total', 'evap_temp', 'eev', 'hc_flow', 'hc_setpoint'].some((k) => findings.includes(k)),
       `EMS-ESP 3.9 long names: the new mappings pass the plausibility checks (${findings.join(', ')})`);
@@ -600,11 +1011,146 @@
     const plain = C._resolve({ preset: 'emsesp' }, hassOf(noTc1, registry)).entities;
     check(plain.flow === 'sensor.boiler_current_flow_temperature' && !noTc1[plain.hc_flow],
       `EMS-ESP without TC1: the current flow temperature is the heat pump flow, not the circuit flow (${plain.flow} / ${plain.hc_flow})`);
+    check(!noTc1[plain.hc_volume] && !noTc1[plain.hc_pump], `EMS-ESP without TC1: no PC1 circuit pump or flow rate (${plain.hc_volume} / ${plain.hc_pump})`);
+  }
+  {
+    // #333: the compressor operating time is uptimecontrol ("total operating time heat"); uptimetotal counts standby too and
+    // uptimecomp is the hot-water share (dhw tag). The values of chris94834's installation are of this kind.
+    const times = toStates({ 'sensor.boiler_hpactivity': 'heating', 'sensor.boiler_hptc1': ['31.5', '°C'], 'sensor.boiler_uptimetotal': ['1180000', 'min'],
+      'sensor.boiler_uptimecontrol': ['388000', 'min'], 'sensor.boiler_dhw_uptimecomp': ['61000', 'min'], 'sensor.boiler_totalcompstarts': ['9120', ''] });
+    const timesReg = Object.fromEntries(Object.keys(times).map((id) => [id, { platform: 'mqtt' }]));
+    const rt = C._resolve({ preset: 'emsesp' }, hassOf(times, timesReg));
+    check(rt.entities.hours === 'sensor.boiler_uptimecontrol' && rt.tiles.hours?.total === 'sensor.boiler_uptimecontrol',
+      `#333: compressor hours and the hours tile from uptimecontrol (${rt.entities.hours} / ${JSON.stringify(rt.tiles.hours)})`);
+    const { 'sensor.boiler_uptimecontrol': _uc, ...uptimeOnly } = times;
+    const ru = C._resolve({ preset: 'emsesp' }, hassOf(uptimeOnly, timesReg));
+    check(ru.entities.hours !== 'sensor.boiler_uptimetotal' && !uptimeOnly[ru.entities.hours] && ru.tiles.hours?.total !== 'sensor.boiler_uptimetotal',
+      `#333: the total uptime with standby is never taken as compressor hours (${ru.entities.hours})`);
+  }
+  {
+    // #224: Buderus WLW186i with EMS-ESP short names: PC0 is the heat pump circuit, PC1 the pump of the first heating circuit.
+    const states = toStates({
+      'sensor.boiler_hpactivity': 'heating', 'sensor.boiler_hptc1': ['31.5', '°C'], 'sensor.boiler_hptc0': ['27', '°C'],
+      'sensor.boiler_curflowtemp': ['30.2', '°C'], 'sensor.boiler_hpcircspd': ['45', '%'], 'sensor.boiler_pc0flow': ['0', 'l/h'],
+      'sensor.boiler_pc1rate': ['38', '%'], 'sensor.boiler_pc1flow': ['612', 'l/h'],
+    });
+    const registry = Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'mqtt' }]));
+    const e = C._resolve({ preset: 'emsesp' }, hassOf(states, registry)).entities;
+    check(e.flow === 'sensor.boiler_hptc1' && e.return === 'sensor.boiler_hptc0' && e.hc_flow === 'sensor.boiler_curflowtemp' && e.volume === 'sensor.boiler_pc0flow',
+      `EMS-ESP short names on a WLW: TC1/TC0, T0 as circuit flow, PC0 flow rate (${e.flow} / ${e.return} / ${e.hc_flow} / ${e.volume})`);
+    check(e.hc_pump === 'sensor.boiler_pc1rate' && e.hc_volume === 'sensor.boiler_pc1flow',
+      `EMS-ESP short names on a WLW: PC1 rate as the circuit pump, PC1 flow as the circuit flow rate (${e.hc_pump} / ${e.hc_volume})`);
+    const withOn = C._resolve({ preset: 'emsesp' }, hassOf({ ...states, ...toStates({ 'binary_sensor.boiler_pc1on': 'on' }) },
+      { ...registry, 'binary_sensor.boiler_pc1on': { platform: 'mqtt' } })).entities;
+    check(withOn.hc_pump === 'binary_sensor.boiler_pc1on', `EMS-ESP: the PC1 on/off state comes before its rate (${withOn.hc_pump})`);
+    const two = C._resolve({ preset: 'emsesp', hc_count: 2 }, hassOf(states, registry)).entities;
+    check(!states[two.hc2_pump] && !states[two.hc2_volume], 'EMS-ESP: PC1 belongs only to the first circuit');
+    const { 'sensor.boiler_pc1flow': _pc1flow, ...noFlow } = states;
+    const nf = C._resolve({ preset: 'emsesp' }, hassOf(noFlow, registry)).entities;
+    check(nf.hc_volume === undefined, `EMS-ESP: without a PC1 flow entity no circuit flow rate is mapped, so no empty label is drawn (${nf.hc_volume})`);
+    // Review of #297: the PC1 rate in % turns the circuit pump; behind a parallel buffer it alone moves the circuit.
+    const buf = { 'sensor.buf': ['35', '°C'] };
+    const card = mount({ preset: 'emsesp', entities: { buffer_top: 'sensor.buf' } }, hassOf({ ...states, ...toStates(buf) }, registry)); await wait(20);
+    const flows = () => !!card.shadowRoot.getElementById('p-hc-vl')?.classList.contains('on');
+    const at38 = flows();
+    card.hass = hassOf({ ...states, ...toStates({ ...buf, 'sensor.boiler_pc1rate': ['0', '%'] }) }, registry); await wait(5);
+    check(at38 && !flows(), `EMS-ESP: PC1 at 38 % runs the circuit, at 0 % it stands still (${at38} / ${flows()})`);
+    card.remove();
+  }
+  {
+    // EMS-ESP short names with writable values: Bosch Compress with mixer module, the ids of a real installation (EMS-ESP MQTT discovery).
+    const states = toStates({
+      'sensor.boiler_hpactivity': 'Heizen', 'binary_sensor.boiler_hpcompon': 'on', 'sensor.boiler_hptc1': ['27.6', '°C'], 'sensor.boiler_hptc0': ['25', '°C'],
+      'sensor.boiler_hppower': ['1500.0', 'W'], 'sensor.boiler_hpcurrpower': ['286', 'W'], 'sensor.boiler_pc0flow': ['670', 'L/h'],
+      'binary_sensor.boiler_dhw_3wayvalve': 'off', 'number.boiler_dhw_seltemp': ['48', '°C'], 'number.thermostat_hc1_seltemp': ['22', '°C'],
+      'switch.boiler_dhw_circpump': 'on', 'switch.boiler_dhw_circ': 'off', 'switch.mixer_hc1_pumpstatus': 'on', 'binary_sensor.boiler_heatingpump': 'on',
+      'sensor.mixer_hc1_flowtemphc': ['25.3', '°C'], 'sensor.thermostat_hc1_currtemp': ['22.5', '°C'],
+    });
+    const registry = Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'mqtt' }]));
+    const hass = hassOf(states, registry);
+    const r = C._resolve({ preset: 'emsesp' }, hass);
+    const e = r.entities;
+    check(e.valve === 'binary_sensor.boiler_dhw_3wayvalve' && e.heat === 'sensor.boiler_hppower',
+      `EMS-ESP short names: 3-way valve and heat output (${e.valve} / ${e.heat})`);
+    check(e.dhw_target === 'number.boiler_dhw_seltemp' && e.room_target === 'number.thermostat_hc1_seltemp',
+      `EMS-ESP short names: writable hot-water and room targets as number entities (${e.dhw_target} / ${e.room_target})`);
+    check(e.circulation === 'switch.boiler_dhw_circ' && e.hc_pump === 'switch.mixer_hc1_pumpstatus',
+      `EMS-ESP short names: circulation and mixer circuit pump as switches (${e.circulation} / ${e.hc_pump})`);
+    const findings = C._checks({ preset: 'emsesp' }, hass, r).map((f) => f.key);
+    check(!['valve', 'heat', 'dhw_target', 'room_target', 'circulation', 'hc_pump'].some((k) => findings.includes(k)),
+      `EMS-ESP short names: the writable mappings pass the plausibility checks (${findings.join(', ')})`);
+    const card = mount({ preset: 'emsesp' }, hass); await wait(20);
+    check(card._kw('heat') === 1.5, `EMS-ESP short names: heat output 1500 W is 1.5 kW (${card._kw('heat')})`);
+    card.remove();
+    // Without the mixer switch the boiler's heating pump (short name heatingpump) drives the first circuit.
+    const { 'switch.mixer_hc1_pumpstatus': _mixer, ...noMixer } = states;
+    const direct = C._resolve({ preset: 'emsesp' }, hassOf(noMixer, registry)).entities;
+    check(direct.hc_pump === 'binary_sensor.boiler_heatingpump', `EMS-ESP short names: boiler heating pump for a direct circuit (${direct.hc_pump})`);
+    // A circulation pump reported as not fitted under its short name maps no circulation.
+    const noCirc = C._resolve({ preset: 'emsesp' }, hassOf({ ...states, ...toStates({ 'switch.boiler_dhw_circpump': 'off' }) }, registry)).entities;
+    check(noCirc.circulation === undefined, `EMS-ESP short names: no circulation without a fitted circulation pump (${noCirc.circulation})`);
   }
   check(!detects('vicare', { 'sensor.vitodens_outside_temperature': '5', 'sensor.vitodens_boiler_temperature': '60' },
     { 'sensor.vitodens_outside_temperature': { platform: 'vicare', translation_key: 'outside_temperature' } }), 'ViCare gas boiler is not a heat pump');
   check(!detects('lambda', { 'sensor.other_hp1_operating_state': 'x' }, { 'sensor.other_hp1_operating_state': { platform: 'something_else' } }), 'foreign hp1_operating_state is not Lambda');
   check(!detects('samsung', { 'sensor.boiler_3_way_valve': 'Room' }, { 'sensor.boiler_3_way_valve': { platform: 'esphome' } }), 'a 3-way valve without the Samsung error code is not Samsung');
+  {
+    // #254: Daikin Altherma EPRA12EAV3 with ESPAltherma (beta, MQTT device discovery), the ids and values of elRadix's installation.
+    const v = (state, unit) => (unit ? [state, unit] : state);
+    const states = toStates(Object.fromEntries(Object.entries({
+      'sensor.espaltherma_leaving_water_temp_after_buh_r2t': v('30.3', '°C'), 'sensor.espaltherma_leaving_water_temp_before_buh_r1t': v('30.3', '°C'),
+      'sensor.espaltherma_inlet_water_tempr4t': v('27', '°C'), 'sensor.espaltherma_flow_sensor_lmin': v('17', 'L/min'),
+      'sensor.espaltherma_inv_frequency_rps': v('22', 'rps'), 'binary_sensor.espaltherma_defrost_operation': 'off',
+      'binary_sensor.espaltherma_3way_valveondhwoffspace': 'off', 'binary_sensor.espaltherma_buh_step1': 'off', 'binary_sensor.espaltherma_bsh': 'off',
+      'sensor.espaltherma_stats_electrical_input_estimated_kw': v('0.58', 'kW'), 'sensor.espaltherma_stats_heat_output_kw': v('3.91', 'kW'),
+      'sensor.espaltherma_r1toutdoor_air_temp': v('8.5', '°C'), 'sensor.espaltherma_fan_1_step': '8', 'sensor.espaltherma_dhw_tank_temp_r5t': v('20.4', '°C'),
+      'number.espaltherma_hot_water_target': v('54', '°C'), 'sensor.espaltherma_dhw_setpoint': v('54', '°C'),
+      'binary_sensor.espaltherma_circulation_pump_operation': 'off', 'sensor.espaltherma_lw_setpoint_main': v('30', '°C'),
+      'sensor.espaltherma_water_pressure': v('1.5', 'bar'), 'sensor.espaltherma_indoor_ambient_temp_r1t': v('20', '°C'), 'sensor.espaltherma_rt_setpoint': v('20', '°C'),
+      'sensor.espaltherma_stats_compressor_starts_today': '3', 'sensor.espaltherma_stats_cop_today_heating': '5.57',
+      'sensor.espaltherma_discharge_pipe_tempr2t': v('41.3', '°C'), 'sensor.espaltherma_suction_pipe_tempr3t': v('5.7', '°C'),
+      'sensor.espaltherma_heat_exchanger_midtempr5t': v('5.7', '°C'), 'sensor.espaltherma_liquid_pipe_tempr6t': v('26.5', '°C'),
+      'sensor.espaltherma_iu_error_code': ' 0', 'sensor.espaltherma_ou_error_code': ' 0', 'sensor.althermasensors': 'Online',
+    })));
+    const registry = Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'mqtt' }]));
+    const hass = hassOf(states, registry);
+    check(C.getStubConfig(hass).preset === 'espaltherma', `ESPAltherma is detected (${JSON.stringify(C.getStubConfig(hass))})`);
+    const r = C._resolve({ preset: 'espaltherma' }, hass); const e = r.entities;
+    check(r.ready && r.prefix === 'espaltherma' && e.flow === 'sensor.espaltherma_leaving_water_temp_after_buh_r2t' && e.return === 'sensor.espaltherma_inlet_water_tempr4t'
+      && e.volume === 'sensor.espaltherma_flow_sensor_lmin' && e.compressor === 'sensor.espaltherma_inv_frequency_rps' && e.valve === 'binary_sensor.espaltherma_3way_valveondhwoffspace'
+      && e.defrost === 'binary_sensor.espaltherma_defrost_operation' && e.outdoor === 'sensor.espaltherma_r1toutdoor_air_temp' && !e.mode,
+    `ESPAltherma core: R2T, R4T, l/min, inverter, 3-way valve, defrost, outdoor, no mode (${r.prefix} / ${e.flow} / ${e.compressor})`);
+    check(e.power === 'sensor.espaltherma_stats_electrical_input_estimated_kw' && e.heat === 'sensor.espaltherma_stats_heat_output_kw'
+      && e.dhw_top === 'sensor.espaltherma_dhw_tank_temp_r5t' && e.dhw_target === 'number.espaltherma_hot_water_target' && e.dhw_heater === 'binary_sensor.espaltherma_bsh'
+      && e.hc_setpoint === 'sensor.espaltherma_lw_setpoint_main' && e.hc_pressure === 'sensor.espaltherma_water_pressure' && e.room === 'sensor.espaltherma_indoor_ambient_temp_r1t',
+    'ESPAltherma: statistics power and heat, tank, booster heater, circuit 1 target, pressure and room');
+    const findings = C._checks({ preset: 'espaltherma' }, hass, r).map((f) => `${f.key}:${f.code}`);
+    check(!findings.length, `ESPAltherma: the mapping passes the plausibility checks (${findings.join(', ')})`);
+    const card = mount({ preset: 'espaltherma' }, hass); await wait(20);
+    const F = card._flowModel();
+    check(F.running && F.hp === 'heating' && !card.shadowRoot.getElementById('chip-err')?.classList.contains('on'),
+      `ESPAltherma: heating while the inverter runs, " 0" is no error (${F.hp})`);
+    card.hass = hassOf({ ...states, ...toStates({ 'binary_sensor.espaltherma_3way_valveondhwoffspace': 'on', 'sensor.espaltherma_iu_error_code': 'U4' }) }, registry); await wait(5);
+    const dhw = card._flowModel();
+    const errOn = card.shadowRoot.getElementById('chip-err').classList.contains('on');
+    check(dhw.hp === 'dhw' && errOn, `ESPAltherma: the 3-way valve on means hot water, the code U4 is an error (${dhw.hp} / ${errOn})`);
+    card.remove();
+    // #323: the values of #254 (heating). Evaporation and condensation from the saturation temperatures at low and high pressure;
+    // no superheat or subcooling from the pipe sensors, whose suction reading lies below the evaporation.
+    const sat = { ...states, ...toStates({ 'sensor.espaltherma_low_pressuret': ['5.1', '°C'], 'sensor.espaltherma_high_pressuret': ['29.3', '°C'],
+      'sensor.espaltherma_suction_pipe_tempr3t': ['4.4', '°C'], 'sensor.espaltherma_heat_exchanger_midtempr5t': ['4.3', '°C'] }) };
+    const satReg = { ...registry, 'sensor.espaltherma_low_pressuret': { platform: 'mqtt' }, 'sensor.espaltherma_high_pressuret': { platform: 'mqtt' } };
+    const rs = C._resolve({ preset: 'espaltherma' }, hassOf(sat, satReg)).entities;
+    check(rs.evap_temp === 'sensor.espaltherma_low_pressuret' && rs.cond_temp === 'sensor.espaltherma_high_pressuret' && e.evap_temp === 'sensor.espaltherma_heat_exchanger_midtempr5t',
+      `#323: evaporation and condensation from the saturation temperatures, R5T only without them (${rs.evap_temp} / ${rs.cond_temp} / ${e.evap_temp})`);
+    const satCard = mount({ preset: 'espaltherma' }, hassOf(sat, satReg)); await wait(20);
+    const satRows = satCard._drawerRows().flatMap(([, list]) => list).map((x) => x[0]);
+    check(satRows.includes('evap_temp') && satRows.includes('cond_temp') && satRows.includes('suction_temp') && !satRows.includes('superheat') && !satRows.includes('subcooling'),
+      `#323: no derived superheat or subcooling for ESPAltherma (${satRows.join(', ')})`);
+    satCard.remove();
+    // The attribute sensor of older versions alone is no installation the preset can read.
+    check(!detects('espaltherma', { 'sensor.althermasensors': 'Online' }, { 'sensor.althermasensors': { platform: 'mqtt' } }), 'ESPAltherma: the attribute sensor alone is not detected');
+  }
   {
     const states = {}; const registry = {};
     const add = (domain, key, state) => {
@@ -630,6 +1176,7 @@
       circuitPump2: add('binary_sensor', 'circuit_2_pump', 'on'),
       cop: add('sensor', 'cop_heating_today', '4.2'),
       dhwStatus: add('sensor', 'domestic_hot_water_status', 'active'),
+      pressure: add('sensor', 'water_pressure', '1.6'),
     };
     const hass = hassOf(toStates(states), registry);
     const stubConfig = C.getStubConfig(hass);
@@ -644,6 +1191,10 @@
       && resolved.entities.hc2_setpoint === ids.circuitTarget2 && resolved.entities.hc2_pump === ids.circuitPump2
       && resolved.tiles.cop_heating.today === ids.cop, 'Open3E preset maps both circuits and daily COP entities');
     check(stubConfig.hc_count === 2, `Open3E detects two circuits (got ${stubConfig.hc_count})`);
+    check(resolved.entities.hc_pressure === ids.pressure && !resolved.entities.brine_pressure && !resolved.entities.hc2_pressure,
+      `#318: Open3E water pressure is the heating pressure at circuit 1, not a brine pressure (${resolved.entities.hc_pressure} / ${resolved.entities.brine_pressure})`);
+    const second = C._resolve({ preset: 'open3e', hc_count: 1, index: { hc: 2 } }, hass).entities;
+    check(second.hc_pressure === ids.pressure && second.hc_flow === ids.circuitFlow2, 'Open3E: the heating pressure stays when the card starts at circuit 2');
     const card = mount({ preset: 'open3e' }, hass);
     check(/Hot water/.test(card.shadowRoot.getElementById('chip-mode')?.textContent || ''), 'Open3E hot_water valve state selects DHW mode');
     check(/Hot water/.test(card.shadowRoot.getElementById('t-dhw-mode')?.textContent || ''), 'Open3E domestic_hot_water_status "active" shows hot water charging');
@@ -1051,6 +1602,27 @@
     card.remove();
   }
   {
+    // #357: the report lists every Energy-dashboard source with its power sensor, so a source without one (its share becomes the
+    // remainder) and a battery with the opposite sign can be seen.
+    const prefs = { energy_sources: [
+      { type: 'solar', stat_energy_from: 'sensor.pv1_energy', stat_rate: 'sensor.pv1_power' },
+      { type: 'solar', stat_energy_from: 'sensor.pv2_energy' },
+      { type: 'battery', stat_energy_from: 'sensor.bat_out', power_config: { stat_rate: 'sensor.bat_power', stat_rate_inverted: true } },
+      { type: 'grid', stat_energy_from: 'sensor.grid_in', power_config: { stat_rate_from: 'sensor.grid_import', stat_rate_to: 'sensor.grid_export' } },
+    ] };
+    const hass = hassOf(toStates({ 'sensor.hp': ['955', 'W'], 'sensor.pv1_power': ['812', 'W'], 'sensor.bat_power': ['-1924', 'W'],
+      'sensor.grid_import': ['28', 'W'], 'sensor.grid_export': ['0', 'W'] }), {}, prefs);
+    const card = mount({ entities: { power: 'sensor.hp' } }, hass); await wait(20);
+    const report = C._diagnosticReport({ entities: { power: 'sensor.hp' } }, hass);
+    const part = report.split('Power sources (PV, battery, grid):')[1]?.split('Checks:')[0] || '';
+    check(/- solar 1: sensor\.pv1_power = 812 W\n/.test(part) && /- solar 2: no power sensor \(energy sensor\.pv2_energy only\)/.test(part)
+      && /- battery 1: sensor\.bat_power = -1924 W \(inverted in the Energy dashboard\)/.test(part)
+      && /- grid 1: from sensor\.grid_import = 28 W; to sensor\.grid_export = 0 W/.test(part), `report lists the Energy-dashboard power sensors (${part})`);
+    card.remove();
+    const own = C._diagnosticReport({ entities: { power: 'sensor.hp', pv: 'sensor.pv1_power' } }, hass);
+    check(/Power sources \(PV, battery, grid\):\n- from the card configuration/.test(own), 'with own PV, battery or grid sensors the report names the configuration');
+  }
+  {
     // #210: scaled power units are live power; energy units remain counters and cannot drive a live flow.
     const attrs = (unit, device_class) => ({ state: '1', attributes: { unit_of_measurement: unit, device_class, state_class: 'measurement' } });
     const prefs = { energy_sources: [{ type: 'battery', stat_rate: 'sensor.source' }] };
@@ -1308,6 +1880,55 @@
     const def = tileRows(mount(setups[1].config, hassOf(toStates(setups[1].states('heat')))));
     check(def[0] && def[0][0] === 'COP heating today', `default tiles unchanged without tiles (${def[0] && def[0][0]})`);
     document.querySelectorAll('heatpump-flow-card').forEach((c) => c.remove());
+  }
+  {
+    // #289: flow rates shown in l/min or m³/h; inside the card they stay l/h.
+    const ents = { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r', volume: 'sensor.v', hc_flow: 'sensor.hf', hc_volume: 'sensor.hv', hc_pump: 'binary_sensor.p' };
+    const st = toStates({ 'sensor.m': 'heating', 'binary_sensor.c': 'on', 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.v': ['9.8', 'L/min'],
+      'sensor.hf': ['33', '°C'], 'sensor.hv': ['720', 'L/h'], 'binary_sensor.p': 'on' });
+    const shown = async (unit) => {
+      const card = mount({ entities: ents, tiles: ['volume'], ...(unit ? { flow_rate_unit: unit } : {}) }, hassOf(st)); await wait(20);
+      const t = (id) => card.shadowRoot.getElementById(id)?.textContent || '';
+      const out = [t('t-vol'), t('t-hc-vol'), tileRows(card)[0]?.[1], card._lh('volume')].join(' | '); card.remove(); return out;
+    };
+    const lh = await shown(); const lmin = await shown('l/min'); const m3 = await shown('m3/h');
+    check(lh === '588 l/h | 720 l/h | 588 l/h | 588' && lmin === '9.8 l/min | 12.0 l/min | 9.8 l/min | 588' && m3 === '0.59 m³/h | 0.72 m³/h | 0.59 m³/h | 588',
+      `#289: schematic, circuit and tile follow flow_rate_unit, the value inside stays l/h (${lh} / ${lmin} / ${m3})`);
+    let err = '';
+    try { C.prototype.setConfig.call(Object.create(C.prototype), { flow_rate_unit: 'gal/min' }); } catch (e) { err = e.message; }
+    check(/flow_rate_unit must be one of: l\/h, l\/min, m³\/h/.test(err), `#289: an unknown unit is rejected (${err})`);
+    check(C._diagnosticReport({ entities: ents, flow_rate_unit: 'l/min' }, hassOf(st)).includes('Flow rates shown in: l/min'), '#289: the report names the unit');
+    const ed = document.createElement('heatpump-flow-card-editor');
+    let out;
+    ed.addEventListener('config-changed', (ev) => { out = ev.detail.config; });
+    ed.setConfig({ entities: ents }); ed.hass = hassOf(st);
+    ed._changed({ entities: ents, flow_rate_unit: 'l/min' });
+    const set = out.flow_rate_unit;
+    ed._changed({ entities: ents, flow_rate_unit: 'l/h' });
+    check(set === 'l/min' && !('flow_rate_unit' in out), `#289: the editor stores l/min and leaves the default l/h out (${set} / ${out.flow_rate_unit})`);
+  }
+  {
+    // #290: spread of a heating circuit from its own flow and return, one tile per circuit, shown while the circuit flows.
+    const ents = { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r', hc_flow: 'sensor.hf', hc_return: 'sensor.hr', hc_pump: 'binary_sensor.p1',
+      hc2_flow: 'sensor.hf2', hc2_return: 'sensor.hr2', hc2_pump: 'binary_sensor.p2', hc3_flow: 'sensor.hf3', hc3_return: 'sensor.hr3' };
+    const st = toStates({ 'sensor.m': 'heating', 'binary_sensor.c': 'on', 'sensor.f': ['34.3', '°C'], 'sensor.r': ['31.8', '°C'], 'sensor.hf': ['31.7', '°C'], 'sensor.hr': ['29.6', '°C'],
+      'binary_sensor.p1': 'on', 'sensor.hf2': ['30', '°C'], 'sensor.hr2': ['28', '°C'], 'binary_sensor.p2': 'off', 'sensor.hf3': ['30', '°C'], 'sensor.hr3': ['27', '°C'] });
+    const cfg = { hc_count: 2, hc2_name: 'OG', buffer: true, entities: ents, tiles: ['hc_spread', 'hc2_spread', 'hc3_spread'] };
+    const card = mount(cfg, hassOf(st)); await wait(20);
+    const rows = tileRows(card);
+    check(JSON.stringify(rows) === JSON.stringify([['Circuit spread', '2.1 K'], ['Circuit spread · OG', '–']]),
+      `#290: circuit spread per circuit, named after the circuit, "–" while it stands, none beyond hc_count (${JSON.stringify(rows)})`);
+    card.hass = hassOf(toStates({ ...st, 'sensor.hf': ['89.6', '°F'], 'sensor.hr': ['86', '°F'] })); await wait(10);
+    check(tileRows(card)[0][1] === '2.0 K', `#290: a spread of sensors in °F is a kelvin difference (${tileRows(card)[0][1]})`);
+    card.remove();
+    const hass = hassOf(st);
+    // Without a selection: the editor always lists tiles that are already selected.
+    const offered = { ...cfg, tiles: undefined };
+    const opts = C._tileOptions(offered, C._resolve(offered, hass), hass).options.map((o) => o.value);
+    const noReturn = { ...offered, entities: { ...ents, hc_return: undefined } };
+    const optsNoReturn = C._tileOptions(noReturn, C._resolve(noReturn, hass), hass).options.map((o) => o.value);
+    check(opts.includes('hc_spread') && opts.includes('hc2_spread') && !opts.includes('hc3_spread') && !optsNoReturn.includes('hc_spread') && optsNoReturn.includes('hc2_spread'),
+      `#290: the editor offers a circuit spread only with both sensors of that circuit (${opts.filter((o) => o.includes('hc')).join(',')})`);
   }
   {
     const s = setups[0];
@@ -1713,8 +2334,11 @@
     check(o.k === '1.4' && o.vol === 'none' && o.pre === 'none' && o.valve === 'none', `narrow schematic: type 1.4x, secondary labels hidden (${JSON.stringify(o)})`);
     const kept = mount({ ...s.config, hc_return_label: true, narrow_values: true }, hass); kept.style.display = 'block'; kept.style.width = '400px'; await wait(30);
     check(getComputedStyle(q(kept, 't-buf-bottom')).display !== 'none' && getComputedStyle(q(kept, 't-hc-rl')).display !== 'none'
-      && getComputedStyle(q(kept, 't-vol')).display === 'none' && getComputedStyle(q(kept, 't-valve')).display === 'none',
+      && getComputedStyle(q(kept, 't-valve')).display === 'none',
     'narrow_values keeps buffer sub-values and circuit return, but not unrelated secondary labels');
+    // #360: the flow rates of the heat pump, the circuits and the source stay with narrow_values and grow like the other kept values.
+    check([...kept.shadowRoot.querySelectorAll('.vol-label')].every((t) => getComputedStyle(t).display !== 'none') && parseFloat(getComputedStyle(q(kept, 't-vol')).fontSize) > 15,
+      `#360: narrow_values keeps the flow rates (${getComputedStyle(q(kept, 't-vol')).fontSize})`);
     // #257: on a phone the tank bottom tells how much hot water is left; narrow_values keeps it and the target line.
     check(getComputedStyle(q(kept, 't-dhw-bottom')).display !== 'none' && getComputedStyle(q(kept, 't-dhw-mode')).display !== 'none'
       && parseFloat(getComputedStyle(q(kept, 't-dhw-bottom')).fontSize) > 15,
@@ -1908,7 +2532,7 @@
       return Promise.resolve(out);
     } });
     const pvHist = (start, end) => [{ state: '0', last_updated: iso(start) }, { state: '1800', last_updated: iso(start + (end - start) * 2 / 8) }, { state: '0', last_updated: iso(start + (end - start) * 4 / 8) }];
-    let c = mount({ ...s.config, timeline: true, timeline_marks: false }, mock(pvHist)(hass('heat'))); await wait(80);
+    let c = mount({ ...s.config, timeline: true, timeline_marks: false, timeline_details: false }, mock(pvHist)(hass('heat'))); await wait(80);
     const kinds = [...c.shadowRoot.querySelectorAll('#timeline .seg')].map((x) => [...x.classList].find((k) => k.startsWith('k-')));
     check(kinds.join() === 'k-idle,k-heat,k-pv,k-heat,k-idle', `the PV surplus part of the heating period is its own period (${kinds})`);
     check(/Heating · PV surplus/.test(c.shadowRoot.querySelector('#timeline .tl-legend').textContent), 'the legend names it');
@@ -1944,6 +2568,12 @@
     o = await chip('3'); check(o.on && /boost/.test(o.kind) && /SG boost/.test(o.text), `SG state 3 shows raised operation (${JSON.stringify(o)})`);
     o = await chip('4'); check(o.on && /forced/.test(o.kind) && /forced on/.test(o.text), `SG state 4 shows forced operation (${JSON.stringify(o)})`);
     check(!(await chip('on')).on && !(await chip('unknown')).on, 'binary and unknown SG states are not guessed');
+    // OpenEMS / FEMS (#359): the controller status texts and the manual state need no map.
+    o = await chip('recommendation_to_use_more_available_power'); check(o.on && /boost/.test(o.kind), `OpenEMS switch-on recommendation is SG boost (${JSON.stringify(o)})`);
+    o = await chip('force_all_possible_consumption_of_the_heat_pump'); check(o.on && /forced/.test(o.kind), 'OpenEMS switch-on command is SG forced');
+    o = await chip('blocks_everything_till_an_internal_maximum_time_of_default_two_hours'); check(o.on && /blocked/.test(o.kind), 'OpenEMS lock is the utility lock');
+    check(!(await chip('default_energy-efficient_operation')).on, 'OpenEMS normal operation shows no chip');
+    o = await chip('FORCE_ON'); check(o.on && /forced/.test(o.kind), 'OpenEMS manual state FORCE_ON is SG forced');
     o = await chip('on', { sg_ready_map: { on: 'blocked', off: 'normal' } });
     check(o.on && /blocked/.test(o.kind), 'sg_ready_map gives a binary utility-lock entity explicit semantics');
     const cfg = { entities: ids, sg_ready_map: { EVU: 'blocked', Normal: 'normal', Raise: 'boost', Force: 'forced' } };
@@ -1998,7 +2628,7 @@
       const kinds = [...card.shadowRoot.querySelectorAll('#timeline .seg')].map((x) => [...x.classList].find((k) => k.startsWith('k-'))); card.remove(); return kinds.join();
     };
     const plain = await hist({})(); const mapped = await hist(map)();
-    check(plain === 'k-heat' || plain === 'k-heat,k-heat', `timeline without a map: only "on" and Tank count as hot water (${plain})`);
+    check(plain === 'k-dhw,k-heat', `timeline without a map: 1 means hot water as in the live view, then 0 heating (${plain})`);
     check(mapped === 'k-heat,k-dhw', `timeline with valve_map: 1 = heating for 12 h, then 0 = hot water (${mapped})`);
   }
 
@@ -2026,6 +2656,10 @@
 
     card = await render({ 'time.start': '2030-01-01 05:45:00', 'time.end': '2030-01-01 08:15:00' }); label = card.shadowRoot.getElementById('t-circ');
     check(label?.textContent === '↻ Circ. 05:45–08:15', 'local date-time entity states keep their wall-clock time'); card.remove();
+    // #331: ebusd's controller program ends a slot at "24:00" (end of day); 24:30 or 25:00 stay invalid.
+    card = await render({ 'time.start': '05:30', 'time.end': '24:00' }); label = card.shadowRoot.getElementById('t-circ');
+    check(label?.textContent === '↻ Circ. 05:30–24:00', `"24:00" is the end of the day (${label?.textContent})`); card.remove();
+    check(card._timeText('24:00:00') === '24:00' && card._timeText('24:30') === '' && card._timeText('25:00') === '', 'only 24:00 itself is accepted beyond 23:59');
     card = await render({ 'time.start': 'unknown', 'time.end': 'unavailable', 'schedule.circ': { state: 'unavailable', attributes: { next_event: null } } });
     label = card.shadowRoot.getElementById('t-circ');
     check(label?.textContent === '↻ Circ.', 'missing program values leave only the existing pump label'); card.remove();
@@ -2182,6 +2816,17 @@
       'system water pressure as heating pressure; hours and starts tiles from the heat pump');
     r = resolve({ ...counters, 'sensor.home_device_2_flexotherm_operation_time': ['10', 'h'], 'sensor.home_device_2_flexotherm_current_power': ['1.2', 'kW'] });
     check(r.entities.hours === 'sensor.home_device_2_flexotherm_operation_time', `the device with a power sensor wins (${r.entities.hours})`);
+    // aroTHERM Split (forum, 8 November): myPyllant lists the hydraulic station's power first; power is the heat pump's.
+    const split = { ...counters, 'sensor.home_device_1_hydraulic_station_current_power': ['5', 'W'], 'sensor.home_device_0_arotherm_split_plus_current_power': ['699', 'W'] };
+    r = resolve(split);
+    check(r.entities.power === 'sensor.home_device_0_arotherm_split_plus_current_power', `power is the heat pump's, not the hydraulic station's (${r.entities.power})`);
+    r = resolve({ ...split, 'sensor.home_device_1_hydraulic_station_consumed_electrical_energy_heating': ['0', 'kWh'],
+      'sensor.home_device_0_arotherm_split_plus_consumed_electrical_energy_heating': ['2.6', 'kWh'], 'sensor.home_device_0_arotherm_split_plus_heat_generated_heating': ['9.1', 'kWh'] });
+    check(r.tiles.energy_heating.today === 'sensor.home_device_0_arotherm_split_plus_consumed_electrical_energy_heating'
+      && r.tiles.heat_heating.today === 'sensor.home_device_0_arotherm_split_plus_heat_generated_heating',
+    `the daily energy tiles take the heat pump's counters, not the station's (${r.tiles.energy_heating.today})`);
+    r = resolve({ ...counters, 'sensor.home_device_1_hydraulic_station_current_power': ['5', 'W'] });
+    check(r.entities.power === 'sensor.home_device_1_hydraulic_station_current_power', `with only the station reporting power, it stays the fallback (${r.entities.power})`);
   }
 
   // 14. outdoor unit drawings: style per preset, manufacturer variants, fans and snowflakes, loop symbol for ground sources
@@ -2252,7 +2897,7 @@
     check(o.samsung === 1 && o.ring === 0 && o.fans === 1 && o.ok, `Samsung preset draws the EHS Mono unit (${JSON.stringify(o)})`);
     // Automatic drawing per preset, as listed in the README table "Outdoor-unit style coverage" (#151). A new preset needs an entry here.
     const unitOf = { lambda: 'lambda', vicare: 'viessmann', open3e: 'viessmann', vaillant: 'vaillant', ebusd: 'vaillant', emsesp: 'bosch', bosch_buderus_heating: 'bosch',
-      heishamon: 'panasonic', samsung: 'samsung', wolf: 'wolf', kronoterm: 'kronoterm', luxtronik: 'alpha_innotec', stiebel_isg: 'stiebel' };
+      heishamon: 'panasonic', samsung: 'samsung', wolf: 'wolf', kronoterm: 'kronoterm', luxtronik: 'alpha_innotec', stiebel_isg: 'stiebel', espaltherma: 'generic' };
     const unitWrong = Object.keys(HFC_PRESETS).filter((p) => (HFC_PRESETS[p].unit_style || 'generic') !== unitOf[p]);
     check(!unitWrong.length, `every preset selects the outdoor-unit drawing the README lists (${unitWrong.join(', ') || 'all match'})`);
     check(Object.values(unitOf).every((s) => HFC_UNIT_STYLES.includes(s)), 'the expected drawings are valid unit_style values');
@@ -2438,10 +3083,17 @@
     check(!!w && (w.__warns || []).some((m) => /custom:heatpump-hydraulic-card/.test(m)), 'the console says which name to use');
     check(!!w && w.customCards.length === 1 && w.customCards[0].type === 'heatpump-hydraulic-card' && w.customCards[0].name === 'Heat Pump Hydraulic Card', 'the card picker then lists the unique name');
     check(!!w && !(w.__warns || []).some((m) => /older copy/.test(m)), 'a foreign card with the same name is no older copy');
+    // The other card's file is not a second copy of this card in the diagnostic report.
+    const other = w.document.createElement('script'); other.type = 'text/plain'; other.src = 'https://ha.example/local/community/heatpump-flow-card/heatpump-flow-card.js';
+    w.document.head.appendChild(other);
+    check(!w.eval('hfcCardScripts()').some((u) => u.endsWith('/heatpump-flow-card.js')), 'the script of a foreign card with the generic name is not listed as a copy of this card');
     fr.remove();
 
     // #171: an older copy of this card took the names first (a resource from before the rename); and the same version twice
-    check(!!hfcOlderCopy(class HeatpumpFlowCard {}) && !!hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: '0.1.0' }))
+    // Another project's card with the same element and class name (Xerolux/heatpump-flow-card) is foreign: an unmarked old copy of
+    // this card is told apart by the helpers every release has had.
+    check(!hfcOlderCopy(class HeatpumpFlowCard extends HTMLElement { render() {} }), 'a foreign card class named HeatpumpFlowCard is no older copy of this card');
+    check(!!hfcOlderCopy(class HeatpumpFlowCard { _txt() {} _cls() {} }) && !!hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: '0.1.0' }))
       && !hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: HFC_VERSION }))
       && !hfcOlderCopy(Object.assign(class X {}, { hfcOwner: 'sturmi77', hfcVersion: '99.0.0' })) && !hfcOlderCopy(class Other {}) && !hfcOlderCopy(undefined),
     'an own copy without version marker or with a lower version is older; the same, a newer or a foreign class is not');
@@ -2500,7 +3152,7 @@
       const c = mount({ ...setup.config, timeline: true, ...extraCfg }, hassFn ? hassFn(h) : h); await wait(60);
       return c;
     };
-    let c = await tl(s);
+    let c = await tl(s, { timeline_details: false });
     const box = c.shadowRoot.getElementById('timeline');
     const segs = [...c.shadowRoot.querySelectorAll('#timeline .seg')];
     const kinds = new Set(segs.map((x) => [...x.classList].find((k) => k.startsWith('k-'))));
@@ -2518,6 +3170,94 @@
     c.shadowRoot.getElementById('tl-bar').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, composed: true, cancelable: true }));
     check(detail() !== before && /Defrost/.test(detail()), `ArrowRight selects the next period (${detail()})`);
     c.remove();
+    // #325: with run details (default) a tap on an operating period opens the panel of its run.
+    c = await tl(s);
+    const q = (sel) => c.shadowRoot.querySelector(sel);
+    const runSegs = [...c.shadowRoot.querySelectorAll('#timeline .seg')];
+    const heatSeg = runSegs.find((x) => x.classList.contains('k-heat'));
+    heatSeg.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    const head = () => q('#tl-run .tl-run-head b')?.textContent || '';
+    check(!!q('#tl-run') && /^(Heating|Hot water|Defrost) · \d\d:\d\d–\d\d:\d\d · \d/.test(head()) && q('#tl-detail').textContent === '' && !!q('#tl-bar .run-sel'),
+      `#325: a tap opens the run panel with kind, times and duration (${head()})`);
+    const edgeCount = new Set(c._tl.runs.filter((r) => r.source === 'run').flatMap((r) => [r.from, r.to]).filter((t) => t > c._tl.start && t < c._tl.now)).size;
+    check(c.shadowRoot.querySelectorAll('#tl-bar .tick').length === edgeCount && !q('#tl-bar .seg.sel'),
+      `compressor run boundaries are marked on the bar, the run outline replaces the period outline (${edgeCount} edges)`);
+    const first = head();
+    const press = (k) => q('#tl-bar').dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, composed: true, cancelable: true }));
+    press('ArrowRight');
+    check((head() || q('#tl-detail').textContent) && head() !== first, `ArrowRight steps to the next run or period (${head() || q('#tl-detail').textContent})`);
+    // The keys reach the runs and, between them, the periods no run covers (standby), in time order.
+    press('Home');
+    const steps = [];
+    for (let n = 0; n < c._tl.runs.length + c._tl.segs.length; n++) {
+      const run = c._tl.runs.find((r) => c._runId(r) === c._tlRun);
+      const seg = c._tl.segs.find((x) => c._segId(x) === c._tlSel);
+      steps.push(run ? { from: run.from, run: true } : { from: seg?.from, kind: seg?.kind });
+      press('ArrowRight');
+    }
+    const order = steps.every((x, n) => Number.isFinite(x.from) && (!n || x.from >= steps[n - 1].from));
+    check(order && steps.some((x) => x.run) && steps.some((x) => x.kind === 'idle'),
+      `arrow keys reach runs and standby periods in time order (${steps.map((x) => (x.run ? 'run' : x.kind)).join(',')}) dbg ${JSON.stringify([c._tlRun, c._tlSel, c._tl.runs.length, c._tl.segs.length, !!q("#tl-bar")])}`);
+    // The first period begins at the window start, which moves with every update: it stays selected (known by its end).
+    press('Home');
+    const firstSel = c._tlSel; const firstStart = c._tl.start;
+    await wait(5); c.shadowRoot.getElementById('timeline')._k = null; c._updateTimeline();
+    check(c._tl.start > firstStart && /^start-/.test(firstSel) && c._tlSel === firstSel && /\d\d:\d\d–\d\d:\d\d/.test(q('#tl-detail').textContent),
+      `the period at the window start stays selected while the window moves (${firstSel}: ${q('#tl-detail').textContent})`);
+    c._tlRun = null; c._tlSel = null; c.shadowRoot.getElementById('timeline')._k = null; c._updateTimeline();
+    c.shadowRoot.querySelector('#timeline .seg.k-heat').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    q('#tl-bar').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true, cancelable: true }));
+    check(!q('#tl-run') && !q('#tl-bar .run-sel'), 'Esc closes the panel');
+    c.shadowRoot.querySelector('#timeline .seg.k-heat').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    q('#tl-run-x').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    check(!q('#tl-run'), 'the close button closes the panel');
+    c.shadowRoot.querySelector('#timeline .seg.k-heat').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    c.shadowRoot.querySelector('#timeline .seg.k-heat').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    check(!q('#tl-run'), 'a second tap on the same run closes the panel');
+    c.remove();
+    {
+      // A period that holds several runs (the mode stays on heating while the compressor cycles): the tap selects the run
+      // under the pointer, not the first run of the period.
+      const H = 3600000; const now = Date.now();
+      const lu = (h, s) => ({ s, lu: (now - h * H) / 1000 });
+      const series = { 'sensor.m': [lu(30, 'heating')], 'sensor.c': [lu(30, 'off'), lu(10, 'on'), lu(9, 'off'), lu(4, 'on'), lu(3, 'off')] };
+      const h = { ...hassOf(toStates({ 'sensor.m': 'heating', 'sensor.c': 'off' })), callWS: (m) => (m.type === 'history/history_during_period'
+        ? Promise.resolve(Object.fromEntries(m.entity_ids.map((id) => [id, series[id] || []]))) : Promise.reject(new Error('not simulated'))) };
+      const k = mount({ timeline: true, entities: { mode: 'sensor.m', compressor: 'sensor.c' } }, h); await wait(60);
+      const seg = k.shadowRoot.querySelector('#timeline .seg.k-heat');
+      const runsIn = k._tl ? k._tl.runs.filter((r) => k._tl.segs[+seg.dataset.seg].from < r.to && k._tl.segs[+seg.dataset.seg].to > r.from) : [];
+      const target = runsIn[runsIn.length - 1];
+      const bar = k.shadowRoot.getElementById('tl-bar').getBoundingClientRect();
+      const x = target ? bar.left + (((target.from + target.to) / 2 - k._tl.start) / (k._tl.now - k._tl.start)) * bar.width : 0;
+      seg.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, clientX: x, clientY: bar.top + 2 }));
+      check(runsIn.length === 2 && k._tlRun === k._runId(target), `a tap selects the run at the tapped time, not the first run of the period (${runsIn.length} runs)`);
+      k.remove();
+    }
+    // The wall display, which nobody taps, keeps the one-line detail; the arrow keys step through runs there as well.
+    c = await tl(s, { layout: 'wall' });
+    c.shadowRoot.querySelector('#timeline .seg.k-heat').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    check(!c.shadowRoot.querySelector('#tl-run') && /^(Heating|Hot water|Defrost) · \d\d:\d\d–/.test(c.shadowRoot.getElementById('tl-detail').textContent),
+      `wall layout: the run shows as one line (${c.shadowRoot.getElementById('tl-detail').textContent})`);
+    c.remove();
+    {
+      // The panel content of one run: notes for a partial run in a series, and the phases when the run had more than one kind.
+      const M = 60000;
+      const k = await tl(s);
+      const run = { from: 0, to: 40 * M, kind: 'dhw', source: 'run', partial: true, ongoing: false, pause: 8 * M, series: 3, seriesFrom: 0,
+        phases: [{ kind: 'heat', from: 0, to: 10 * M }, { kind: 'dhw', from: 10 * M, to: 40 * M }] };
+      const html = k._runPanel(run).replace(/<[^>]+>/g, '');
+      check(/began before the timeline/.test(html) && /run 3 since \d\d:\d\d/.test(html) && /pause before 8 min/.test(html) && /Heating 10 min · Hot water 30 min/.test(html),
+        `run panel notes and phases (${html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()})`);
+      const phase = k._runPanel({ ...run, source: 'phase', partial: false, series: 1, pause: null, phases: [{ kind: 'heat', from: 0, to: 40 * M }] });
+      check(/operating period, no compressor data/.test(phase) && !/run \d since/.test(phase) && !/Heating \d+ min ·/.test(phase), 'a phase run says so and lists no single phase');
+      k.remove();
+    }
+    let error = '';
+    try { new C().setConfig({ timeline: true, timeline_details: 'no' }); } catch (e) { error = e.message; }
+    check(error === 'timeline_details must be true or false', `timeline_details must be a boolean (${error})`);
+    const keysOfRun = (n) => (n.schema ? n.schema.flatMap(keysOfRun) : [n.name]);
+    check(C._formSchema({ timeline: true }).schema.flatMap(keysOfRun).includes('timeline_details') && !C._formSchema({}).schema.flatMap(keysOfRun).includes('timeline_details'),
+      'the editor offers the run details with the timeline');
     // no option, no timeline; no history, no timeline
     c = mount(setups[1].config, hassOf(toStates(setups[1].states('heat')), {}, setups[1].energy, setups[1])); await wait(30);
     check(!c.shadowRoot.getElementById('timeline'), 'without the option there is no timeline');
@@ -2552,7 +3292,7 @@
     const keysOf = (n) => (n.schema ? n.schema.flatMap(keysOf) : [n.name]);
     check(C._formSchema({}).schema.flatMap(keysOf).includes('timeline') && !C._formSchema({}).schema.flatMap(keysOf).includes('timeline_hours') && C._formSchema({ timeline: true }).schema.flatMap(keysOf).includes('timeline_hours'), 'editor offers the timeline and its length');
     // marks: badges (or a list of entities) as extra lanes under the bar
-    c = await tl(s);
+    c = await tl(s, { timeline_details: false });
     const lane = c.shadowRoot.querySelectorAll('#timeline .tl-mark');
     const ms = [...c.shadowRoot.querySelectorAll('#timeline .mseg')];
     check(lane.length === 1 && ms.length === 2, `the Boost badge gets a lane with its two periods (${lane.length} lane, ${ms.length} periods)`);
@@ -2827,6 +3567,10 @@
     check(r.tiles.energy_heating?.now === `sensor.${p}_main_heat_energy_consumption` && r.tiles.heat_dhw?.now === `sensor.${p}_main_dhw_energy_production`, 'HeishaMon tiles accept the Energy spelling');
     check(r.entities.hc_setpoint === `sensor.${p}_main_z1_water_target_temp` && r.entities.hc2_setpoint === `sensor.${p}_main_z2_water_target_temp`, 'HeishaMon takes the zone target temperature, not the outlet target');
     check(r.entities.program === `switch.${p}_main_holiday_mode_state`, 'HeishaMon falls back to the holiday switch');
+    // #276: the water pressure (K/L series) only where the entity exists, and only for the first circuit.
+    const withPressure = C._resolve({ preset: 'heishamon', hc_count: 2 }, hassOf(toStates({ ...v2, [`sensor.${p}_main_water_pressure`]: ['2.26', 'bar'] }))).entities;
+    check(!r.entities.hc_pressure && withPressure.hc_pressure === `sensor.${p}_main_water_pressure` && !withPressure.hc2_pressure,
+      `HeishaMon maps the water pressure only where it exists (${r.entities.hc_pressure} / ${withPressure.hc_pressure} / ${withPressure.hc2_pressure})`);
     const card = mount({ preset: 'heishamon' }, hassOf(toStates(v2))); await wait(20);
     const chip = card.shadowRoot.getElementById('chip-program');
     check(chip.classList.contains('on') && chip.classList.contains('holiday'), 'holiday switch on shows the holiday chip');
@@ -2898,6 +3642,9 @@
     check(txt(card, 't-dhw-top') === '49.6 °C' && txt(card, 't-dhw-mode') === 'Target 50 °C', `tank temperature and target from the DHW thermostat (${txt(card, 't-dhw-top')} / ${txt(card, 't-dhw-mode')})`);
     check(txt(card, 't-house-room') === '22.4 / 22.7 °C', `room and target (${txt(card, 't-house-room')})`);
     check(/^33\.2 °C/.test(txt(card, 't-hc')) && /^30\.5 °C/.test(txt(card, 't-hc2')), `circuit flows (${txt(card, 't-hc')} / ${txt(card, 't-hc2')})`);
+    // #361: the risers to circuit 2 run at x 660 and 676; the circuit labels start right of them, in every circuit alike.
+    const left = (id) => card.shadowRoot.getElementById(id).getBBox().x;
+    check(left('t-hc2') > 680 && left('t-hc') === left('t-hc2'), `circuit labels start right of the risers (${left('t-hc')} / ${left('t-hc2')})`);
     check(txt(card, 't-hp-cop') === 'COP 3.7' && txt(card, 't-hp-power') === '1,464 W → 5.5 kW', `live COP from heat output and power (${txt(card, 't-hp-cop')} / ${txt(card, 't-hp-power')})`);
     check(!errOn(card) && !card.shadowRoot.getElementById('chip-program').classList.contains('on'), 'no error and no program chip in auto mode');
     const tank = card.shadowRoot.querySelector('#svg [data-entity="climate.kronoterm_dhw_temperature"]');
@@ -3069,6 +3816,44 @@
     const find = (list) => flat(list).find((x) => x.name === 'power');
     check(find(C._formSchema(cfg).schema)?.selector?.entity?.multiple === true, 'editor shows a picker for several entities for a list');
     check(!find(C._formSchema({ preset: 'heishamon' }).schema)?.selector?.entity?.multiple, 'editor keeps the single picker without a list');
+  }
+  {
+    // #23: a list of room sensors gives their mean, a list of power or heat meters a sum that forms a COP only when complete.
+    const st = {
+      'sensor.m': 'heating', 'binary_sensor.c': 'on', 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'],
+      'sensor.r1': ['20', '°C'], 'sensor.r2': ['71.6', '°F'], 'climate.r3': 'heat', 'sensor.h1': ['40', '%'], 'sensor.h2': ['50', '%'],
+      'sensor.r4': ['18', '°C'], 'sensor.r5': ['19', '°C'], 'sensor.o1': ['3', '°C'], 'sensor.o2': ['9', '°C'],
+      'sensor.p1': ['600', 'W'], 'sensor.p2': ['0.4', 'kW'], 'sensor.q1': ['2.5', 'kW'], 'sensor.q2': ['1500', 'W'],
+    };
+    const states = toStates(st); states['climate.r3'].attributes = { current_temperature: 25 };
+    const ents = { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r', room: ['sensor.r1', 'sensor.r2'], room_humidity: ['sensor.h1', 'sensor.h2'],
+      hc2_room: ['sensor.r4', 'sensor.r5', 'climate.r3'], outdoor: ['sensor.o1', 'sensor.o2'], power: ['sensor.p1', 'sensor.p2'], heat: ['sensor.q1', 'sensor.q2'] };
+    const cfg = { hc_count: 2, entities: ents };
+    const card = mount(cfg, hassOf(states)); await wait(20);
+    const r1 = card._n('room'); const h = card._n('room_humidity'); const r2 = card._n('hc2_room');
+    check(Math.abs(r1 - 21) < 1e-9 && h === 45 && Math.abs(r2 - 62 / 3) < 1e-9 && card._n('outdoor') === 3,
+      `#23: rooms and humidity are averaged (°F converted, climate entities by their current temperature), other keys take the first entity (${r1} / ${h} / ${r2} / ${card._n('outdoor')})`);
+    const cop = () => card.shadowRoot.getElementById('t-hp-cop')?.textContent || '';
+    check(card._w('power') === 1000 && card._kw('heat') === 4 && /COP 4\.0/.test(cop()), `#23: complete sums of power and heat give the COP (${cop()})`);
+    card.hass = hassOf(toStates({ ...st, 'sensor.r1': 'unavailable', 'sensor.p2': 'unavailable' })); await wait(10);
+    check(Math.abs(card._n('room') - 22) < 1e-9 && card._w('power') === 600 && cop() === '',
+      `#23: a missing room sensor leaves the others, a missing power meter leaves the sum shown but no COP (${card._n('room')} / ${card._w('power')} / "${cop()}")`);
+    card.hass = hassOf(toStates({ ...st, 'sensor.r1': 'unavailable', 'sensor.r2': 'unknown' })); await wait(10);
+    check(Number.isNaN(card._n('room')), '#23: without any room value the mean is unknown');
+    card.remove();
+    // A climate entity reports in the unit of the installation; a missing first member does not hide the rooms.
+    const fStates = toStates({ ...st, 'sensor.r1': ['68', '°F'] }); fStates['climate.r3'].attributes = { current_temperature: 68 };
+    const fHass = { ...hassOf(fStates), config: { unit_system: { temperature: '°F' } } };
+    const fCard = mount({ entities: { ...ents, room: ['sensor.r1', 'climate.r3'] } }, fHass); await wait(20);
+    check(Math.abs(fCard._n('room') - 68) < 1e-9, `#23: a climate entity counts in the installation's unit (${fCard._n('room')})`);
+    fCard.remove();
+    const gap = mount({ entities: { ...ents, room: ['sensor.gone', 'sensor.r1'], room_humidity: undefined } }, hassOf(states)); await wait(20);
+    check(gap._e.room === 'sensor.r1' && gap._n('room') === 20 && /20\.0/.test(gap.shadowRoot.getElementById('t-room')?.textContent || ''),
+      `#23: the first existing member stands for the key, so the house overview stays (${gap._e.room} / ${gap.shadowRoot.getElementById('t-room')?.textContent})`);
+    gap.remove();
+    const report = C._diagnosticReport(cfg, hassOf(states));
+    check(report.includes('- room (average 1): sensor.r1') && report.includes('- room (average 2): sensor.r2') && report.includes('- power (sum 2): sensor.p2'),
+      '#23: the diagnostic report names averaged and summed members');
   }
 
   // 18f. HeishaMon: refrigerant temperatures and the superheat computed from them
@@ -3284,6 +4069,14 @@
     card = mount({ preset: 'heishamon' }, hassOf(st({ [`sensor.${p}_main_pump_flow`]: ['0', 'l/min'], [`sensor.${p}_main_compressor_freq`]: ['0', 'Hz'] }))); await wait(20);
     check(!q(card, '#impeller-primary').classList.contains('on'), 'the primary pump stands still without a flow rate');
     card.remove();
+    // #312: EMS-ESP reports PC0 below about 50 % speed as -1 l/h. A negative flow rate is unknown: the pump follows the
+    // running heat pump, no "-1 l/h" label, no estimated heat from it.
+    card = mount({ preset: 'heishamon' }, hassOf(st({ [`sensor.${p}_main_pump_flow`]: ['-1', 'l/h'] }))); await wait(20);
+    check(q(card, '#impeller-primary').classList.contains('on') && q(card, '#t-vol').textContent === '' && q(card, '#p-vl').classList.contains('on'),
+      `#312: a negative flow rate is unknown, the primary pump turns while the heat pump runs (${q(card, '#t-vol').textContent})`);
+    card.hass = hassOf(st({ [`sensor.${p}_main_pump_flow`]: ['-1', 'l/h'], [`sensor.${p}_main_compressor_freq`]: ['0', 'Hz'] })); await wait(5);
+    check(!q(card, '#impeller-primary').classList.contains('on'), '#312: with a negative flow rate and the heat pump off the primary pump stands still');
+    card.remove();
     // Sniffing: the compressor is off, the primary pump moves a few l/h. The water circulates slowly, the mode stays idle.
     card = mount({ preset: 'heishamon', hc_type: 'radiator' }, hassOf(st({ [`sensor.${p}_main_pump_flow`]: ['0.13', 'l/min'], [`sensor.${p}_main_compressor_freq`]: ['0', 'Hz'] }))); await wait(20);
     const imp = q(card, '#impeller-primary');
@@ -3350,7 +4143,7 @@
     card = await mountSetup('Kronoterm ADAPT');
     check(!!q(card, 'circle.pump[cx="720"]'), 'Kronoterm: the loop pump stays in the circuit next to the primary pump');
     card.remove();
-    check(Object.entries(HFC_PRESETS).filter(([, p]) => p.primary_pump).map(([k]) => k).sort().join() === 'heishamon,kronoterm,samsung', 'presets with a primary pump: HeishaMon, Kronoterm, Samsung');
+    check(Object.entries(HFC_PRESETS).filter(([, p]) => p.primary_pump).map(([k]) => k).sort().join() === 'espaltherma,heishamon,kronoterm,samsung', 'presets with a primary pump: ESPAltherma, HeishaMon, Kronoterm, Samsung');
   }
 
   // 18p. hot-water standby loss (#32): cool-down in K/h only in verified standby windows, charging and draw-off excluded
@@ -3697,6 +4490,23 @@
     card.hass = hassOf(st({ 'binary_sensor.p2': 'off', 'sensor.m': 'idle', 'sensor.c': ['0', 'Hz'] })); await wait(5);
     check(!on(card, 'p-hc-trunk-vl') && !on(card, 'p-hc-trunk-rl'), 'all circuits off: the trunk stands');
     card.remove();
+    // #302: three circuits behind a combined storage, only circuit 2 runs. The riser to circuit 2 flows, the segment on to the
+    // stopped circuit 3 stands and no longer covers it; the risers lie under the labels of circuits 2 and 3.
+    const three = { ...base, hc_pump: 'binary_sensor.p1', hc2_pump: 'binary_sensor.p2', hc3_pump: 'binary_sensor.p3', hc2_flow: 'sensor.f2', hc2_setpoint: 'sensor.s2',
+      dhw_top: 'sensor.t1', buffer_top: 'sensor.t4' };
+    const st3 = (extra = {}) => st({ 'binary_sensor.p3': 'off', 'sensor.f2': ['31.5', '°C'], 'sensor.s2': ['33', '°C'], ...extra });
+    card = mount({ entities: three, hc_count: 3, storage: 'combined' }, hassOf(st3())); await wait(20);
+    const segment = (id) => q(card, id).getAttribute('d');
+    check(on(card, 'p-hc-up2') && on(card, 'p-hc-down2') && !on(card, 'p-hc-up3') && !on(card, 'p-hc-down3') && on(card, 'p-hc-body2') && !on(card, 'p-hc-vl'),
+      'three circuits, only circuit 2 runs: its riser flows, the segment to circuit 3 stands');
+    check(segment('p-hc-up2') === 'M660 360 V610' && segment('p-hc-up3') === 'M660 610 V860' && segment('p-hc-down3') === 'M676 995 V745',
+      `the risers are one segment per step (${segment('p-hc-up3')} / ${segment('p-hc-down3')})`);
+    const before = (a, b) => !!(q(card, a).compareDocumentPosition(q(card, b)) & Node.DOCUMENT_POSITION_FOLLOWING);
+    check(before('p-hc-up3', 't-hc2') && before('p-hc-down3', 't-hc2') && before('p-hc-up3', 't-hc3'), 'the risers lie under the circuit labels');
+    card.hass = hassOf(st3({ 'binary_sensor.p2': 'off', 'binary_sensor.p3': 'on' })); await wait(5);
+    check(on(card, 'p-hc-up2') && on(card, 'p-hc-up3') && on(card, 'p-hc-down2') && on(card, 'p-hc-down3') && !on(card, 'p-hc-body2'),
+      'only circuit 3 runs: both riser segments flow past the stopped circuit 2');
+    card.remove();
     card = mount({ entities: { ...base, hc_pump: 'binary_sensor.p2' } }, hassOf(st())); await wait(20);
     check(!q(card, 'p-hc-trunk-vl'), 'one circuit: no separate trunk');
     card.remove();
@@ -3968,6 +4778,26 @@
     const noFull = mount({ ...s.config, fullscreen: false }, h);
     check(!noFull.shadowRoot.getElementById('fullscreen-toggle'), 'fullscreen: false removes the button');
     noFull.remove();
+    {
+      // diagnostic: false hides the diagnostic report button; the editor shows it switched on by default and writes only false.
+      const noDiag = mount({ ...s.config, diagnostic: false }, h);
+      check(!noDiag.shadowRoot.getElementById('diagnostic-copy') && !!noDiag.shadowRoot.getElementById('fullscreen-toggle'),
+        'diagnostic: false removes the diagnostic button and keeps the full-screen button');
+      noDiag.remove();
+      let threw = false; try { new C().setConfig({ ...s.config, diagnostic: 'no' }); } catch (e) { threw = true; }
+      check(threw, 'diagnostic must be true or false');
+      const keys = (n) => (n.schema ? n.schema.flatMap(keys) : [n.name]);
+      check(C._formSchema(s.config).schema.flatMap(keys).includes('diagnostic'), 'editor offers the diagnostic button switch');
+      const dEd = document.createElement('heatpump-flow-card-editor'); let dChanged;
+      dEd.addEventListener('config-changed', (ev) => { dChanged = ev.detail.config; });
+      dEd.setConfig(s.config); dEd.hass = h; await wait(10);
+      const shownByDefault = dEd._form.data.diagnostic === true;
+      dEd._changed({ ...dEd._form.data, diagnostic: false });
+      const off = dChanged.diagnostic === false;
+      dEd._changed({ ...dEd._form.data, diagnostic: true });
+      check(shownByDefault && off && !('diagnostic' in dChanged), `editor: diagnostic button on by default, writes only false (${shownByDefault} / ${off} / ${JSON.stringify(dChanged.diagnostic)})`);
+      dEd.remove();
+    }
 
     const custom = { ...s.config, title: undefined, language: 'xy', texts: { xy: {
       title: 'Warmtepomp & huis', heat_pump: 'Warm <bron>', details: 'Details NL',
@@ -4089,6 +4919,30 @@
     check(C._formSchema({}).schema.flatMap(function keysOf(n) { return n.schema ? n.schema.flatMap(keysOf) : [n.name]; }).includes('hc_return_label'), 'editor offers the circuit return label');
   }
 
+  // 20a2. hc_flow_label: false hides the flow temperature at the circuits, the target stays (#291)
+  {
+    const st = toStates({ 'sensor.f': ['48', '°C'], 'sensor.r': ['40', '°C'], 'sensor.c': ['40', 'Hz'], 'sensor.hcf': ['33', '°C'], 'sensor.set': ['34', '°C'], 'sensor.off': ['2', 'K'] });
+    const ents = { flow: 'sensor.f', return: 'sensor.r', compressor: 'sensor.c', hc_setpoint: 'sensor.set' };
+    const txt = (c, id) => c.shadowRoot.getElementById(id)?.textContent ?? '(missing)';
+    // Direct circuit without its own sensor: it shows the heat pump flow by default.
+    let c = mount({ entities: ents }, hassOf(st)); await wait(20);
+    const shown = txt(c, 't-hc');
+    c.remove();
+    c = mount({ entities: ents, hc_flow_label: false }, hassOf(st)); await wait(20);
+    check(shown === '48.0 °C · Target 34.0' && txt(c, 't-hc') === 'Target 34.0', `hc_flow_label: false leaves only the target at the circuit (${shown} / ${txt(c, 't-hc')})`);
+    c.remove();
+    // With a heating curve shift the flow stands below the pump; it goes as well, the target text stays.
+    c = mount({ entities: { ...ents, hc_flow: 'sensor.hcf', hc_curve_offset: 'sensor.off' }, hc_flow_label: false }, hassOf(st)); await wait(20);
+    check(txt(c, 't-hc-now') === '' && txt(c, 't-hc').startsWith('Target 34'), `hc_flow_label: false with a curve shift (${txt(c, 't-hc-now')} / ${txt(c, 't-hc')})`);
+    c.remove();
+    let error = '';
+    try { new C().setConfig({ hc_flow_label: 'no' }); } catch (e) { error = e.message; }
+    check(error === 'hc_flow_label must be true or false', `hc_flow_label must be a boolean (${error})`);
+    check(C._formSchema({}).schema.flatMap(function keysOf(n) { return n.schema ? n.schema.flatMap(keysOf) : [n.name]; }).includes('hc_flow_label'), 'editor offers the circuit flow label');
+    const report = C._diagnosticReport({ hc_flow_label: false, entities: ents }, hassOf(st));
+    check(report.includes('Circuit labels: flow hidden · return hidden'), 'the report names the circuit label options');
+  }
+
   // 20b. DHW tank with only a sensor near the bottom (HeishaMon has one tank sensor; its position depends on the tank)
   {
     const states = toStates({ 'sensor.flow': ['35', '°C'], 'sensor.return': ['30', '°C'], 'sensor.dhw': ['37', '°C'] });
@@ -4190,6 +5044,13 @@
     check(codes({ entities: { ...ents, energy_today: 'sensor.e' } }, { ...base, 'sensor.e': ['200000', 'Wh'] }) === 'energy_today:today'
       && codes({ entities: { ...ents, energy_today: 'sensor.e' } }, { ...base, 'sensor.e': ['5000', 'Wh'] }) === '', 'energy today converts Wh before comparing with one day');
     check(codes({ entities: { ...ents, mode: 'sensor.mode_temp' } }, { ...base, 'sensor.mode_temp': ['21', '°C'] }) === 'mode:unit', 'a temperature as the operating mode');
+    // #276: the chosen operating mode (a select) as the current one keeps the card idle.
+    const chosen = { ...base, 'select.hp_operating_mode_state': { state: 'Heat only', attributes: { options: ['Heat only', 'Cool only', 'Heat+DHW'] } } };
+    check(codes({ entities: { ...ents, mode: 'select.hp_operating_mode_state' } }, chosen) === 'mode:setting'
+      && codes({ entities: { ...ents, mode: 'input_select.hp_mode' } }, { ...base, 'input_select.hp_mode': 'Auto' }) === 'mode:setting'
+      && codes({ entities: { ...ents, mode: 'sensor.hp_activity' } }, { ...base, 'sensor.hp_activity': 'heating' }) === '', '#276: a select as the operating mode is a setting, a sensor is not');
+    const setting = C._checks({ entities: { ...ents, mode: 'select.hp_operating_mode_state' } }, hassOf(toStates(chosen)))[0];
+    check(C._checkText(setting, HFC_EDITOR.de).startsWith('mode: select.hp_operating_mode_state ist eine Einstellung (select)'), `#276: the finding text (${C._checkText(setting, HFC_EDITOR.de)})`);
     // Mappings that look alike but are right
     check(codes({ entities: { ...ents, valve: 'binary_sensor.v', heater: 'sensor.rod', compressor: 'sensor.hz', hc_volume: 'sensor.vol', volume: 'sensor.vol', room: 'climate.house',
       room_target: 'climate.house', dhw_top: 'water_heater.dhw', dhw_target: 'water_heater.dhw', outdoor: 'sensor.out', source_in: 'sensor.out', hc_curve_offset: 'number.shift' } },
@@ -4366,9 +5227,30 @@
     const card = mount(s.config, hassOf(toStates(s.states('heat')), s.registry || {}, null, s)); await wait(20);
     const el = (id) => card.shadowRoot.getElementById(id);
     const before = (a, b) => !!(el(a) && el(b) && el(a).compareDocumentPosition(el(b)) & Node.DOCUMENT_POSITION_FOLLOWING);
-    check(['p-vl', 'p-vl-dhw'].every((id) => before('p-rl-dhw', id) && before('f-rl-dhw', id)),
-      'the return from the hot-water tank and its dashes are drawn under the flow and the hot-water flow');
+    check(['p-vl', 'p-vl-dhw', 'p-vl-buf'].every((id) => before('p-rl-dhw', id) && before('f-rl-dhw', id)),
+      'the return from the hot-water tank and its dashes are drawn under the flow, the hot-water flow and the heating flow');
     check(['p-rl-buf', 'p-rl'].every((id) => before(id, 'p-vl')), 'all return pipes of the heat pump are drawn before its flow pipes');
+    card.remove();
+  }
+
+  // Hot-water return: one crossing. The return from the tank goes down beside the tank and crosses only the heating flow;
+  // the valve label above the valve stays between the hot-water flow and the tank, also in the longest language.
+  {
+    const s = setups.find((x) => x.config.preset === 'heishamon') || setups[0];
+    const hass = hassOf(toStates(s.states('heat')), s.registry || {}, null, s);
+    const card = mount(s.config, { ...hass, locale: { language: 'sk' }, language: 'sk' }); await wait(20);
+    const el = (id) => card.shadowRoot.getElementById(id);
+    const rl = el('p-rl-dhw'); const len = rl.getTotalLength(); const pts = [];
+    for (let d = 0; d <= len; d += 2) pts.push(rl.getPointAtLength(d));
+    const hits = (id) => pts.filter((p) => el(id).isPointInStroke(new DOMPoint(p.x, p.y))).length;
+    check(hits('p-vl') === 0 && hits('p-vl-dhw') === 0 && hits('p-vl-buf') > 0,
+      `the return from the hot-water tank crosses only the heating flow (flow ${hits('p-vl')}, hot-water flow ${hits('p-vl-dhw')}, heating flow ${hits('p-vl-buf')} points)`);
+    const label = el('t-valve'); const b = label.getBBox();
+    check(label.textContent === 'Vykurovanie' && b.x >= 424 && b.x + b.width <= 520 && b.y + b.height <= 211,
+      `the longest valve label fits between the hot-water flow and the tank, above the return (${label.textContent}: ${[b.x, b.y, b.width, b.height].map(Math.round).join(',')})`);
+    const free = ['p-vl-dhw', 'p-rl-dhw', 'p-vl'].every((id) => [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]]
+      .every(([x, y]) => !el(id).isPointInStroke(new DOMPoint(x, y))));
+    check(free, 'the corners of the valve label touch no pipe');
     card.remove();
   }
 
@@ -4469,6 +5351,30 @@
       && C._fit('percent', 'sensor.t', { state: '40', attributes: { unit_of_measurement: '°C' } }).verdict === 'bad', 'mixer keys are checked as a percentage and as on/off');
   }
 
+  // #367: at a standstill the valve arrow shows the position the valve reports; while water flows it follows the path
+  {
+    const ids = { mode: 'sensor.vm', compressor: 'binary_sensor.vc', flow: 'sensor.vf', return: 'sensor.vr', valve: 'sensor.vv', dhw_top: 'sensor.vd' };
+    const st = (mode, comp, valve) => toStates({ 'sensor.vm': mode, 'binary_sensor.vc': comp, 'sensor.vf': ['35', '°C'], 'sensor.vr': ['30', '°C'], 'sensor.vv': valve, 'sensor.vd': ['48', '°C'] });
+    const cfg = { mode_map: { Heating: 'heating', DHW: 'dhw', Standby: 'idle' }, entities: ids };
+    const card = mount(cfg, hassOf(st('Standby', 'off', 'Tank'))); await wait(20);
+    const arrow = () => card.shadowRoot.getElementById('valve-arrow').getAttribute('transform') || 'dhw';
+    const label = () => card.shadowRoot.getElementById('t-valve').textContent;
+    const seen = [];
+    for (const [mode, comp, valve, want] of [['Standby', 'off', 'Tank', 'dhw'], ['Standby', 'off', 'Room', 'heat'], ['Heating', 'on', 'Room', 'heat'], ['DHW', 'on', 'Tank', 'dhw'], ['Heating', 'on', 'Tank', 'dhw']]) {
+      card.hass = hassOf(st(mode, comp, valve)); await wait(10);
+      seen.push(`${mode}/${valve}: ${arrow() === 'dhw' ? 'dhw' : 'heat'}${label() ? ` "${label()}"` : ''}`);
+      if ((arrow() === 'dhw') !== (want === 'dhw')) seen.push('  ^ wrong');
+    }
+    check(!seen.some((s) => s.includes('wrong')) && card._flowModel().toDhw, `#367: the valve arrow follows the reported position at a standstill and the path while running (${seen.join(', ')})`);
+    card.hass = hassOf(st('Standby', 'off', 'Tank')); await wait(10);
+    check(label() === '' && !card._flowModel().loop && !card.shadowRoot.getElementById('f-vl-dhw').classList.contains('on'),
+      '#367: at a standstill on the tank, no water moves and the valve has no label');
+    card.remove();
+    const noValve = mount({ ...cfg, entities: { ...ids, valve: null } }, hassOf(st('Standby', 'off', 'Tank'))); await wait(20);
+    check(noValve.shadowRoot.getElementById('valve-arrow').getAttribute('transform') === 'rotate(180 420 250)', '#367: without a valve entity the arrow rests on heating at a standstill');
+    noValve.remove();
+  }
+
   // #51: a manually configured boiler is a separate heat generator in the common flow before the existing diverter valve
   {
     const ids = { mode: 'sensor.mode', compressor: 'binary_sensor.compressor', power: 'sensor.hp_power', flow: 'sensor.hp_flow', return: 'sensor.hp_return',
@@ -4495,6 +5401,17 @@
     card.hass = hassOf(state(false, true, 'Tank')); await wait(10);
     check(el('f-vl-dhw').classList.contains('on') && !el('f-vl-buf').classList.contains('on'), 'boiler-only hot water follows the existing diverter valve');
     card.remove();
+    // Forum, 8 November: the flow label stood in the boiler box. Between the heat pump block and the box it drops its prefix and
+    // ends in front of the box, with and without a primary pump.
+    for (const extra of [{}, { primary_pump: true }]) {
+      const lc = mount({ ...cfg, ...extra }, hassOf(state(true, false))); lc.style.display = 'block'; lc.style.width = '900px'; await wait(30);
+      const box = (sel) => (sel.startsWith('.') ? lc.shadowRoot.querySelector(sel) : lc.shadowRoot.getElementById(sel)).getBBox();
+      // The right edge is exact (the label ends at the box); the left edge depends on the font, so it is only bounded loosely.
+      const vl = box('t-vl'); const hp = box('hp-box'); const bx = box('.boiler-box'); const t = lc.shadowRoot.getElementById('t-vl');
+      check(vl.x + vl.width <= bx.x + 0.5 && vl.x > hp.x + hp.width - 20 && !t.querySelector('.pre') && t.textContent === '36.0 °C',
+        `with a boiler the flow label ends in front of the boiler box, without its prefix${extra.primary_pump ? ', also with a primary pump' : ''} (${Math.round(vl.x)}–${Math.round(vl.x + vl.width)}, box from ${bx.x}, "${t.textContent}")`);
+      lc.remove();
+    }
 
     const noBoiler = mount({ entities: { flow: ids.flow, return: ids.return } }, hassOf(state(false, false))); await wait(10);
     check(!noBoiler.shadowRoot.getElementById('boiler') && JSON.parse(noBoiler._layoutSignature()).boiler === false, 'without boiler entities the existing geometry is unchanged');
@@ -4537,6 +5454,113 @@
     check(idle && Math.abs(idle.rate - 0.4) < 0.03, `boiler off: the standby slope is measured (${JSON.stringify(idle)})`);
     check(lc._dhwLoss(lossHist(true), lossIds, start, end) === null, 'boiler running all the time: no window counts as standby');
     lc.remove();
+  }
+
+  // 22. narrow_focus (#4): on a narrow schematic the key values grow, secondary values move to one line under it or are hidden
+  {
+    const byName = (name, sub = '') => setups.find((s) => s.name === name && s.sub.startsWith(sub));
+    const lambda = byName('Lambda', 'legacy naming'); const ems = byName('Buderus / Bosch'); const ground = byName('Ground source heat pump');
+    const cooling = byName('Cooling dew-point safety');
+    const hassFor = (s, scen = 'heat') => hassOf(toStates(s.states(scen)), s.registry || {}, s.energy, s);
+    const at = async (s, px, extra = {}, scen = 'heat') => {
+      const c = mount({ ...s.config, ...extra }, hassFor(s, scen)); c.style.display = 'block'; c.style.width = `${px}px`; await wait(40);
+      c.hass = hassFor(s, scen); await wait(20); return c;
+    };
+    const el = (c, id) => c.shadowRoot.getElementById(id);
+    const shown = (c, id) => !!el(c, id) && getComputedStyle(el(c, id)).display !== 'none';
+    const size = (c, id) => parseFloat(getComputedStyle(el(c, id)).fontSize);
+    // invalid values, editor switch and labels
+    let threw = false; try { new C().setConfig({ narrow_focus: 'yes' }); } catch (e) { threw = /narrow_focus/.test(e.message); }
+    check(threw, 'narrow_focus: a value other than true or false is rejected');
+    const keysOf = (n) => (n.schema ? n.schema.flatMap(keysOf) : [n.name]);
+    check(C._formSchema({}).schema.flatMap(keysOf).includes('narrow_focus') && Object.keys(HFC_LANGUAGES).every((l) => HFC_EDITOR[l]?.narrow_focus),
+      'narrow_focus: switch in the editor, labelled in every built-in language');
+
+    // option off: nothing of the focus view is drawn
+    let off = await at(lambda, 400);
+    check(!off.shadowRoot.querySelector('ha-card').classList.contains('narrow-focus') && !el(off, 'focus-line') && !el(off, 't-hp-heat')
+      && !off.shadowRoot.querySelector('.nf-big, .nf-moved, .nf-tail, .nf-two'), 'narrow_focus off: no focus line, no extra label, no extra class');
+    const offSizes = { vl: size(off, 't-vl'), cop: size(off, 't-hp-cop'), target: size(off, 't-room-target') };
+    off.remove();
+
+    // option on below 500 px: key values grow, secondary values move or hide
+    let c = await at(lambda, 400, { narrow_focus: true });
+    check(c.shadowRoot.querySelector('ha-card').classList.contains('narrow-focus'), 'narrow_focus: the card carries the class');
+    check(shown(c, 't-hp-heat') && size(c, 't-hp-heat') === 32 && el(c, 't-hp-heat').textContent === '6.3 kW'
+      && !shown(c, 't-hp-power') && !shown(c, 't-hp-status'),
+    `narrow_focus: heat output alone in the heat pump block, input power and status hidden ("${el(c, 't-hp-heat').textContent}", ${size(c, 't-hp-heat')})`);
+    check(size(c, 't-hp-cop') === 32 && size(c, 't-vl') === 30 && size(c, 't-rl') === 30 && size(c, 't-room-target') === 28
+      && size(c, 't-hp-cop') > offSizes.cop && size(c, 't-vl') > offSizes.vl && size(c, 't-room-target') > offSizes.target,
+    `narrow_focus: COP, flow, return and room target grow (${['t-hp-cop', 't-vl', 't-rl', 't-room-target'].map((id) => size(c, id)).join(', ')})`);
+    check(!shown(c, 't-hc') && !shown(c, 't-hc-mode') && !shown(c, 't-src-in') && !shown(c, 't-outdoor-hp')
+      && [...c.shadowRoot.querySelectorAll('.src text')].every((t) => getComputedStyle(t).display === 'none'),
+    'narrow_focus: circuit label, circuit status, air inlet, outdoor and power source texts leave the drawing');
+    const line = el(c, 'focus-line');
+    check(getComputedStyle(line).display === 'block' && line.textContent === 'Outdoor 10.4 °C · Air inlet 9.8 °C · PV 820 W · Battery 0 W · Grid 420 W'
+      && line.querySelectorAll('span').length === 5, `narrow_focus: one line under the schematic ("${line.textContent}")`);
+    check(getComputedStyle(el(c, 't-rl')).transform !== 'none', 'narrow_focus: the return label moves beside the return riser');
+    c.remove();
+    // only the parts that exist: no power sources, no humidity
+    c = await at(ems, 400, { narrow_focus: true });
+    check(el(c, 'focus-line').textContent === 'Outdoor 2.8 °C · Air inlet 3.4 °C', `narrow_focus: missing sources are left out ("${el(c, 'focus-line').textContent}")`);
+    c.remove();
+    // the heat pump is off: a short, smaller status instead of the values
+    c = await at(ems, 400, { narrow_focus: true }, 'idle');
+    check(el(c, 't-hp-heat').textContent === 'Compressor off' && el(c, 't-hp-heat').classList.contains('off') && size(c, 't-hp-heat') === 22,
+      `narrow_focus: an idle heat pump shows the compressor state in smaller type ("${el(c, 't-hp-heat').textContent}")`);
+    c.remove();
+    // the humidity leaves the target line and joins the line under the schematic; a dew-point warning stays in the drawing
+    c = await at(cooling, 400, { narrow_focus: true }, 'defrost');
+    const tail = el(c, 't-room-target').querySelector('.nf-tail');
+    check(!!tail && getComputedStyle(tail).display === 'none' && /(^| · )Humidity \d+ %$/.test(el(c, 'focus-line').textContent),
+      `narrow_focus: humidity moves to the line ("${el(c, 'focus-line').textContent}")`);
+    check(el(c, 't-hc').classList.contains('dew-warning') && shown(c, 't-hc'), 'narrow_focus: a dew-point warning stays in the drawing');
+    c.remove();
+    // several circuits: up to three rows in two lines, the value larger than before
+    c = await at(ground, 400, { narrow_focus: true });
+    check(el(c, 'house-row2').classList.contains('nf-two') && size(c, 't-house-room') === 26 && size(c, 't-house-room2') === 26
+      && !shown(c, 't-outdoor') && /Outdoor -6.5 °C/.test(el(c, 'focus-line').textContent),
+    `narrow_focus: two circuits get two-line room rows; the outdoor temperature moves to the line (${size(c, 't-house-room')})`);
+    c.remove();
+
+    // 500 px and wider: the option changes nothing that is shown
+    for (const s of [lambda, ground]) {
+      off = await at(s, 900); c = await at(s, 900, { narrow_focus: true });
+      const look = (card) => [...card.shadowRoot.querySelectorAll('#svg text')].filter((t) => t.id !== 't-hp-heat')
+        .map((t) => { const cs = getComputedStyle(t); return `${t.id}|${t.textContent}|${cs.display}|${cs.fontSize}|${cs.transform}|${cs.textAnchor}`; }).join('\n');
+      check(look(off) === look(c) && !shown(c, 't-hp-heat') && getComputedStyle(el(c, 'focus-line')).display === 'none',
+        `narrow_focus: no effect on a wide schematic (${s.name})`);
+      off.remove(); c.remove();
+    }
+
+    // together with narrow_values: its kept values stay, narrow_focus decides the rest
+    c = await at(lambda, 400, { narrow_focus: true, narrow_values: true, hc_return_label: true });
+    check(shown(c, 't-buf-bottom') && shown(c, 't-dhw-mode') && !shown(c, 't-hc') && size(c, 't-vl') === 30 && shown(c, 'focus-line'),
+      'narrow_focus with narrow_values: tank sub-values stay, circuit label hidden, flow enlarged');
+    c.remove();
+  }
+
+  // 23. EMS-ESP hot-water target: the setpoint the boiler works to (dhw/settemp) comes before the selected temperature (dhw/seltemp)
+  {
+    // Bosch Compress in Eco+, the ids and values of a real installation (EMS-ESP MQTT discovery, short names).
+    const base = {
+      'sensor.boiler_hpactivity': 'Heizen', 'sensor.boiler_hptc1': ['28.2', '°C'], 'sensor.boiler_hptc0': ['25.4', '°C'],
+      'sensor.boiler_dhw_curtemp': ['49.8', '°C'],
+    };
+    const resolve = (extra) => {
+      const states = toStates({ ...base, ...extra });
+      const registry = Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'mqtt' }]));
+      return { hass: hassOf(states, registry), e: C._resolve({ preset: 'emsesp' }, hassOf(states, registry)).entities };
+    };
+    const eco = resolve({ 'sensor.boiler_dhw_settemp': ['50.0', '°C'], 'number.boiler_dhw_seltemp': ['48', '°C'] });
+    check(eco.e.dhw_target === 'sensor.boiler_dhw_settemp', `EMS-ESP: the active hot-water setpoint before the selected temperature (${eco.e.dhw_target})`);
+    const card = mount({ preset: 'emsesp' }, eco.hass); await wait(20);
+    check(card._n('dhw_target') === 50, `EMS-ESP: the tank shows the setpoint of the active mode, 50 °C, not the selected 48 °C (${card._n('dhw_target')})`);
+    card.remove();
+    const older = resolve({ 'sensor.boiler_wwsettemp': ['50.0', '°C'], 'number.boiler_wwseltemp': ['48', '°C'] });
+    check(older.e.dhw_target === 'sensor.boiler_wwsettemp', `EMS-ESP: older ww names, the active setpoint wwsettemp first (${older.e.dhw_target})`);
+    const selectedOnly = resolve({ 'number.boiler_dhw_seltemp': ['48', '°C'] });
+    check(selectedOnly.e.dhw_target === 'number.boiler_dhw_seltemp', `EMS-ESP: without settemp the selected temperature stays the target (${selectedOnly.e.dhw_target})`);
   }
 
   log.push(`${checks} checks, ${fails.length} failed`);

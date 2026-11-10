@@ -1,0 +1,1 @@
+- With a boiler, the flow temperature of the heat pump no longer runs into the boiler box. It drops its "VL" prefix there and ends in front of the box, also with a primary pump (forum, 8 November).
