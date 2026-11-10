@@ -22,6 +22,8 @@
 </script>
 <script src="../dist/heatpump-hydraulic-card.js"></script>
 <script src="../demo/setups.js"></script>
+<script src="drawing-collisions.js"></script>
+<script src="drawing-collisions.js"></script>
 <script>
 (async () => {
   const C = customElements.get('heatpump-flow-card');
@@ -56,6 +58,54 @@
   };
   // Rendered without an error: the drawing, or the start state of a card without preset and entities (#142).
   const ok = (card) => !card._failed && (!!card.shadowRoot.getElementById('svg') || !!card.shadowRoot.getElementById('start-hint'));
+
+  // Geometry oracle: inject faults into a small rendered scene independently of the card and its snapshots.
+  {
+    const fixture = document.createElement('div');
+    fixture.innerHTML = `<svg viewBox="0 0 200 100" width="400" height="200">
+      <text id="first" x="10" y="20">First</text><g transform="translate(90 0)"><text id="second" x="10" y="20">Second</text></g>
+      <g style="display:none"><text x="10" y="20">Hidden</text></g>
+      <rect class="tank" x="0" y="50" width="50" height="50"/><text class="tank-temp" x="10" y="75">40</text>
+      <rect id="rod" class="heater-flange" x="48" y="55" width="9" height="18"/><path class="pipe" id="port" d="M50 88 H100" stroke="black" stroke-width="8"/>
+    </svg>`;
+    document.body.append(fixture);
+    const svg = fixture.querySelector('svg');
+    check(!drawingCollisions(svg).length, 'separated labels, hidden groups, mounted flanges and the tank value are allowed');
+    svg.querySelector('#second').parentNode.setAttribute('transform', 'translate(0 0)');
+    svg.querySelector('#rod').setAttribute('y', 72);
+    const first = svg.querySelector('#first');
+    check(drawingCollisions(svg).includes('first overlaps second') && drawingCollisions(svg).includes('rod covers port of port'),
+      'the geometry oracle detects a transformed label collision and an obstructed pipe port');
+    first.setAttribute('y', 70);
+    check(drawingCollisions(svg).includes('first overlaps tank'), 'a foreign label cannot cover the tank');
+    first.setAttribute('x', 195);
+    check(drawingCollisions(svg).includes('first outside viewBox'), 'a label extending beyond the view box fails');
+    fixture.remove();
+  }
+
+  // Geometry oracle: inject faults into a small rendered scene independently of the card and its snapshots.
+  {
+    const fixture = document.createElement('div');
+    fixture.innerHTML = `<svg viewBox="0 0 200 100" width="400" height="200">
+      <text id="first" x="10" y="20">First</text><g transform="translate(90 0)"><text id="second" x="10" y="20">Second</text></g>
+      <g style="display:none"><text x="10" y="20">Hidden</text></g>
+      <rect class="tank" x="0" y="50" width="50" height="50"/><text class="tank-temp" x="10" y="75">40</text>
+      <rect id="rod" class="heater-flange" x="48" y="55" width="9" height="18"/><path class="pipe" id="port" d="M50 88 H100" stroke="black" stroke-width="8"/>
+    </svg>`;
+    document.body.append(fixture);
+    const svg = fixture.querySelector('svg');
+    check(!drawingCollisions(svg).length, 'separated labels, hidden groups, mounted flanges and the tank value are allowed');
+    svg.querySelector('#second').parentNode.setAttribute('transform', 'translate(0 0)');
+    svg.querySelector('#rod').setAttribute('y', 72);
+    const first = svg.querySelector('#first');
+    check(drawingCollisions(svg).includes('first overlaps second') && drawingCollisions(svg).includes('rod covers port of port'),
+      'the geometry oracle detects a transformed label collision and an obstructed pipe port');
+    first.setAttribute('y', 70);
+    check(drawingCollisions(svg).includes('first overlaps tank'), 'a foreign label cannot cover the tank');
+    first.setAttribute('x', 195);
+    check(drawingCollisions(svg).includes('first outside viewBox'), 'a label extending beyond the view box fails');
+    fixture.remove();
+  }
 
   // 1. every installation and scenario renders, presets are detected
   for (const [i, s] of setups.entries()) {
@@ -1957,6 +2007,22 @@
     const optsNoReturn = C._tileOptions(noReturn, C._resolve(noReturn, hass), hass).options.map((o) => o.value);
     check(opts.includes('hc_spread') && opts.includes('hc2_spread') && !opts.includes('hc3_spread') && !optsNoReturn.includes('hc_spread') && optsNoReturn.includes('hc2_spread'),
       `#290: the editor offers a circuit spread only with both sensors of that circuit (${opts.filter((o) => o.includes('hc')).join(',')})`);
+  }
+  {
+    // #387 review: next to a buffer with several circuits the circuit labels keep their place right of the risers (x 688, #361),
+    // in heating and in cooling; only a single circuit moves its cooling readout.
+    const ents = { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r', hc_flow: 'sensor.hf', hc_setpoint: 'sensor.hs',
+      hc_pump: 'binary_sensor.p1', hc2_flow: 'sensor.hf2', hc2_setpoint: 'sensor.hs2', hc2_pump: 'binary_sensor.p2' };
+    const st = (mode) => toStates({ 'sensor.m': mode, 'binary_sensor.c': 'on', 'sensor.f': ['34.3', '°C'], 'sensor.r': ['31.8', '°C'], 'sensor.hf': ['31.7', '°C'],
+      'sensor.hs': ['32', '°C'], 'binary_sensor.p1': 'on', 'sensor.hf2': ['30', '°C'], 'sensor.hs2': ['30.5', '°C'], 'binary_sensor.p2': 'on' });
+    const card = mount({ hc_count: 2, buffer: true, entities: ents }, hassOf(st('heating'))); await wait(20);
+    const pos = () => ['t-hc', 't-hc2'].map((id) => { const el = card.shadowRoot.getElementById(id); return `${el?.getAttribute('x')}/${el?.getAttribute('text-anchor')}`; });
+    const heating = pos();
+    card.hass = hassOf(st('cooling')); await wait(10);
+    const cooling = pos();
+    check([...heating, ...cooling].every((p) => p === '688/start'),
+      `#387 review: with a buffer and two circuits the circuit labels stay right of the risers (${heating.join(', ')} | ${cooling.join(', ')})`);
+    card.remove();
   }
   {
     const s = setups[0];
@@ -5507,9 +5573,24 @@
     // option off: nothing of the focus view is drawn
     let off = await at(lambda, 400);
     check(!off.shadowRoot.querySelector('ha-card').classList.contains('narrow-focus') && !el(off, 'focus-line') && !el(off, 't-hp-heat')
-      && !off.shadowRoot.querySelector('.nf-big, .nf-moved, .nf-tail, .nf-two'), 'narrow_focus off: no focus line, no extra label, no extra class');
+      && !off.shadowRoot.querySelector('.nf-big, .nf-moved, .nf-two'), 'narrow_focus off: no focus line, no extra label, no extra class');
     const offSizes = { vl: size(off, 't-vl'), cop: size(off, 't-hp-cop'), target: size(off, 't-room-target') };
     off.remove();
+
+    // without the option a narrow schematic still drops what is wider than its place: the humidity after the room target (wider
+    // than the house) and the names in front of the brine or well temperatures (past the left edge); a wide one keeps both
+    for (const [px, narrow] of [[400, true], [900, false]]) {
+      const room = await at(cooling, px, {}, 'defrost');
+      const tail = el(room, 't-room-target').querySelector('.nf-tail');
+      check(!!tail && /Humidity \d+ %$/.test(tail.textContent) && (getComputedStyle(tail).display === 'none') === narrow,
+        `${px} px: the humidity after the room target is ${narrow ? 'hidden' : 'shown'} ("${el(room, 't-room-target').textContent}")`);
+      room.remove();
+      const src = await at(ground, px);
+      const pre = el(src, 't-src-out')?.querySelector('.pre');
+      check(!!pre && (getComputedStyle(pre).display === 'none') === narrow && /\d °C$/.test(el(src, 't-src-out').textContent),
+        `${px} px: the name in front of the source outlet is ${narrow ? 'hidden' : 'shown'} ("${el(src, 't-src-out')?.textContent}")`);
+      src.remove();
+    }
 
     // option on below 500 px: key values grow, secondary values move or hide
     let c = await at(lambda, 400, { narrow_focus: true });

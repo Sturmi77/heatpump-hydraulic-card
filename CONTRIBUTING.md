@@ -35,6 +35,7 @@ New setups and scenarios belong in `demo/setups.js`; assertions belong in `test/
 
 - **Snapshot.** Every demo setup in every layout and scenario, and every generated combination in every operating state, is reduced to two fingerprints – the geometry of the schematic and its state (which pipe flows, classes, colours, texts) – and compared with `test/topology-snapshot.js`. A refactor must leave both unchanged.
 - **Combinations.** The storage strategies the card draws (direct, parallel buffer, series buffer with and without bypass valve) × hot-water tank (none, tank, tank with solar thermal) × primary pump × 1–6 heating circuits, with source type, emitters, heaters, power sources and layout rotating through the cases. Each combination must render; every pipe must end at another pipe or a component; a flowing pipe must not end at a closed one; components must not overlap; the drawing must stay inside its view box; and the schematic must stay one tab stop with labelled parts.
+- **Visible geometry.** Every demo scenario and generated operating state also checks rendered SVG label bounds against other labels, appliance bodies and the view box. A separate matrix exercises all 16 heater subsets on each storage wall with solar and fresh-water ports, including narrow layouts and cooling readouts. Failures identify the configuration and the two elements. Extend the interacting options and their geometry checks when adding a part. The storage and circuit layout rules are in [the topology plan](docs/TOPOLOGY.md#collision-checks).
 
 A change that alters the drawing on purpose (a new part, a moved label, a changed text) updates the baseline in the same pull request:
 
@@ -50,6 +51,8 @@ node scripts/topology-snapshot.mjs --diff before.json after.json
 ```
 
 If `test/topology-snapshot.js` conflicts after `main` was merged into a branch, do not merge it by hand: take either side and run `npm run topology:update` again.
+
+The update command runs the geometric and flow checks before replacing the baseline. The full description export remains available to diagnose a failing drawing.
 
 The flow logic lives in one method, `_flowModel()`: it decides the operating state, the open side of the diverter valve, the series-buffer bypass and which pipe, circuit and loop flows; `_update()` only draws it. A new hydraulic part adds its pipes there instead of new flags in the drawing code. Without a parallel buffer the circuits and the heat pump are one water loop: the flow model moves them together, and each circuit has a `pump` (its impeller turns) apart from `on` (water flows through it).
 
