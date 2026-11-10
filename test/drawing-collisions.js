@@ -5,8 +5,26 @@ function schematicMatrix(el, svg) {
   return svg.getScreenCTM().inverse().multiply(el.getScreenCTM());
 }
 
-function rootBox(el, svg) {
+// Text gets its height from the font size: from cap height above to descender depth below the baseline of every character.
+// getBBox uses the line metrics of whatever font the browser picked, and Firefox on Linux reports a line about a third taller
+// than Chromium, so stacked labels 22 units apart (power over COP) touched there only. The width stays measured.
+const CAP = 0.72; const DESCENT = 0.22;
+function localBox(el) {
   const bounds = el.getBBox();
+  const chars = el instanceof SVGTextElement ? el.getNumberOfChars() : 0;
+  if (!chars) return bounds;
+  const size = Math.max(...[el, ...el.querySelectorAll('tspan')].map((n) => parseFloat(getComputedStyle(n).fontSize)).filter(Number.isFinite));
+  let top = Infinity; let bottom = -Infinity;
+  for (let n = 0; n < chars; n++) {
+    let y;
+    try { ({ y } = el.getStartPositionOfChar(n)); } catch (err) { continue; }
+    top = Math.min(top, y - CAP * size); bottom = Math.max(bottom, y + DESCENT * size);
+  }
+  return Number.isFinite(top) ? { x: bounds.x, y: top, width: bounds.width, height: bottom - top } : bounds;
+}
+
+function rootBox(el, svg) {
+  const bounds = localBox(el);
   const matrix = schematicMatrix(el, svg);
   const corners = [bounds.x, bounds.x + bounds.width].flatMap((x) =>
     [bounds.y, bounds.y + bounds.height].map((y) => new DOMPoint(x, y).matrixTransform(matrix)));
