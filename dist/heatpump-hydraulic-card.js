@@ -604,7 +604,9 @@ const HFC_PRESETS = {
         hours: s('boiler_uptimecontrol', 'boiler_total_operating_time_heat'),
         starts_total: s('boiler_totalcompstarts', 'boiler_total_compressor_control_starts'),
         energy_total: s('boiler_metertotal', 'boiler_meter_total', 'boiler_nrgconstotal', 'boiler_total_energy_consumption'),
-        heat_total: s('boiler_nrgtotal', 'boiler_total_energy', 'boiler_nrgsupptotal', 'boiler_total_energy_supplied'),
+        // A heat total that is smaller than one of its parts is not the delivered heat: on a Nefit EnviLine (EMS-ESP 3.8.6)
+        // "total energy supplied" reads the heater rod's energy, so the total COP was 0.1 (#349). It is then left unmapped.
+        heat_total: HFC_PRESETS.emsesp.heatTotals(x, ctx),
         compressor_speed: s('boiler_hpcompspd', 'boiler_compressor_speed'),
         evap_temp: s('boiler_hppl1', 'boiler_evaporator_inlet_temperature_tr4'),
         // Expansion valve VR1 (short name expvalve); larger outdoor units also report VR0 (recvalve) (#224).
@@ -615,18 +617,51 @@ const HFC_PRESETS = {
         liquid_temp: s('boiler_hptr3', 'boiler_refrigerant_temperature_liquid_side_condenser_output_tr3'),
       };
     },
+    // Heat counters of the parts (heating, hot water, cooling) and of the total, in the order the preset prefers them: the two-decimal
+    // counters, the short names, then the long names ("long names" entity format, #349; EMS-ESP locale_translations.h).
+    heatParts: {
+      heating: ['nrgheat', 'energy_heating', 'nrgsuppheating', 'total_energy_supplied_heating'],
+      dhw: ['dhw_nrg', 'dhw_energy', 'dhw_nrgsupp', 'dhw_total_energy_warm_supplied'],
+      cooling: ['nrgcool', 'energy_cooling', 'nrgsuppcooling', 'total_energy_supplied_cooling'],
+    },
+    // The heat total candidates without those that read less than one of the parts (#349). A total cannot be smaller than a
+    // part; such a counter measures something else, and its COP would be wrong. The readings are compared in kWh, so a total
+    // shown in MWh next to parts in kWh is not taken for the smaller one. Without part counters every candidate stays. Part
+    // counters that exist but read no number yet (after a restart) map no total: the dynamic check only rebuilds for a mapping
+    // that appears, so a total mapped now could not be dropped once the parts report. With readings only existing totals stay,
+    // so a candidate without an entity cannot stand in for the one that was left out.
+    heatTotals: (x, ctx) => {
+      const id = (k) => `sensor.${x}boiler_${k}`;
+      const kwh = (k) => {
+        const v = parseFloat(ctx?.state(id(k)));
+        const u = String(ctx?.unit?.(id(k)) || '').trim().toLowerCase();
+        return u === 'wh' ? v / 1000 : u === 'mwh' ? v * 1000 : v;
+      };
+      const totals = ['nrgtotal', 'total_energy', 'nrgsupptotal', 'total_energy_supplied'];
+      const partKeys = Object.values(HFC_PRESETS.emsesp.heatParts).flat().filter((k) => ctx?.state(id(k)) !== undefined);
+      if (!partKeys.length) return totals.map(id);
+      const parts = partKeys.map(kwh).filter(Number.isFinite);
+      if (!parts.length) return [];
+      const largest = Math.max(...parts);
+      return totals.filter((k) => ctx.state(id(k)) !== undefined && !(kwh(k) < largest)).map(id);
+    },
     // EMS-ESP only reports totals; today, month … come from their long-term statistics.
-    tiles: (p) => {
-      const t = (...ks) => ({ total: ks.map((k) => `sensor.${p ? `${p}_` : ''}boiler_${k}`) });
+    tiles: (p, i, ctx) => {
+      const x = p ? `${p}_` : '';
+      const t = (...ks) => ({ total: ks.map((k) => `sensor.${x}boiler_${k}`) });
+      const parts = HFC_PRESETS.emsesp.heatParts;
       return {
         // The counters with two decimals of CS5800/6800i and WLW176/186i first (`meter…` electricity, `nrg…` heat): the whole-kWh
-        // counters make the COP of a day jump in coarse steps (#346).
-        energy: t('metertotal', 'meter_total', 'nrgconstotal', 'total_energy_consumption'), energy_heating: t('meterheat', 'meter_heating', 'nrgconscompheating'),
-        energy_dhw: t('dhw_meter', 'dhw_nrgconscomp'), energy_cooling: t('metercool', 'meter_cooling', 'nrgconscompcooling'),
-        energy_aux: t('metereheat', 'meter_e_heater', 'auxelecheatnrgconstotal'),
-        heat: t('nrgtotal', 'total_energy', 'nrgsupptotal', 'total_energy_supplied'), heat_heating: t('nrgheat', 'energy_heating', 'nrgsuppheating'),
-        heat_dhw: t('dhw_nrg', 'dhw_energy', 'dhw_nrgsupp'), heat_cooling: t('nrgcool', 'energy_cooling', 'nrgsuppcooling'),
-        starts: t('totalcompstarts', 'total_compressor_control_starts'), cycles_heating: t('heatingstarts'), cycles_dhw: t('dhw_startshp'), cycles_cooling: t('coolingstarts'),
+        // counters make the COP of a day jump in coarse steps (#346). Then the short names, then the long names (#349).
+        energy: t('metertotal', 'meter_total', 'nrgconstotal', 'total_energy_consumption'),
+        energy_heating: t('meterheat', 'meter_heating', 'nrgconscompheating', 'energy_consumption_compressor_heating'),
+        energy_dhw: t('dhw_meter', 'dhw_nrgconscomp', 'dhw_energy_consumption_compressor'),
+        energy_cooling: t('metercool', 'meter_cooling', 'nrgconscompcooling', 'energy_consumption_compressor_cooling'),
+        energy_aux: t('metereheat', 'meter_e_heater', 'auxelecheatnrgconstotal', 'total_aux_elec_heater_energy_consumption'),
+        heat: { total: HFC_PRESETS.emsesp.heatTotals(x, ctx) },
+        heat_heating: t(...parts.heating), heat_dhw: t(...parts.dhw), heat_cooling: t(...parts.cooling),
+        starts: t('totalcompstarts', 'total_compressor_control_starts'), cycles_heating: t('heatingstarts', 'heating_control_starts'),
+        cycles_dhw: t('dhw_startshp', 'dhw_starts_hp'), cycles_cooling: t('coolingstarts', 'cooling_control_starts'),
         hours: t('uptimecontrol', 'total_operating_time_heat'),
       };
     },
@@ -2645,6 +2680,7 @@ class HeatpumpFlowCard extends HTMLElement {
       // Without a registry entry (YAML entities) the platform cannot be checked; accept the pattern match.
       match: (re, platform) => ids.find((e) => re.test(e) && (!reg[e] || !platform || reg[e].platform === platform) && onDevice(e)),
       state: (id) => states[id]?.state,
+      unit: (id) => states[id]?.attributes?.unit_of_measurement,
     };
   }
 

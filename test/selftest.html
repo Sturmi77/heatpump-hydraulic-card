@@ -926,6 +926,72 @@
       `EMS-ESP: an unavailable "pump fitted" switch maps no circulation yet, a missing one keeps it (${pending.circulation} / ${legacy.circulation})`);
   }
   {
+    // #349: Nefit EnviLine with EMS-ESP 3.8.6, long names. "total energy supplied" equals the heater rod's energy and is smaller
+    // than the heating share alone, so it is no heat total; the split counters feed the tiles under their long names.
+    const kwh = (v) => [String(v), 'kWh'];
+    const base = {
+      'sensor.boiler_compressor_activity': 'heating', 'sensor.boiler_compressor_speed': ['40', '%'],
+      'sensor.boiler_total_energy_consumption': kwh(15426), 'sensor.boiler_total_aux_elec_heater_energy_consumption': kwh(1537),
+      'sensor.boiler_energy_consumption_compressor_heating': kwh(9800), 'sensor.boiler_dhw_energy_consumption_compressor': kwh(4400),
+      'sensor.boiler_energy_consumption_compressor_cooling': kwh(1200),
+      'sensor.boiler_total_energy_supplied_heating': kwh(34840), 'sensor.boiler_dhw_total_energy_warm_supplied': kwh(19523),
+      'sensor.boiler_total_energy_supplied_cooling': kwh(5768), 'sensor.boiler_heating_control_starts': '9100', 'sensor.boiler_dhw_starts_hp': '2100',
+    };
+    const resolve349 = (extra) => {
+      const states = toStates({ ...base, ...extra });
+      return C._resolve({ preset: 'emsesp' }, hassOf(states, Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'mqtt' }]))));
+    };
+    const wrong = resolve349({ 'sensor.boiler_total_energy_supplied': kwh(1537) });
+    check(wrong.entities.heat_total === undefined && wrong.tiles.heat === undefined,
+      `EMS-ESP: a heat total below the heating share is not mapped (#349) (${wrong.entities.heat_total} / ${JSON.stringify(wrong.tiles.heat)})`);
+    const tl = wrong.tiles;
+    check(tl.heat_heating?.total === 'sensor.boiler_total_energy_supplied_heating' && tl.heat_dhw?.total === 'sensor.boiler_dhw_total_energy_warm_supplied'
+      && tl.heat_cooling?.total === 'sensor.boiler_total_energy_supplied_cooling' && tl.energy_heating?.total === 'sensor.boiler_energy_consumption_compressor_heating'
+      && tl.energy_dhw?.total === 'sensor.boiler_dhw_energy_consumption_compressor' && tl.energy_cooling?.total === 'sensor.boiler_energy_consumption_compressor_cooling'
+      && tl.energy_aux?.total === 'sensor.boiler_total_aux_elec_heater_energy_consumption' && tl.cycles_heating?.total === 'sensor.boiler_heating_control_starts'
+      && tl.cycles_dhw?.total === 'sensor.boiler_dhw_starts_hp', `EMS-ESP long names: split counters for the tiles (#349) (${JSON.stringify(tl)})`);
+    const right = resolve349({ 'sensor.boiler_total_energy_supplied': kwh(60131) });
+    check(right.entities.heat_total === 'sensor.boiler_total_energy_supplied' && right.tiles.heat?.total === 'sensor.boiler_total_energy_supplied',
+      `EMS-ESP: a plausible heat total stays mapped (${right.entities.heat_total})`);
+    const nextOne = resolve349({ 'sensor.boiler_total_energy_supplied': kwh(1537), 'sensor.boiler_total_energy': kwh(60131.42) });
+    check(nextOne.entities.heat_total === 'sensor.boiler_total_energy', `EMS-ESP: the next plausible heat total takes its place (${nextOne.entities.heat_total})`);
+    // Review of #375: the counters are compared in kWh. A total in MWh next to parts in kWh is not the smaller one, a small total
+    // in MWh still is; a total in Wh is converted down.
+    const mwh = resolve349({ 'sensor.boiler_total_energy_supplied': ['60.131', 'MWh'] });
+    const smallMwh = resolve349({ 'sensor.boiler_total_energy_supplied': ['1.537', 'MWh'] });
+    const wh = resolve349({ 'sensor.boiler_total_energy_supplied': ['1537000', 'Wh'] });
+    check(mwh.entities.heat_total === 'sensor.boiler_total_energy_supplied' && mwh.tiles.heat?.total === 'sensor.boiler_total_energy_supplied'
+      && smallMwh.entities.heat_total === undefined && wh.entities.heat_total === undefined,
+    `EMS-ESP: heat total and parts are compared in kWh (${mwh.entities.heat_total} / ${smallMwh.entities.heat_total} / ${wh.entities.heat_total})`);
+    // Review of #375: part counters that exist but report no number yet (after a restart) map no total. The dynamic check only
+    // rebuilds for a mapping that appears, so the wrong total would otherwise stay until the card is rebuilt.
+    const partIds = ['sensor.boiler_total_energy_supplied_heating', 'sensor.boiler_dhw_total_energy_warm_supplied', 'sensor.boiler_total_energy_supplied_cooling'];
+    const unknownParts = Object.fromEntries(partIds.map((id) => [id, ['unknown', 'kWh']]));
+    const early = resolve349({ ...unknownParts, 'sensor.boiler_total_energy_supplied': kwh(1537) });
+    check(early.entities.heat_total === undefined && early.tiles.heat === undefined,
+      `EMS-ESP: part counters without a reading map no heat total yet (${early.entities.heat_total} / ${JSON.stringify(early.tiles.heat)})`);
+    const hass349 = (extra) => {
+      const states = toStates({ ...base, 'sensor.boiler_total_energy_supplied': kwh(1537), ...extra });
+      return hassOf(states, Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'mqtt' }])));
+    };
+    // Only the total below a part: it is mapped neither while the parts are unknown nor once they report.
+    const onlyWrong = mount({ preset: 'emsesp' }, hass349(unknownParts)); await wait(20);
+    const wrongBefore = [onlyWrong._e.heat_total, onlyWrong._tileMap.heat?.total];
+    onlyWrong._checkedAt = 0; onlyWrong.hass = hass349({}); await wait(20);
+    check(wrongBefore.every((v) => v === undefined) && onlyWrong._e.heat_total === undefined && onlyWrong._tileMap.heat === undefined,
+      `EMS-ESP: after a restart a running card never maps the total below a part (${wrongBefore.join(' / ')} → ${onlyWrong._e.heat_total} / ${JSON.stringify(onlyWrong._tileMap.heat)})`);
+    onlyWrong.remove();
+    // With a plausible total as well: it appears once the parts report, and the dynamic check builds the card again.
+    const plausible = { 'sensor.boiler_total_energy': kwh(60131) };
+    const restart = mount({ preset: 'emsesp' }, hass349({ ...plausible, ...unknownParts })); await wait(20);
+    const before = [restart._e.heat_total, restart._tileMap.heat?.total];
+    restart._checkedAt = 0; restart.hass = hass349(plausible); await wait(20);
+    check(before.every((v) => v === undefined) && restart._e.heat_total === 'sensor.boiler_total_energy'
+      && restart._tileMap.heat?.total === 'sensor.boiler_total_energy',
+    `EMS-ESP: once the parts report, a running card maps the plausible total (${before.join(' / ')} → ${restart._e.heat_total} / ${restart._tileMap.heat?.total})`);
+    restart.remove();
+  }
+  {
     // #287: Buderus WLW166i with EMS-ESP 3.9.0-dev (long names, #225): the binary compressor reads off while the compressor runs.
     const states = toStates({
       'sensor.boiler_compressor_activity': 'Heizen', 'binary_sensor.boiler_hp_compressor': 'off', 'sensor.boiler_compressor_speed': ['31', '%'],
