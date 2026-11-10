@@ -1,7 +1,13 @@
-// Compare in schematic coordinates, including parts in translated circuit rows.
+// Element to schematic (viewBox) coordinates, including parts in translated circuit rows. getScreenCTM includes the viewBox
+// scaling of the outer svg in every browser; getCTM of the outer svg leaves it out in Firefox, which mixed screen pixels with
+// schematic units (a pipe radius of 4.5 units against a rod box scaled to 0.39).
+function schematicMatrix(el, svg) {
+  return svg.getScreenCTM().inverse().multiply(el.getScreenCTM());
+}
+
 function rootBox(el, svg) {
   const bounds = el.getBBox();
-  const matrix = svg.getCTM().inverse().multiply(el.getCTM());
+  const matrix = schematicMatrix(el, svg);
   const corners = [bounds.x, bounds.x + bounds.width].flatMap((x) =>
     [bounds.y, bounds.y + bounds.height].map((y) => new DOMPoint(x, y).matrixTransform(matrix)));
   return { l: Math.min(...corners.map((p) => p.x)), r: Math.max(...corners.map((p) => p.x)),
@@ -37,9 +43,10 @@ function drawingCollisions(svg) {
     }
   }
   // Labels painted inside an appliance belong to it. All other labels need to
-  // clear its body, even when their anchor still falls outside the appliance.
+  // clear its body, even when their anchor still falls outside the appliance. The flow label next to a boiler (.no-pre) ends in
+  // front of the boiler box and may reach over the edge of the heat pump on a narrow card, where its halo keeps it readable.
   const bodies = [
-    ['#hp-box', '.unit-title, .unit-status, .unit-val'],
+    ['#hp-box', '.unit-title, .unit-status, .unit-val, .no-pre'],
     ['rect.tank', '.tank-temp, .tank-sub, .on-tank, .series-title, #cs-tank ~ #t-dhw-mode'],
     ['rect.boiler-box', '.boiler-value'],
     ['rect.fws', '#t-dhw-top'],
@@ -60,7 +67,7 @@ function drawingCollisions(svg) {
   }
   // A mounting flange must leave pipe ports free, including the painted pipe cap.
   if (flanges.length) for (const pipe of svg.querySelectorAll('path.pipe')) {
-    const m = svg.getCTM().inverse().multiply(pipe.getCTM());
+    const m = schematicMatrix(pipe, svg);
     const r = parseFloat(getComputedStyle(pipe).strokeWidth) / 2;
     for (const end of [0, pipe.getTotalLength()]) {
       const { x, y } = pipe.getPointAtLength(end).matrixTransform(m);

@@ -251,7 +251,8 @@
   };
   // The shapes of the schematic with their boxes and, for pipes, the end points of every sub-path (local and schematic coordinates).
   const scene = (svg) => {
-    const toRoot = (el) => svg.getCTM().inverse().multiply(el.getCTM());
+    // Same matrix as rootBox (drawing-collisions.js), so pipe ends and shape boxes share one coordinate system in every browser.
+    const toRoot = (el) => schematicMatrix(el, svg);
     const shapes = [...svg.querySelectorAll('path, rect, circle, ellipse, line, polyline, polygon')]
       .filter((el) => !el.classList.contains('flow') && !el.classList.contains('eflow') && visible(el, svg))
       .map((el) => ({ el, box: rootBox(el, svg), pipe: el.classList.contains('pipe') }));
