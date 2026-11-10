@@ -2,7 +2,8 @@
   "preset": "heishamon",
   "reviewed": {
     "date": "2026-11-10",
-    "version": "2.12.4"
+    "version": "2.12.4",
+    "note": "2.12.3 and 2.12.4 checked: device classes of read-only binary sensors (RUNNING/HEAT moved to binary_sensor_device_class), native temperature attributes for climate and DHW, firmware update reporting. Entity ids and translation keys unchanged."
   },
   "unmapped": {
     "hc_return": "HeishaMon reports per zone the water temperature and its target, no return."

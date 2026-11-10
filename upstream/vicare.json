@@ -2,7 +2,8 @@
   "preset": "vicare",
   "reviewed": {
     "date": "2026-11-10",
-    "version": null
+    "version": null,
+    "note": "HA dev to 86f7b2b checked: heating rod runtime sensors, an operating mode select per heating circuit, room window and condensation risk binary sensors (one device per room). Additions only; heating rod runtime is a candidate for aux_hours, condensation_risk for the dew-point warning of #251."
   },
   "unmapped": {
     "heat": "ViCare reports no live heat output, only consumption and production counters; the card estimates it from flow rate and spread.",

@@ -2,7 +2,8 @@
   "preset": "samsung",
   "reviewed": {
     "date": "2026-11-10",
-    "version": "2026.10.0"
+    "version": "2026.10.0",
+    "note": "Only the README changed (FSV 5031, 5032, 5061 as number components). Nothing for the preset."
   },
   "unmapped": {
     "hc_return": "The NASA bus reports the return of the heat pump (0x4236), not one per circuit.",
