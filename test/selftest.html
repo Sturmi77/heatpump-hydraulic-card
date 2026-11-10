@@ -976,6 +976,18 @@
       `EMS-ESP: an unavailable "pump fitted" switch maps no circulation yet, a missing one keeps it (${pending.circulation} / ${legacy.circulation})`);
   }
   {
+    // #389: EMS-ESP can publish binary_sensor.boiler_auxheaterstatus with an empty state next to a working
+    // sensor.boiler_auxheaterstatus (#224). A candidate with an empty state yields to the next one, like unknown or unavailable.
+    const states = toStates({ 'sensor.boiler_hpactivity': 'heating', 'binary_sensor.boiler_auxheaterstatus': '', 'sensor.boiler_auxheaterstatus': 'on' });
+    const registry = Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'mqtt' }]));
+    const empty = C._resolve({ preset: 'emsesp' }, hassOf(states, registry)).entities;
+    const reported = C._resolve({ preset: 'emsesp' }, hassOf({ ...states, ...toStates({ 'binary_sensor.boiler_auxheaterstatus': 'off' }) }, registry)).entities;
+    const alone = C._resolve({ preset: 'emsesp' }, hassOf(toStates({ 'sensor.boiler_hpactivity': 'heating', 'binary_sensor.boiler_auxheaterstatus': '' }), registry)).entities;
+    check(empty.heater === 'sensor.boiler_auxheaterstatus' && reported.heater === 'binary_sensor.boiler_auxheaterstatus'
+      && alone.heater === 'binary_sensor.boiler_auxheaterstatus',
+      `EMS-ESP: an aux heater binary sensor with an empty state yields to the sensor (#389) (${empty.heater} / ${reported.heater} / ${alone.heater})`);
+  }
+  {
     // #349: Nefit EnviLine with EMS-ESP 3.8.6, long names. "total energy supplied" equals the heater rod's energy and is smaller
     // than the heating share alone, so it is no heat total; the split counters feed the tiles under their long names.
     const kwh = (v) => [String(v), 'kWh'];

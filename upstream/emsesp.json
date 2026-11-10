@@ -1,8 +1,9 @@
 {
   "preset": "emsesp",
   "reviewed": {
-    "date": "2026-11-01",
-    "version": "v3.8.6"
+    "date": "2026-11-10",
+    "version": "v3.9.0",
+    "note": "v3.9.0 checked: new boiler auxHeater (a writable setting, not the heater state), FR50 mode/heattemp/maxflowtemp now read-only, pc0flow cleared after sustained 0xFFFF, discovery availability cleanup. No key the preset uses changed."
   },
   "unmapped": {
     "hc_return": "EMS-ESP reports per circuit the flow temperature of the mixer module (MM100) and the thermostat values, no return."

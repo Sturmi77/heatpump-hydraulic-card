@@ -1,8 +1,9 @@
 {
   "preset": "espaltherma",
   "reviewed": {
-    "date": "2026-11-03",
-    "version": null
+    "date": "2026-11-10",
+    "version": null,
+    "note": "beta to 45bbd71 checked: German definitions only changed comments (pump labels), HT outdoor unit names added, counters and values for software 20002203. The preset uses the English names; nothing changed for it."
   },
   "unmapped": {
     "hc_flow": "ESPAltherma reports the leaving water of the heat pump, no flow per circuit.",

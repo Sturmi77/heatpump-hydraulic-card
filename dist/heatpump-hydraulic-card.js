@@ -3138,7 +3138,8 @@ class HeatpumpFlowCard extends HTMLElement {
     const fromPreset = {};
     const presetSums = {};
     // First candidate with a value; one that exists but is unavailable or unknown (not reported by this model) yields to a later one.
-    const live = (id) => hass.states[id] && !['unknown', 'unavailable'].includes(hass.states[id].state);
+    // So does one with an empty state: EMS-ESP can publish an aux heater binary sensor that never reports (#389).
+    const live = (id) => hass.states[id] && !['unknown', 'unavailable', ''].includes(String(hass.states[id].state ?? '').trim());
     const take = (k, v) => {
       // { sum: [a, b] }: the key is the sum of these entities, as a list in the configuration is (ebusd heat, #338).
       if (v && Array.isArray(v.sum)) {

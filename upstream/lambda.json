@@ -1,9 +1,9 @@
 {
   "preset": "lambda",
   "reviewed": {
-    "date": "2026-11-01",
-    "version": "V3.6.1",
-    "note": "Entity names now live in lambda_modbus/*.py (const_base/const_sensor/const_mapping removed upstream in July); watched paths updated, all preset names still present."
+    "date": "2026-11-10",
+    "version": "V3.7.0",
+    "note": "V3.6.3 and V3.7.0 checked: outdoor temperature at -0.1 °C fixed, new runtime sensors per mode (heating/hot_water/defrost/heating_rod runtime total/daily), heating-to-hot-water switch counters, pv_temperature_increase numbers, Lambda Cockpit dashboard. Additions only; the runtime totals are candidates for the hours tiles."
   },
   "unmapped": {
     "hc_pump": "The heating-circuit registers of the Lambda Modbus interface (5000 + 100n) have no pump state."
