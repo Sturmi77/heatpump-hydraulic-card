@@ -2009,6 +2009,22 @@
       `#290: the editor offers a circuit spread only with both sensors of that circuit (${opts.filter((o) => o.includes('hc')).join(',')})`);
   }
   {
+    // #387 review: next to a buffer with several circuits the circuit labels keep their place right of the risers (x 688, #361),
+    // in heating and in cooling; only a single circuit moves its cooling readout.
+    const ents = { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r', hc_flow: 'sensor.hf', hc_setpoint: 'sensor.hs',
+      hc_pump: 'binary_sensor.p1', hc2_flow: 'sensor.hf2', hc2_setpoint: 'sensor.hs2', hc2_pump: 'binary_sensor.p2' };
+    const st = (mode) => toStates({ 'sensor.m': mode, 'binary_sensor.c': 'on', 'sensor.f': ['34.3', '°C'], 'sensor.r': ['31.8', '°C'], 'sensor.hf': ['31.7', '°C'],
+      'sensor.hs': ['32', '°C'], 'binary_sensor.p1': 'on', 'sensor.hf2': ['30', '°C'], 'sensor.hs2': ['30.5', '°C'], 'binary_sensor.p2': 'on' });
+    const card = mount({ hc_count: 2, buffer: true, entities: ents }, hassOf(st('heating'))); await wait(20);
+    const pos = () => ['t-hc', 't-hc2'].map((id) => { const el = card.shadowRoot.getElementById(id); return `${el?.getAttribute('x')}/${el?.getAttribute('text-anchor')}`; });
+    const heating = pos();
+    card.hass = hassOf(st('cooling')); await wait(10);
+    const cooling = pos();
+    check([...heating, ...cooling].every((p) => p === '688/start'),
+      `#387 review: with a buffer and two circuits the circuit labels stay right of the risers (${heating.join(', ')} | ${cooling.join(', ')})`);
+    card.remove();
+  }
+  {
     const s = setups[0];
     const hass = hassOf(toStates(s.states('heat')), {}, null, s);
     const o = C._tileOptions(s.config, C._resolve(s.config, hass), hass);

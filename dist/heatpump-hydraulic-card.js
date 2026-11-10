@@ -6666,7 +6666,8 @@ class HeatpumpFlowCard extends HTMLElement {
           const label = this._$(`t-hc${s}`);
           // The longer cooling readout uses the row between the storage and the
           // emitter heading. Keep its left edge clear of the storage column.
-          if (label && P.buffer) {
+          // With several circuits every label already starts right of the risers (x 688, #361) and stays there.
+          if (label && P.buffer && this._hcCount === 1) {
             label.setAttribute('x', dewKnown ? 648 : 740);
             label.setAttribute('text-anchor', dewKnown ? 'start' : 'middle');
           }
