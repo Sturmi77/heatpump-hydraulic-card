@@ -1,9 +1,9 @@
 {
   "preset": "vicare",
   "reviewed": {
-    "date": "2026-11-02",
+    "date": "2026-11-10",
     "version": null,
-    "note": "HA dev 2026-11-01/02: room_temperature, room_humidity, room_window_open and room_condensation_risk (translation key condensation_risk) come from ViCare room controls, one device per room; not mapped (no unambiguous room or circuit for the card). condensation_risk is a candidate for the dew-point warning of #251. Holiday program and pellet sensors not used."
+    "note": "HA dev to 86f7b2b checked: heating rod runtime sensors, an operating mode select per heating circuit, room window and condensation risk binary sensors (one device per room). Additions only; heating rod runtime is a candidate for aux_hours, condensation_risk for the dew-point warning of #251."
   },
   "unmapped": {
     "heat": "ViCare reports no live heat output, only consumption and production counters; the card estimates it from flow rate and spread.",
