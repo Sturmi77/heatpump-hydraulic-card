@@ -5545,9 +5545,24 @@
     // option off: nothing of the focus view is drawn
     let off = await at(lambda, 400);
     check(!off.shadowRoot.querySelector('ha-card').classList.contains('narrow-focus') && !el(off, 'focus-line') && !el(off, 't-hp-heat')
-      && !off.shadowRoot.querySelector('.nf-big, .nf-moved, .nf-tail, .nf-two'), 'narrow_focus off: no focus line, no extra label, no extra class');
+      && !off.shadowRoot.querySelector('.nf-big, .nf-moved, .nf-two'), 'narrow_focus off: no focus line, no extra label, no extra class');
     const offSizes = { vl: size(off, 't-vl'), cop: size(off, 't-hp-cop'), target: size(off, 't-room-target') };
     off.remove();
+
+    // without the option a narrow schematic still drops what is wider than its place: the humidity after the room target (wider
+    // than the house) and the names in front of the brine or well temperatures (past the left edge); a wide one keeps both
+    for (const [px, narrow] of [[400, true], [900, false]]) {
+      const room = await at(cooling, px, {}, 'defrost');
+      const tail = el(room, 't-room-target').querySelector('.nf-tail');
+      check(!!tail && /Humidity \d+ %$/.test(tail.textContent) && (getComputedStyle(tail).display === 'none') === narrow,
+        `${px} px: the humidity after the room target is ${narrow ? 'hidden' : 'shown'} ("${el(room, 't-room-target').textContent}")`);
+      room.remove();
+      const src = await at(ground, px);
+      const pre = el(src, 't-src-out')?.querySelector('.pre');
+      check(!!pre && (getComputedStyle(pre).display === 'none') === narrow && /\d °C$/.test(el(src, 't-src-out').textContent),
+        `${px} px: the name in front of the source outlet is ${narrow ? 'hidden' : 'shown'} ("${el(src, 't-src-out')?.textContent}")`);
+      src.remove();
+    }
 
     // option on below 500 px: key values grow, secondary values move or hide
     let c = await at(lambda, 400, { narrow_focus: true });

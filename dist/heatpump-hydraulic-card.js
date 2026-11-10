@@ -4059,9 +4059,9 @@ class HeatpumpFlowCard extends HTMLElement {
     el.append(t, text);
   }
   _txt(id, text) { const el = this._$(id); if (el && el.textContent !== text) el.textContent = text; }
-  // Label whose tail (for example the humidity after the room target) the narrow focus view hides; without the option a plain label.
+  // Label whose tail (for example the humidity after the room target) the narrow focus view hides; a narrow schematic also hides
+  // the humidity after the room target, which is wider than the house there.
   _txtTail(id, main, tail) {
-    if (!this._narrowFocus()) { this._txt(id, `${main}${tail}`); return; }
     const el = this._$(id); if (!el) return;
     const key = `${main}|${tail}`;
     if (el._k === key) return;
@@ -6763,8 +6763,9 @@ class HeatpumpFlowCard extends HTMLElement {
     if (this._sourceType === 'air') { this._txt('t-src-in', srcParts.join(' · ')); this._$('t-outdoor-hp')?.setAttribute('y', srcParts.length ? 472 : 450); }
     else {
       const brine = this._sourceType === 'brine';
-      this._txt('t-src-in', this._has('source_in') ? `${brine ? i.brine_in : i.well_in} ${this._t(this._n('source_in'))}` : '');
-      this._txt('t-src-out', this._has('source_out') ? `${brine ? i.brine_out : i.well_out} ${this._t(this._n('source_out'))}` : '');
+      // The names are prefixes: a narrow schematic shows the values alone, "Brine out" no longer reaches past the left edge.
+      this._txtPre('t-src-in', brine ? i.brine_in : i.well_in, this._has('source_in') ? this._t(this._n('source_in')) : '');
+      this._txtPre('t-src-out', brine ? i.brine_out : i.well_out, this._has('source_out') ? this._t(this._n('source_out')) : '');
       const sourceSpread = this._n('source_in') - this._n('source_out');
       this._txt('t-src-spread', this._sourceSpread && running && Number.isFinite(sourceSpread) ? `ΔT ${this._fmt(sourceSpread)} K` : '');
       this._txt('t-src-vol', this._has('source_volume') && srcVol > 0 ? this._flowText(srcVol) : '');
@@ -7289,7 +7290,7 @@ HeatpumpFlowCard.styles = `
   /* narrow schematic (phones, narrow columns): larger type, secondary labels hidden */
   .stage { container-type: inline-size; }
   @container (max-width: 640px) { #svg { --k: 1.2; --ku: 1.1; --kp: 1; --k2: 1; --ks: 1.2; --kt: 1.15; } }
-  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .vol-label, .tank-sub, .pre, #t-valve, #t-circ, #t-dhw-mode { display: none; } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values #t-dhw-middle, .narrow-values #t-dhw-bottom, .narrow-values #t-dhw-mode, .narrow-values .vol-label { display: block; font-size: calc(13px * var(--k2, 1)); } }
+  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .vol-label, .tank-sub, .pre, #t-valve, #t-circ, #t-dhw-mode, #t-room-target .nf-tail { display: none; } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values #t-dhw-middle, .narrow-values #t-dhw-bottom, .narrow-values #t-dhw-mode, .narrow-values .vol-label { display: block; font-size: calc(13px * var(--k2, 1)); } }
   /* narrow_focus: below 500 px the key values grow to about the size of the tank temperature; the outdoor, air inlet and power
      source values move to one line under the schematic, and the secondary labels are hidden. Wins over narrow_values. */
   #t-hp-heat, .focus-line { display: none; }

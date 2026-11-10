@@ -19,7 +19,10 @@
   ?dump writes the full descriptions as JSON into <pre id="dump"> instead of comparing (scripts/topology-snapshot.mjs uses it).
   Result: <pre id="result">PASS</pre> or FAIL with the failed checks.
 -->
-<style>#stage { width: 900px; } #stage.narrow { width: 420px; }</style>
+<!-- The card inherits the page font outside Home Assistant (which uses Roboto). Without one each browser falls back to its own
+     default, a wide serif in Firefox on Ubuntu, and the collision checks measured other text widths than in Chromium. Arial and
+     Liberation Sans have the same metrics, so Windows and Linux measure alike. -->
+<style>#stage { width: 900px; font-family: Arial, "Liberation Sans", sans-serif; } #stage.narrow { width: 420px; }</style>
 </head>
 <body>
 <pre id="result">RUNNING</pre>
