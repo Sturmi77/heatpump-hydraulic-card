@@ -2480,6 +2480,10 @@ const HFC_STORAGES = ['separate', 'combined'];
 // Sides of the diverter valve in a `valve_map`: dhw or heating, in any case and with the usual synonyms (#126).
 const HFC_VALVE_SIDES = { dhw: 'dhw', 'hot water': 'dhw', hot_water: 'dhw', hotwater: 'dhw', heating: 'heating', heat: 'heating' };
 const hfcValveSide = (v) => HFC_VALVE_SIDES[String(v ?? '').trim().toLowerCase()];
+// Options that place or size labels of the schematic, listed in the diagnostic report (#395): scripts/report-fixture.mjs turns a
+// report into a test case.
+const HFC_DRAWING_KEYS = ['title', 'hc_type', 'hc2_type', 'hc3_type', 'hc4_type', 'hc5_type', 'hc6_type', 'hc_name', 'hc2_name', 'hc3_name', 'hc4_name',
+  'hc5_name', 'hc6_name', 'unit_style', 'unit_size', 'source_spread', 'narrow_values', 'buffer_values', 'timeline'];
 // Value maps of a preset or the configuration, listed in the diagnostic report.
 const HFC_MAP_KEYS = ['valve_map', 'mode_map', 'dhw_mode_map', 'buffer_mode_map', 'hc_mode_map', 'program_map', 'sg_ready_map'];
 // How the tap water is heated: a coil in the tank, a fresh-water station on the storage, or a tank in the combined storage.
@@ -3465,6 +3469,13 @@ class HeatpumpFlowCard extends HTMLElement {
       })()}`,
       `Flow rates shown in: ${String(config.flow_rate_unit || 'l/h').replace('m3/h', 'm³/h')}`,
       `Circuit labels: flow ${config.hc_flow_label === false ? 'hidden' : 'shown'} · return ${config.hc_return_label ? 'shown' : 'hidden'}`,
+      // The other options that place or size labels, so a layout report can be turned into a test case (#395). Names only as
+      // their length: the drawing depends on it, the report does not need the name.
+      `Drawing options: ${(() => {
+        const set = HFC_DRAWING_KEYS.filter((key) => config[key] !== undefined && config[key] !== null && config[key] !== '')
+          .map((key) => `${key}=${/_name$|^title$/.test(key) ? `${String(config[key]).length} characters` : clean(config[key])}`);
+        return set.length ? set.join(', ') : 'defaults';
+      })()}`,
       '',
       'Detection:',
       ...detection,
@@ -3975,13 +3986,15 @@ class HeatpumpFlowCard extends HTMLElement {
     if (el._k === key) return;
     if (el.dataset.lines === '2') { el._k = this._hcTargetLines(el, texts) ? key : ''; return; }
     let measured = true;
+    // From the pump (x 736) back to the riser of the diverter valve (x 386) with some air, or to the hot-water return (x 490)
+    // where a tank is drawn (#395).
+    const left = this._parts.dhw && !this._parts.station ? 500 : 400;
     for (const t of texts) {
       el.textContent = t;
       let w = 0;
       try { w = el.getComputedTextLength(); } catch (err) { w = 0; }
       if (!(w > 0)) { measured = false; break; }
-      // From the pump (x 736) back to the riser of the diverter valve (x 386) with some air.
-      if (w <= 736 - 400) break;
+      if (w <= 736 - left) break;
     }
     el._k = measured ? key : '';
   }
@@ -4295,7 +4308,7 @@ class HeatpumpFlowCard extends HTMLElement {
             <circle class="pump" cx="${P.boiler ? 316 : 340}" cy="250" r="16"/>
             <g class="impeller" id="impeller-primary" style="transform-origin:${P.boiler ? 316 : 340}px 250px"><path d="M${P.boiler ? 316 : 340} 238 L${P.boiler ? 322 : 346} 250 L${P.boiler ? 310 : 334} 250Z M${P.boiler ? 316 : 340} 262 L${P.boiler ? 310 : 334} 250 L${P.boiler ? 322 : 346} 250Z" class="imp"/></g>
           </g>` : ''}
-          <g class="tap" ${de('flow')}><text class="pipe-label${nf && !P.boiler ? ' nf-big' : ''}${P.boiler ? ' no-pre' : ''}" id="t-vl" x="${P.boiler ? 344 : (this._primaryPump() ? 340 : 338)}" y="${this._primaryPump() ? 226 : 236}" text-anchor="${P.boiler ? 'end' : 'middle'}"></text></g>
+          <g class="tap" ${de('flow')}><text class="pipe-label${nf && !P.boiler ? ' nf-big' : ''}${P.boiler ? ' no-pre' : ''}" id="t-vl" x="${P.boiler ? 344 : (this._primaryPump() ? 340 : 338)}" y="${(this._primaryPump() ? 226 : 236) + (P.boiler ? 2 : 0)}" text-anchor="${P.boiler ? 'end' : 'middle'}"></text></g>
           <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${P.boiler ? 336 : (this._primaryPump() ? 340 : 346)}" y="${P.boiler ? 324 : this._primaryPump() ? 284 : 275}" text-anchor="middle"></text></g>
           <g class="tap" ${de('return')}><text class="pipe-label" id="t-rl" x="335" y="406" text-anchor="middle"></text></g>
 
@@ -4312,7 +4325,7 @@ class HeatpumpFlowCard extends HTMLElement {
             <text class="unit-val strong" id="t-hp-cop" x="170" y="412" text-anchor="middle"></text>
             ${nf ? '<text class="unit-val" id="t-hp-heat" x="170" y="374" text-anchor="middle"></text>' : ''}
           </g>
-          ${this._sourceType === 'air' ? `<g class="tap" ${de(e.source_in ? 'source_in' : 'source_volume')}><text class="small${nf ? ' nf-moved' : ''}" id="t-src-in" x="170" y="450" text-anchor="middle"></text></g>${this._has('outdoor') ? `<g class="tap" ${de('outdoor')}><text class="small" id="t-outdoor-hp" x="170" y="472" text-anchor="middle"></text></g>` : ''}` : ''}
+          ${this._sourceType === 'air' ? `<g class="tap" ${de(e.source_in ? 'source_in' : 'source_volume')}><text class="small${nf ? ' nf-moved' : ''}" id="t-src-in" x="170" y="450" text-anchor="middle" data-fit="330"></text></g>${this._has('outdoor') ? `<g class="tap" ${de('outdoor')}><text class="small" id="t-outdoor-hp" x="170" y="472" text-anchor="middle"></text></g>` : ''}` : ''}
           ${this._heaterSvg('heater', 'inline')}
           ${P.boiler ? `<g class="tap boiler" id="boiler" ${de(e.boiler_state ? 'boiler_state' : (e.boiler_power ? 'boiler_power' : 'boiler_flow'))}>
             <text class="boiler-title" x="372" y="207" text-anchor="middle">${this._esc(i.boiler)}</text>
@@ -4955,13 +4968,13 @@ class HeatpumpFlowCard extends HTMLElement {
     if (this._noBypass()) {
       return `${pp('byp-vl', 'M520 360 H600')}${pp('sb-vl', 'M600 360 H640')}${pp('sb-b', 'M640 495 H582')}${pp('byp-rl', 'M582 495 H520')}
       <rect class="tank" id="sb-tank" x="450" y="452" width="116" height="86" rx="20"/>
-      <text class="small series-title" x="508" y="499" text-anchor="middle" data-fit="104">${this._esc(i.series_tank)}</text>`;
+      <text class="small series-title" x="508" y="499" text-anchor="middle" data-fit="98">${this._esc(i.series_tank)}</text>`;
     }
     // The branches leave the flow line under its end, so the round cap of the idle branch does not cover the flowing pipe.
     return `${pp('sb-a', 'M600 360 V477')}${pp('sb-vl', 'M600 360 H640')}${pp('byp-vl', 'M520 360 H600')}${pp('sb-b', 'M640 495 H618')}${pp('byp-rl', 'M582 495 H520')}
       <g class="tap" ${de(e.bypass_valve ? 'bypass_valve' : 'defrost')}>
         <rect class="tank" id="sb-tank" x="450" y="452" width="116" height="86" rx="20"/>
-        <text class="small series-title" x="508" y="499" text-anchor="middle" data-fit="104">${this._esc(i.series_tank)}</text>
+        <text class="small series-title" x="508" y="499" text-anchor="middle" data-fit="98">${this._esc(i.series_tank)}</text>
         <circle class="valve" cx="600" cy="495" r="18"/>
         <path class="valve-arrow" id="sb-arrow" d="M614 495 H586 M593 488 L586 495 L593 502"/>
         <text class="small" id="t-bypass" x="600" y="534" text-anchor="middle"></text>
@@ -5051,9 +5064,14 @@ class HeatpumpFlowCard extends HTMLElement {
       ${this._config.hc_return_label ? `<g class="tap" ${de(k('return'))}><text class="vol-label" id="t-hc-rl${s}" x="690" y="515" text-anchor="start"></text></g>` : ''}
       ${n === 1 && e.hc_pressure
     // Starts right of the storage column (and right of the risers of further circuits), so a long text such as
-    // "Heizungsdruck 1,8 bar" is not covered by the buffer (#129); low enough to pass between the pipes of the emitter. With a
-    // mixer it ends before the mixer's bypass (x 760); a longer text then shows the value alone.
-    ? `<g class="tap pressure" id="pressure-hc" ${de('hc_pressure')}><text class="pressure-label" id="t-hc-pressure" x="${this._hcCount > 1 ? 684 : 650}" y="458" text-anchor="start" data-fit="${(this._mixerSvg(n) ? 752 : 860) - (this._hcCount > 1 ? 684 : 650)}"></text></g>` : ''}
+    // "Heizungsdruck 1,8 bar" is not covered by the buffer (#129); low enough to pass between the pipes of an underfloor loop. With a
+    // mixer it ends before the mixer's bypass (x 760), at a radiator before the bend of its return (x 785, #395); there a longer
+    // text shows the value alone even in English (data-fit-pre="optional").
+    ? (() => {
+      const x = this._hcCount > 1 ? 684 : 650;
+      const end = this._mixerSvg(n) ? 752 : this._hcTypes[0] === 'underfloor' ? 860 : 778;
+      return `<g class="tap pressure" id="pressure-hc" ${de('hc_pressure')}><text class="pressure-label" id="t-hc-pressure" x="${x}" y="458" text-anchor="start" data-fit="${end - x}"${end < 860 ? ' data-fit-pre="optional"' : ''}></text></g>`;
+    })() : ''}
       <g class="tap" ${de(e[k('pump')] ? k('pump') : k('mode'))}>
         ${this._circuitPump(n) ? `<circle class="pump" cx="720" cy="360" r="16"/>
         <g class="impeller" id="impeller${s}"><path d="M720 348 L726 360 L714 360Z M720 372 L714 360 L726 360Z" class="imp"/></g>` : ''}

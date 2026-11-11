@@ -1,0 +1,4 @@
+- The heating pressure no longer runs into a radiator or a column radiator: next to them it ends before the return bend, and a longer text shows the value alone (#395).
+- A heating curve shift no longer writes its target across the hot-water return: next to a tank the text leaves out the word "shift" earlier.
+- The air inlet line under the heat pump and the series-buffer title keep to their width in every language; the flow temperature next to a boiler keeps its distance from the boiler title on large type.
+- The diagnostic report lists the drawing options (emitters, unit drawing, value options; circuit names only as their length), so a layout report can be turned into a test case.

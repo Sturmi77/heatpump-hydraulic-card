@@ -83,6 +83,60 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # A pull request that changes the drawing baseline gets pictures of the changed cases, before and after, as the artifact
+  # "drawing-changes" (#395), so a review sees the drawings and not only fingerprints. Not a required check.
+  sheet:
+    name: Drawing changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Did the baseline change?
+        id: changed
+        run: |
+          if git diff --quiet "origin/${{ github.base_ref }}" HEAD -- test/topology-snapshot.js; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "The drawing baseline is unchanged." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.changed.outputs.changed == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.changed.outputs.changed == 'true'
+        run: npm ci
+      - name: Cache chromium
+        if: steps.changed.outputs.changed == 'true'
+        id: browser-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
+      - name: Install chromium
+        if: steps.changed.outputs.changed == 'true' && steps.browser-cache.outputs.cache-hit != 'true'
+        run: |
+          for attempt in 1 2 3; do
+            timeout 120 npx playwright install chromium && exit 0
+            echo "Attempt $attempt failed" >&2
+          done
+          exit 1
+      - name: Draw the changed cases before and after
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          node scripts/topology-sheet.mjs --base "origin/${{ github.base_ref }}" --out drawing-changes | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Pictures: artifact drawing-changes of this run (open index.html)." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.changed.outputs.changed == 'true'
+        with:
+          name: drawing-changes
+          path: drawing-changes/
+          retention-days: 14
+
   # HACS reads the download counter of the release asset named in hacs.json (`filename`) and downloads the card from it.
   # A release without that asset shows no download count on the HACS page, so every release tag attaches the file.
   release-asset:

@@ -10,7 +10,7 @@
 // purpose updates the baseline in the same pull request; --out before and after the change shows what moved.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { serveRepo } from './repo-server.mjs';
 
 const args = process.argv.slice(2);
 const root = resolve(import.meta.dirname, '..');
@@ -37,10 +37,11 @@ const run = async (mode) => {
   const playwright = await import('playwright');
   const firefox = process.env.HFC_BROWSER === 'firefox';
   const browser = firefox ? await playwright.firefox.launch() : await playwright.chromium.launch({ executablePath: process.env.HFC_CHROMIUM || undefined });
+  const server = await serveRepo(root);
   try {
     // Same browser locale as the Playwright tests, so the baseline does not depend on the system language.
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, locale: 'en-US' });
-    await page.goto(`${pathToFileURL(resolve(root, 'test/topology.html')).href}?${mode}`);
+    await page.goto(`${server.url}/test/topology.html?${mode}`);
     await page.waitForFunction(() => ['DUMPED', 'FAIL'].includes(document.getElementById('result').textContent), null, { timeout: 600_000 });
     // One read without a time limit: the dump is several megabytes.
     const out = await page.evaluate(() => ['result', 'log', 'dump'].map((id) => document.getElementById(id).textContent));
@@ -48,6 +49,7 @@ const run = async (mode) => {
     return JSON.parse(out[2]);
   } finally {
     await browser.close();
+    server.close();
   }
 };
 
