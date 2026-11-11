@@ -2585,7 +2585,9 @@ const HFC_VALVE_LABEL = 84;
 const HFC_LOSS = { hours: 48, minWindow: 3, settle: 0.5, drawOff: 1.5, rise: 1.0 };
 // Runs of the timeline (#300): a pause shorter than seriesGap minutes continues a series of runs, so short cycling shows as
 // "3rd run since 21:00"; a longer standstill starts a new series.
-const HFC_RUNS = { seriesGap: 60 };
+// Runs of the timeline: a standstill of `seriesGap` minutes or more starts a new series; a stretch without data shorter than
+// `dataGap` minutes between two running states does not end a run (a Modbus timeout or an integration reload).
+const HFC_RUNS = { seriesGap: 60, dataGap: 2 };
 // Runs from fast signals (`run_signal`, #365): a unit of a cascade runs above `unitW`; a dip below the threshold shorter than
 // `dip` minutes does not end a run, and a stretch above it shorter than `min` minutes is no run (a short spike without the compressor).
 const HFC_RUN_SIGNAL = { values: ['auto', 'units', 'power'], unitW: 50, dip: 2, min: 1 };
@@ -5630,15 +5632,19 @@ class HeatpumpFlowCard extends HTMLElement {
     // A compressor without recorded history (excluded from the recorder) leaves the phases of the operating mode.
     // With run_signal (#365) the power signal delimits the runs; without recorded power the compressor does.
     const signal = this._runSignalSeries(hist, ids);
-    const list = signal.length ? signal : (ids.cycle || ids.comp) ? hist[ids.cycle || ids.comp] || [] : [];
+    const list = this._bridgeDataGaps(signal.length ? signal : (ids.cycle || ids.comp) ? hist[ids.cycle || ids.comp] || [] : []);
     if (list.length) {
-      // The same rule as the segments and the live view (hfcCompressorOn); unavailable ends the run.
+      // The same rule as the segments and the live view (hfcCompressorOn); unavailable ends the run unless it is a short gap.
       list.forEach((e, n) => {
         if (!hfcCompressorOn(e.s)) return;
         const from = Math.max(e.t, start); const to = Math.min(list[n + 1] ? list[n + 1].t : end, end);
         if (to > from) add(from, to, 'run');
       });
-    } else segs.forEach((s) => { if (active(s.kind)) add(s.from, s.to, 'phase'); });
+    } else {
+      // Phase runs follow the same rule: a short gap between two operating periods stays inside the run.
+      const short = (s) => s.kind === 'gap' && s.to - s.from < HFC_RUNS.dataGap * 60000;
+      segs.forEach((s, n) => { if (active(s.kind) || (short(s) && active(segs[n - 1]?.kind) && active(segs[n + 1]?.kind))) add(s.from, s.to, 'phase'); });
+    }
     runs.forEach((r, n) => {
       r.phases = phasesIn(r.from, r.to);
       // The kind is the phase kind that lasted longest; PV surplus and SG boost are heating. Without any phase the compressor
@@ -5669,6 +5675,24 @@ class HeatpumpFlowCard extends HTMLElement {
         return { ...r, from, to, kind: part.kind, phases: phasesIn(from, to), partial: r.partial && !n, ongoing: r.ongoing && n === parts.length - 1, pause: n ? null : r.pause };
       });
     });
+  }
+
+  // A stretch without data (unknown, unavailable) shorter than HFC_RUNS.dataGap minutes between two running states takes the
+  // state before it: a compressor does not stop and start again within that time, so the run went on. The bar keeps the gap.
+  _bridgeDataGaps(list) {
+    const noData = (s) => ['unknown', 'unavailable'].includes(String(s ?? '').trim().toLowerCase());
+    if (!list.some((e) => noData(e.s))) return list;
+    const out = list.map((e) => ({ ...e }));
+    for (let n = 1; n < out.length; n++) {
+      if (!noData(out[n].s) || !hfcCompressorOn(out[n - 1].s)) continue;
+      let k = n;
+      while (k < out.length && noData(out[k].s)) k++;
+      if (k < out.length && hfcCompressorOn(out[k].s) && out[k].t - out[n].t < HFC_RUNS.dataGap * 60000) {
+        for (let j = n; j < k; j++) out[j].s = out[n - 1].s;
+      }
+      n = k;
+    }
+    return out;
   }
 
   // Preset rule for units without a valve or hot-water charging entity (`valve_rule: 'flow_above_dhw'`, ViCare #196): hot water
@@ -5878,8 +5902,10 @@ class HeatpumpFlowCard extends HTMLElement {
     return new Intl.DateTimeFormat(this._lang, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: tz }).format(ms);
   }
 
+  // Whole minutes; less than a minute (a gap of a few seconds) reads "< 1 min" instead of a minute that did not pass.
   _timelineDuration(ms) {
-    const m = Math.max(Math.round(ms / 60000), 1);
+    if (ms < 60000) return '< 1 min';
+    const m = Math.round(ms / 60000);
     return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
   }
 

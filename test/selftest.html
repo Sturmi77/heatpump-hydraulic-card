@@ -657,6 +657,44 @@
     card.remove();
   }
   {
+    // Short data gaps inside a run: a Modbus timeout or an integration reload leaves every entity unavailable for seconds while
+    // the compressor keeps running. Such a gap does not end the run; the bar still shows it as "no data".
+    const M = 60000; const S = 1000;
+    const card = mount({ entities: { mode: 'sensor.m', compressor_speed: 'sensor.cs' } }, hassOf(toStates({ 'sensor.m': 'heating', 'sensor.cs': ['30', '%'] }))); await wait(20);
+    const ids = card._timelineIds();
+    const at = (pairs) => pairs.map(([t, s]) => ({ t, s }));
+    // Heating 0–60 min with gaps of 4 s at 10 min, 9 s at 20 min and 86 s at 30 min in the mode and the compressor speed.
+    const gaps = [[10 * M, 4 * S], [20 * M, 9 * S], [30 * M, 86 * S]];
+    const series = (on) => at([[0, on], ...gaps.flatMap(([t, d]) => [[t, 'unavailable'], [t + d, on]]), [60 * M, on === 'heating' ? 'idle' : '0']]);
+    const hist = { 'sensor.m': series('heating'), 'sensor.cs': series('30') };
+    const segs = card._timelineSegments(hist, ids, 0, 70 * M);
+    const runs = card._timelineRuns(hist, ids, segs, 0, 70 * M);
+    check(runs.length === 1 && runs[0].from === 0 && runs[0].to === 60 * M && runs[0].kind === 'heat' && runs[0].pause === null,
+      `short gaps of 4, 9 and 86 seconds do not divide a run (${runs.map((r) => `${r.kind}:${r.from / S}-${r.to / S}`).join(' ')})`);
+    check(segs.filter((s) => s.kind === 'gap').length === 3 && runs[0].phases.every((p) => p.kind === 'heat'),
+      `the bar keeps the gaps as no data, the run keeps heating as its only phase (${segs.map((s) => s.kind).join()})`);
+    // A gap of two minutes or more, and a gap after which the compressor stands, still end the run.
+    const long = { 'sensor.m': at([[0, 'heating']]), 'sensor.cs': at([[0, '30'], [10 * M, 'unavailable'], [12 * M, '30'], [20 * M, 'unknown'], [20 * M + 30 * S, '0']]) };
+    const longRuns = card._timelineRuns(long, ids, card._timelineSegments(long, ids, 0, 30 * M), 0, 30 * M);
+    check(longRuns.map((r) => `${r.from / M}-${r.to / M}`).join(' ') === '0-10 12-20',
+      `a gap of two minutes ends a run, so does a gap before a standstill (${longRuns.map((r) => `${r.from / M}-${r.to / M}`).join(' ')})`);
+    // Without a compressor the phase runs follow the same rule.
+    const phaseHist = { 'sensor.m': at([[0, 'idle'], [10 * M, 'heating'], [20 * M, 'unavailable'], [20 * M + 30 * S, 'heating'], [40 * M, 'idle']]) };
+    const phaseRuns = card._timelineRuns(phaseHist, { mode: 'sensor.m' }, card._timelineSegments(phaseHist, { mode: 'sensor.m' }, 0, 50 * M), 0, 50 * M);
+    check(phaseRuns.map((r) => `${r.from / M}-${r.to / M}`).join(' ') === '10-40', `a short gap stays inside a phase run (${phaseRuns.map((r) => `${r.from / M}-${r.to / M}`).join(' ')})`);
+    // A gap of a few seconds is shorter than a minute, not "1 min".
+    check(card._timelineDuration(4 * S) === '< 1 min' && card._timelineDuration(61 * S) === '1 min' && card._timelineDuration(75 * M) === '1 h 15 min',
+      `durations below a minute read "< 1 min" (${card._timelineDuration(4 * S)} / ${card._timelineDuration(61 * S)} / ${card._timelineDuration(75 * M)})`);
+    card.remove();
+    // run_signal power: an unavailable power sensor for a few seconds does not divide the run either.
+    const pc = mount({ entities: { mode: 'sensor.m', power: 'sensor.p' }, run_signal: 'power', power_threshold: 100 }, hassOf(toStates({ 'sensor.m': 'heating', 'sensor.p': ['800', 'W'] }))); await wait(20);
+    const pids = pc._timelineIds();
+    const ph = { 'sensor.m': at([[0, 'heating']]), 'sensor.p': at([[0, '20'], [5 * M, '800'], [15 * M, 'unavailable'], [15 * M + 6 * S, '790'], [40 * M, '20']]) };
+    const pruns = pc._timelineRuns(ph, pids, pc._timelineSegments(ph, pids, 0, 50 * M), 0, 50 * M);
+    check(pruns.map((r) => `${r.from / M}-${r.to / M}`).join(' ') === '5-40', `run_signal power: a short gap in the power does not divide the run (${pruns.map((r) => `${r.from / M}-${r.to / M}`).join(' ')})`);
+    pc.remove();
+  }
+  {
     // One rule for "the compressor runs": the live view, the timeline segments and the runs agree on every state.
     const M = 60000;
     const states = ['on', 'off', '1', '0', '0.00', '-1', '42', '12.5 Hz', 'standby', 'Running', 'true', 'false'];
