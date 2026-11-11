@@ -1,0 +1,90 @@
+name: Layout nightly
+
+# The second tier of the drawing tests (#395): the long-text passes of test/topology.html (demos, generated combinations and
+# zone matrices with wide values and long names) once per built-in language, at three card widths, in both browsers. Pull
+# requests run the faster first tier in "Validate". A failed scheduled run opens an issue with the label "layout", or comments
+# on the open one.
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: layout-nightly
+  cancel-in-progress: true
+
+jobs:
+  sweep:
+    name: Sweep / ${{ matrix.browser }} / ${{ matrix.width }} px
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
+        width: [360, 600, 1200]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Cache ${{ matrix.browser }}
+        id: browser-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('package-lock.json') }}
+      - name: Install ${{ matrix.browser }}
+        if: steps.browser-cache.outputs.cache-hit != 'true'
+        run: |
+          for attempt in 1 2 3; do
+            timeout 120 npx playwright install ${{ matrix.browser }} && exit 0
+            echo "Attempt $attempt failed" >&2
+          done
+          exit 1
+      - name: Layout sweep in every language at ${{ matrix.width }} px
+        env:
+          HFC_SWEEP_WIDTH: ${{ matrix.width }}
+        run: npx playwright test --project=${{ matrix.browser }} --grep "layout sweep"
+      - name: Upload the sweep logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: layout-sweep-${{ matrix.browser }}-${{ matrix.width }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  report:
+    name: Report a failed sweep
+    needs: sweep
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Nightly layout sweep failed"
+          body="The nightly layout sweep failed on $(date -u +%Y-%m-%d): $RUN_URL
+
+          The logs of each failed browser and width are attached to the run (layout-sweep-*). Fix the drawing, or, for a conflict that needs the layout step of #395, add it to KNOWN in test/topology.html with a reason."
+          number=$(gh issue list --state open --label layout --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --label layout --body "$body"
+          fi

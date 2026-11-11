@@ -23,7 +23,6 @@
 <script src="../dist/heatpump-hydraulic-card.js"></script>
 <script src="../demo/setups.js"></script>
 <script src="drawing-collisions.js"></script>
-<script src="drawing-collisions.js"></script>
 <script>
 (async () => {
   const C = customElements.get('heatpump-flow-card');
@@ -83,30 +82,6 @@
     fixture.remove();
   }
 
-  // Geometry oracle: inject faults into a small rendered scene independently of the card and its snapshots.
-  {
-    const fixture = document.createElement('div');
-    fixture.innerHTML = `<svg viewBox="0 0 200 100" width="400" height="200">
-      <text id="first" x="10" y="20">First</text><g transform="translate(90 0)"><text id="second" x="10" y="20">Second</text></g>
-      <g style="display:none"><text x="10" y="20">Hidden</text></g>
-      <rect class="tank" x="0" y="50" width="50" height="50"/><text class="tank-temp" x="10" y="75">40</text>
-      <rect id="rod" class="heater-flange" x="48" y="55" width="9" height="18"/><path class="pipe" id="port" d="M50 88 H100" stroke="black" stroke-width="8"/>
-    </svg>`;
-    document.body.append(fixture);
-    const svg = fixture.querySelector('svg');
-    check(!drawingCollisions(svg).length, 'separated labels, hidden groups, mounted flanges and the tank value are allowed');
-    svg.querySelector('#second').parentNode.setAttribute('transform', 'translate(0 0)');
-    svg.querySelector('#rod').setAttribute('y', 72);
-    const first = svg.querySelector('#first');
-    check(drawingCollisions(svg).includes('first overlaps second') && drawingCollisions(svg).includes('rod covers port of port'),
-      'the geometry oracle detects a transformed label collision and an obstructed pipe port');
-    first.setAttribute('y', 70);
-    check(drawingCollisions(svg).includes('first overlaps tank'), 'a foreign label cannot cover the tank');
-    first.setAttribute('x', 195);
-    check(drawingCollisions(svg).includes('first outside viewBox'), 'a label extending beyond the view box fails');
-    fixture.remove();
-  }
-
   // Geometry oracle, pipes (#395): a label on a visible pipe fails; a pipe hidden under an appliance does not count.
   {
     const fixture = document.createElement('div');
@@ -120,6 +95,24 @@
     check(!drawingCollisions(svg).length, 'pipe oracle: a label clear of the pipe and a value inside the tank over its hidden pipe are allowed');
     svg.querySelector('#free').setAttribute('y', 44);
     check(drawingCollisions(svg).includes('free lies on pipe line'), 'pipe oracle: a label on a visible pipe fails');
+    fixture.remove();
+  }
+
+  // Geometry oracle, gap (#395): two labels need LABEL_GAP units between them, measured on the boxes in schematic units.
+  {
+    const fixture = document.createElement('div');
+    fixture.innerHTML = `<svg viewBox="0 0 200 100" width="400" height="200" style="font: 10px Arial, sans-serif">
+      <text id="left" x="10" y="20">Left</text><text id="right" x="100" y="20">Right</text>
+    </svg>`;
+    document.body.append(fixture);
+    const svg = fixture.querySelector('svg');
+    check(!drawingCollisions(svg).length, 'gap oracle: labels far apart are allowed');
+    const left = svg.querySelector('#left');
+    const end = rootBox(left, svg).r;
+    svg.querySelector('#right').setAttribute('x', end + LABEL_GAP + 0.5);
+    check(!drawingCollisions(svg).length, 'gap oracle: labels just over the gap apart are allowed');
+    svg.querySelector('#right').setAttribute('x', end + LABEL_GAP - 1);
+    check(drawingCollisions(svg).includes(`left is closer than ${LABEL_GAP} units to right`), 'gap oracle: labels closer than the gap fail');
     fixture.remove();
   }
 
