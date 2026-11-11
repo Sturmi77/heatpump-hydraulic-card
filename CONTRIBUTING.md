@@ -52,6 +52,8 @@ node scripts/topology-snapshot.mjs --diff before.json after.json
 
 A label whose text depends on the language, a configured name or a value gets a width budget (`data-fit`, schematic units) up to the next obstacle. The topology test draws everything once more with the longest translation of every text, wide values and long names, and English labels must fit their budget unshortened. Zone matrices try every combination of the options that put labels into a circuit row or the heat source; the test font is Roboto (`test/fonts/`), and labels need a gap of 2 units. To look at single cases, open `test/topology.html?only=<regular expression>` in the dev server. A nightly workflow repeats the long-text passes in every language at 360, 600 and 1200 px; one language and width locally: `HFC_SWEEP_WIDTH=360 HFC_SWEEP_LANGS=de npx playwright test --project=chromium --grep "layout sweep"`.
 
+`KNOWN` in `test/topology.html` lists conflicts that are known and not yet solved. Only a new check may add entries there, for conflicts it finds in the drawing as it already was, each narrowed to the cases it hits and naming the issue that will fix it. A change never adds an entry for a conflict it causes itself; it fixes the conflict instead.
+
 **A layout bug comes with its field case.** Turn the diagnostic report of the issue into a test case and commit it with the fix:
 
 ```bash
