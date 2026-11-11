@@ -1,1 +1,0 @@
-- The live view, the timeline and the runs read the compressor state with one rule: an on-state of a binary entity, or a frequency, speed or load above 0. Before, the timeline counted states such as `0.00`, `-1` or `standby` as running, so it could show heating while the heat pump block said "compressor off", and the runs read them differently again.

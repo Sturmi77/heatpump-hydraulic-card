@@ -1,1 +1,0 @@
-- Polish translation of the card and the editor, by Krzysztonek (#342). It shipped in 0.19.0-beta.1 without a changelog line; one card text ("began before the timeline") had a typo, which is fixed.
