@@ -22,10 +22,13 @@
 <!-- The card inherits the page font outside Home Assistant. The test draws in Roboto, the font of Home Assistant, from a copy in
      the repository (fonts/roboto.woff2, subset of the variable font, SIL Open Font License in fonts/OFL.txt), so every browser and
      system measures the same widths as a dashboard. Without it each browser fell back to its own default, a wide serif in Firefox
-     on Ubuntu. Characters outside the subset fall back to Arial (Liberation Sans on Linux, same metrics). -->
+     on Ubuntu. Characters outside the subset fall back to Arial (Liberation Sans on Linux, same metrics). Chromium on Linux
+     rounds glyph advances to whole pixels unless text is drawn with geometric precision, which made English labels about
+     4 % wider than on Windows and macOS; geometricPrecision gives every system the font's own widths. -->
 <style>
 @font-face { font-family: "HFC Test Roboto"; src: url("fonts/roboto.woff2") format("woff2"); font-weight: 400 800; }
-#stage { width: 900px; font-family: "HFC Test Roboto", Arial, "Liberation Sans", sans-serif; } #stage.narrow { width: 420px; }
+#stage { width: 900px; font-family: "HFC Test Roboto", Arial, "Liberation Sans", sans-serif; text-rendering: geometricPrecision; }
+#stage.narrow { width: 420px; }
 </style>
 </head>
 <body>
