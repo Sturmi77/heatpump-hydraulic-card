@@ -1,14 +1,14 @@
 # Issue plan for the roadmap draft
 
-**GitHub assignments · 3 November 2026, updated on 9 November after 0.19.0-beta.2.** The milestone table records the assigned issues, including three lead issues. The recommendations below give the scope and evidence for each item. A field report can belong to a milestone without committing an entire preset or layout to that release. [Roadmap and milestone criteria](ROADMAP-DRAFT.md) · [Open issues](https://github.com/Sturmi77/heatpump-hydraulic-card/issues?q=is%3Aissue+is%3Aopen)
+**GitHub assignments · 3 November 2026, updated on 11 November with 0.19.0-beta.3.** The milestone table records the assigned issues, including three lead issues. The recommendations below give the scope and evidence for each item. A field report can belong to a milestone without committing an entire preset or layout to that release. [Roadmap and milestone criteria](ROADMAP-DRAFT.md) · [Open issues](https://github.com/Sturmi77/heatpump-hydraulic-card/issues?q=is%3Aissue+is%3Aopen)
 
 ## Pull requests
 
 | PR | State at review | Proposed treatment |
 | --- | --- | --- |
-| [#370 · Full screen in nested dashboard popups](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/370) | Contributor PR from a fork. Reviewed on 8 November with seven suggestions (a popover around backdrop and card, taps in a Home Assistant dialog above the card, double dimming). The fork's checks wait for approval. | Wait for the author's update, then approve the checks and test with a real more-info dialog. Not needed for 0.19.0. |
+| [#370 · Full screen in nested dashboard popups](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/370) | Contributor PR from a fork. Reviewed on 8 November with seven suggestions; the author applied them on 11 November. Second review the same day: a card detached in full screen (a view switch) comes back invisible, fix and test suggested. The fork's checks wait for approval. | Wait for the author's update, then approve the checks and test with a real more-info dialog. Not needed for 0.19.0; only through a beta. |
 
-Everything up to `0.19.0-beta.2` is merged. Since then `main` has #364 (heat of `units`, flow rates with `narrow_values`), #368 (myPyllant power of the split unit), #369 (boiler flow label) and #371 (valve position at a standstill), none of them in a pre-release yet.
+Everything on `main` up to 11 November is in `0.19.0-beta.3`: since beta.2 #364, #368, #369, #371, #374–#377, #387, #389/#390, #391, #395 (#396, #397, #398) and the Polish changelog line (#342).
 
 ## GitHub milestones
 
@@ -46,21 +46,18 @@ Agreed on 4 November after the mockup of the run details. One pull request per s
 | | 10 | [#327](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/327) | Energy and COP per run, only where power and heat cover the run. | done ([#347](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/347)) |
 | 4 · Independent | 11 | [#289](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/289) | Flow rates in l/min as a display option. | done ([#348](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/348)) |
 | | 12 | [#4](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/4) | Phone readability: `narrow_focus` by n42net. | done ([#330](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/330)) |
-| | 13 | [#365](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/365) | Beta feedback from [#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173): opt-in `run_signal`, run bounds from unit power and the kind from the valve where the mode updates only hourly. Does not block the release; moves to 0.20.0 if the field answers come late. | specified: the answers from [#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173) are in the issue (8 November), not built |
-| 5 · Acceptance and release | 14 | [#300](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/300) | Compare the run details with recorder traces of at least two installations (the maintainer's Lambda, the cascade in [#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173) or the Daikin in [#254](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/254)); then release 0.19.0. | in progress: the Lambda is checked against its counters ([#353](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/353) came out of it); the cascade in #173 reports runs on beta.2, whose bounds follow hourly signals there (→ #365) |
+| | 13 | [#365](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/365) | Beta feedback from [#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173): opt-in `run_signal`, run bounds from unit power and the kind from the valve where the mode updates only hourly. Does not block the release; moves to 0.20.0 if the field answers come late. | done ([#377](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/377)), in `0.19.0-beta.3` |
+| 5 · Acceptance and release | 14 | [#300](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/300) | Compare the run details with recorder traces of at least two installations (the maintainer's Lambda, the cascade in [#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173) or the Daikin in [#254](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/254)); then release 0.19.0. | in progress: the Lambda is checked against its counters ([#353](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/353) came out of it); the cascade in #173 reports runs on beta.2, whose bounds follow hourly signals there (→ #365, in beta.3) |
 
 ### Open before 0.19.0 final
 
-State on 9 November. The self-test (1973 checks), the coverage, i18n and link checks pass on `main`. Decided: everything below goes into a `0.19.0-beta.3`, then the final after a few quiet days.
+State on 11 November. Everything decided on 9 November is merged and in `0.19.0-beta.3` (#349 in #375, one rule for "compressor on" in #374, the keyboard in #376, `run_signal` in #377, the drawing tests of #395 with their fixes in #396–#398). The final follows after a few quiet days.
 
-| Item | Pull request |
+| Item | State |
 | --- | --- |
-| **Bug from the beta cohort** [#349](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/349): EMS-ESP with long entity names; the heat total equals the heater rod's energy on a Nefit EnviLine (total COP 0.1), the split counters are missing under their long names. The compressor hours are fixed since beta.1 (#333). | [#375](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/375) |
-| **One rule for "compressor on"** in the timeline segments, the runs and the live view (`0.00`, `-1`, `standby` …). | [#374](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/374) |
-| **Keyboard:** the arrow keys reach the periods between runs; the first period keeps its selection while the window moves. | [#376](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/376) |
-| **#365 `run_signal`** (opt-in), with one rule for "valve on hot water" in the live view and the timeline. Contains the commit of #374. | [#377](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/377) |
-| **Second installation for #300:** the cascade of #173 with `run_signal: units` on beta.3. | – |
-| Release PR `0.19.0-beta.3` with the changes since beta.2 (#364, #368, #369, #371) and the Polish changelog line (#342). | after the merges |
+| **Second installation for #300:** the cascade of #173 with `run_signal: units` on beta.3. | waiting for the field |
+| **Confirmations** of #344, #349, #359 and #360 on beta.3. | waiting; the issues close with 0.19.0 either way |
+| Release PR `0.19.0`: compile the fragments, rename the beta sections, close #23, #4 and #300, move #395 (stage 3) to 0.20.0. | after the field test |
 
 ## Scope and follow-up by issue
 
