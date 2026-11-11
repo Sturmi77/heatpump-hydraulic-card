@@ -20,6 +20,7 @@ const contentTypes = {
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
   '.svg': 'image/svg+xml; charset=utf-8',
+  '.woff2': 'font/woff2',
 };
 
 const server = createServer((request, response) => {

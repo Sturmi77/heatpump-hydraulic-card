@@ -37,6 +37,12 @@ function boxesOverlap(a, b) {
   return Math.min(a.r, b.r) - Math.max(a.l, b.l) > 1 && Math.min(a.b, b.b) - Math.max(a.t, b.t) > 1;
 }
 
+// Two labels need a gap of at least LABEL_GAP schematic units, or they read as one text (#395).
+const LABEL_GAP = 2;
+function labelsTooClose(a, b) {
+  return Math.min(a.r, b.r) - Math.max(a.l, b.l) > -LABEL_GAP && Math.min(a.b, b.b) - Math.max(a.t, b.t) > -LABEL_GAP;
+}
+
 function drawingCollisions(svg) {
   const hits = [];
   const view = svg.viewBox.baseVal;
@@ -58,6 +64,7 @@ function drawingCollisions(svg) {
     }
     for (const other of labels.slice(n + 1)) {
       if (boxesOverlap(b, other.b)) hits.push(`${name(el)} overlaps ${name(other.el)}`);
+      else if (labelsTooClose(b, other.b)) hits.push(`${name(el)} is closer than ${LABEL_GAP} units to ${name(other.el)}`);
     }
   }
   // Labels painted inside an appliance belong to it. All other labels need to

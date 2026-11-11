@@ -40,5 +40,7 @@ Run `npm run check` before opening a pull request. CI requires `HACS validation`
 - Units and states: W/kW, Wh/kWh, °C/°F, and `unknown`/`unavailable` must not turn into zeros or crashes.
 - Is there a test that would have failed before the fix?
 - Did the drawing change without a matching topology baseline update, or the baseline change without a reason in the pull request?
-- Does a new or moved label whose text depends on the language, a name or a value have a width budget (`data-fit`) up to the next pipe or part? Do not loosen the collision checks to make a test pass.
+- Does a new or moved label whose text depends on the language, a name or a value have a width budget (`data-fit`) up to the next pipe or part? Do not loosen the collision checks, and do not add entries to `KNOWN` in `test/topology.html`, to make a test pass.
+- Does a layout fix come with the field case of its report (`scripts/report-fixture.mjs`, `test/field-cases.js`)? Does a new option that puts a label into a circuit row or the heat source extend that zone matrix in `test/topology.html`?
+- For a baseline change, look at the pictures in the `drawing-changes` artifact, not only at the fingerprints.
 - Are entity ids backed by evidence, or guessed?

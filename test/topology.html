@@ -19,10 +19,14 @@
   ?dump writes the full descriptions as JSON into <pre id="dump"> instead of comparing (scripts/topology-snapshot.mjs uses it).
   Result: <pre id="result">PASS</pre> or FAIL with the failed checks.
 -->
-<!-- The card inherits the page font outside Home Assistant (which uses Roboto). Without one each browser falls back to its own
-     default, a wide serif in Firefox on Ubuntu, and the collision checks measured other text widths than in Chromium. Arial and
-     Liberation Sans have the same metrics, so Windows and Linux measure alike. -->
-<style>#stage { width: 900px; font-family: Arial, "Liberation Sans", sans-serif; } #stage.narrow { width: 420px; }</style>
+<!-- The card inherits the page font outside Home Assistant. The test draws in Roboto, the font of Home Assistant, from a copy in
+     the repository (fonts/roboto.woff2, subset of the variable font, SIL Open Font License in fonts/OFL.txt), so every browser and
+     system measures the same widths as a dashboard. Without it each browser fell back to its own default, a wide serif in Firefox
+     on Ubuntu. Characters outside the subset fall back to Arial (Liberation Sans on Linux, same metrics). -->
+<style>
+@font-face { font-family: "HFC Test Roboto"; src: url("fonts/roboto.woff2") format("woff2"); font-weight: 400 800; }
+#stage { width: 900px; font-family: "HFC Test Roboto", Arial, "Liberation Sans", sans-serif; } #stage.narrow { width: 420px; }
+</style>
 </head>
 <body>
 <pre id="result">RUNNING</pre>
@@ -33,6 +37,7 @@
 <script src="../demo/setups.js"></script>
 <script src="topology-snapshot.js"></script>
 <script src="drawing-collisions.js"></script>
+<script src="field-cases.js"></script>
 <script>
 (async () => {
   const C = customElements.get('heatpump-flow-card');
@@ -44,10 +49,22 @@
   const only = params.get('only') ? new RegExp(params.get('only')) : null;
   const want = (name) => !only || only.test(name);
   const done = (card) => { if (!only) card.remove(); };
+  // ?sweep&lang=<code>&width=<px> is the nightly run (layout sweep in test/selftest.spec.mjs): instead of the snapshot and the
+  // pseudo-localisation, the long-text passes (demos, combinations, zone matrices) draw in one real language at one card width.
+  const sweep = params.has('sweep');
+  const sweepLang = params.get('lang') || 'en';
+  const sweepWidth = Number(params.get('width')) || 900;
+  if (sweep && !HFC_LANGUAGES[sweepLang]) throw new Error(`unknown language ${sweepLang}`);
+  const LONG = sweep ? `${sweepLang} ${sweepWidth} px` : 'long texts';
   const fails = []; let checks = 0;
   const check = (ok, label) => { checks++; if (!ok) fails.push(label); };
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const stage = document.getElementById('stage');
+  // Every width depends on the test font: wait for it, and fail plainly when it is missing.
+  await Promise.all(['400', '600', '700'].map((w) => document.fonts.load(`${w} 16px "HFC Test Roboto"`).catch(() => [])));
+  if (![...document.fonts].some((f) => f.family.replace(/"/g, '') === 'HFC Test Roboto' && f.status === 'loaded')) {
+    throw new Error('test font fonts/roboto.woff2 did not load (open the page over http, e.g. npm run dev)');
+  }
 
   // Same state format and Home Assistant stub as selftest.html.
   const toStates = (obj) => {
@@ -69,7 +86,8 @@
   });
   const mount = (config, hass, narrow = false) => {
     C._energyPrefs = null;
-    stage.className = narrow ? 'narrow' : '';
+    stage.className = narrow && !sweep ? 'narrow' : '';
+    stage.style.width = sweep ? `${sweepWidth}px` : '';
     const card = document.createElement('heatpump-flow-card');
     card.setConfig(config);
     stage.appendChild(card);
@@ -135,21 +153,99 @@
     return d;
   };
   const base = window.HFC_TOPOLOGY_SNAPSHOT;
+  // Known layout conflicts: found by the zone matrices, left for the layout step of #395 (stage 3, label positions and priorities
+  // on narrow cards) because no fixed coordinate fits them. A matching collision is not counted; an entry that no longer matches
+  // anything in a full run fails, so the fix that solves it also removes it here. Never add an entry to make a new change pass.
+  const KNOWN = [
+    { why: 'narrow card or long texts: with a heating curve shift the two-line target next to a buffer or further circuits reaches the circuit title',
+      case: /^(zone circuit .*\bcurve\b.* narrow|[^:]+: zone circuit .*\bcurve\b.*)$/, hit: /^t-hc\d* (overlaps|is closer than \d+ units to) tank-title / },
+    { why: 'cards narrower than 400 px (nightly sweep): with a heating curve shift and a mixer the flow temperature under the pump reaches the mixer bypass',
+      case: /^[a-z]{2} 3\d\d px: zone circuit .*\bmixer curve\b/, hit: /^t-hc-now\d* lies on pipe p-hc-mix\d*$/, sweepOnly: true },
+  ];
+  const knownSeen = new Set();
+  const known = (name, hit) => {
+    const k = KNOWN.findIndex((x) => x.case.test(name) && x.hit.test(hit));
+    if (k >= 0) knownSeen.add(k);
+    return k >= 0;
+  };
   const checkDrawing = (card, name) => {
     const svg = card.shadowRoot.getElementById('svg');
     check(!!svg, `${name}: missing schematic`);
     if (!svg) return;
-    const hits = drawingCollisions(svg);
+    const hits = drawingCollisions(svg).filter((hit) => !known(name, hit));
     check(!hits.length, `${name}: ${hits.join(', ')}`);
   };
   // In English with the usual values every label fits its width budget: a shortened text or a dropped prefix there means the
   // budget is too tight and would hide information from most users.
   const checkFits = (card, name) => {
     const svg = card.shadowRoot.getElementById('svg'); if (!svg) return;
-    const cut = [...svg.querySelectorAll('text[data-fit]')].filter((el) => el.textContent.endsWith('…') || el.querySelector('.fit-off'))
+    // A label marked data-fit-pre="optional" stands where even English leaves its prefix out by design.
+    const cut = [...svg.querySelectorAll('text[data-fit]')]
+      .filter((el) => el.textContent.endsWith('…') || (el.querySelector('.fit-off') && el.dataset.fitPre !== 'optional'))
       .map((el) => el.id || el.getAttribute('class'));
     check(!cut.length, `${name}: English labels fit their width (${cut.join(', ')})`);
   };
+  /* ---------- long texts and wide values (pseudo-localisation, used by sections 3 and 4) ---------- */
+  // For each text the longest translation of all built-in languages, so a new language is included without a change here.
+  const longest = (blocks) => {
+    const out = {};
+    for (const [key, ref] of Object.entries(blocks[0])) {
+      if (Array.isArray(ref)) continue;
+      if (ref && typeof ref === 'object') { out[key] = longest(blocks.map((b) => (b?.[key] && typeof b[key] === 'object' ? b[key] : {}))); continue; }
+      if (typeof ref !== 'string') continue;
+      out[key] = blocks.map((b) => b?.[key]).filter((v) => typeof v === 'string').reduce((a, v) => (v.length > a.length ? v : a), ref);
+    }
+    return out;
+  };
+  const texts = { en: longest(Object.keys(HFC_LANGUAGES).map((lang) => HFC_I18N[lang] || {})) };
+  // Wide values: one decimal everywhere, two-digit negatives for low temperatures, four-digit flow rates, power in kW. Zero
+  // stays zero and the sign of a temperature only changes below 10 °C, so running and standing parts keep their state.
+  const wideValue = (state, unit) => {
+    const v = parseFloat(state);
+    if (!Number.isFinite(v) || typeof unit !== 'string') return state;
+    const u = unit.toLowerCase();
+    if (u === '°c' || u === '°f') return (v < 10 ? -(Math.abs(v) + 10.3) : v + 0.04).toFixed(1);
+    if (u === 'w') return v >= 100 ? String(Math.round(v * 7.3 + 1234)) : state;
+    if (u === 'kw') return v > 0 ? (v + 10.25).toFixed(2) : state;
+    if (u === 'l/h') return v > 0 ? '1444' : state;
+    if (u === 'l/min' || u === 'm³/h') return v > 0 ? (v + 10.06).toFixed(2) : state;
+    if (u === 'bar') return '1.85';
+    if (u === 'k') return (v < 0 ? v - 10.25 : v + 10.25).toFixed(1);
+    return state;
+  };
+  const widen = (map) => Object.fromEntries(Object.entries(map).map(([id, v]) => {
+    if (Array.isArray(v)) return [id, [wideValue(v[0], v[1]), ...v.slice(1)]];
+    if (v && typeof v === 'object' && v.state !== undefined) return [id, { ...v, state: wideValue(v.state, v.attributes?.unit_of_measurement) }];
+    return [id, v];
+  }));
+  const named = (config) => {
+    const out = sweep ? { ...config, language: sweepLang } : { ...config, texts, language: 'en' };
+    const count = config.hc_count || 1;
+    out.hc_name = 'Fußbodenheizung Erdgeschoss';
+    for (let n = 2; n <= count; n++) out[`hc${n}_name`] = `Heizkörper Obergeschoss ${n}`;
+    return out;
+  };
+  // Waits until the schematic stops changing (cheaper than `settled`, for cases that are only checked, not recorded).
+  const quiet = async (card) => {
+    let last = null;
+    for (let n = 0; n < 30; n++) {
+      await wait(n < 2 ? 0 : 5);
+      const now = card.shadowRoot.getElementById('svg')?.innerHTML ?? '';
+      if (n >= 2 && now === last) return;
+      last = now;
+    }
+  };
+  // One checked case: drawn, collision-checked (and in English with the usual values: every label fits its budget), removed.
+  const probe = async (name, config, states, { narrow = false, english = false, energy } = {}) => {
+    if (!want(name)) return;
+    const card = mount(config, hassOf(toStates(states), {}, energy), narrow);
+    if (only) card.dataset.case = name;
+    await quiet(card);
+    checkDrawing(card, name);
+    if (english) checkFits(card, name);
+    done(card);
+  };
+
   const results = {}; const full = {};
   const record = (key, d) => {
     const h = `${hash(d.geo)} ${hash(d.state)}`;
@@ -160,7 +256,7 @@
   };
 
   /* ---------- 1. demo installations ---------- */
-  for (const [i, s] of setups.entries()) {
+  if (!sweep) for (const [i, s] of setups.entries()) {
     for (const layout of [...HFC_LAYOUTS, 'narrow']) {
       const narrow = layout === 'narrow';
       const config = narrow ? s.config : { ...s.config, layout };
@@ -341,7 +437,7 @@
     check(!dead.length, `${label}: flowing pipes do not end at closed pipes (${dead.join(' ')})`);
   };
 
-  for (const [idx, c] of combos.entries()) {
+  if (!sweep) for (const [idx, c] of combos.entries()) {
     const config = installation(c, idx);
     const name = `combo ${c.storage} ${c.dhw} ${c.primary ? 'pp' : 'nopp'} hc${c.hcs}${c.boiler ? ' boiler' : ''}`;
     let card = null; let shapes = null; let lastSvg;
@@ -367,7 +463,7 @@
   // Each wall can carry a plain rod and one at each sensor height. Exhaust the subsets
   // on both walls independently of the snapshot rotation, including every combination
   // of solar and hot-water preparation that can occupy the same wall.
-  if (!dump && !only) {
+  if (!dump && !sweep) {
     for (const [storage, dhw] of [['parallel', 'tank'], ['parallel', 'fws'], ['combined', 'tank'], ['combined', 'fws'], ['combined', 'tit']]) {
       const station = storage === 'parallel' && dhw === 'fws';
       for (const solar of station ? [false] : [false, true]) for (let mask = 0; mask < 16; mask++) {
@@ -389,14 +485,14 @@
         }
         const name = `wall ${storage} ${dhw} solar=${solar} rods=${mask} ${config.language} ${config.layout} hc${c.hcs}`;
         let card;
-        for (const mode of ['heat', 'cool']) {
+        for (const mode of ['heat', 'cool'].filter((m) => want(`${name} ${m}`))) {
           const hass = hassOf(toStates({ ...statesOf(c, mode), 'sensor.t_buffer_middle': ['33', '°C'], 'binary_sensor.t_rod': 'on',
             'sensor.t_mix': ['85', '%'], 'sensor.t_set': ['35', '°C'], 'sensor.t_pressure': ['1.8', 'bar'], 'sensor.t_humidity': ['72', '%'] }));
           if (!card) card = mount(config, hass, mask % 3 === 0); else card.hass = hass;
           check(card.shadowRoot.querySelectorAll('.heater-flange').length === present.length * (station ? 1 : 2), `${name}: configured rods drawn`);
           checkDrawing(card, `${name} ${mode}`);
         }
-        card.remove();
+        if (card) done(card);
       }
     }
   }
@@ -407,43 +503,6 @@
   // (a new language is included without a change here), wide but realistic values and long circuit names. Collision checks only:
   // nothing of this pass enters the snapshot.
   if (!dump) {
-    const longest = (blocks) => {
-      const out = {};
-      for (const [key, ref] of Object.entries(blocks[0])) {
-        if (Array.isArray(ref)) continue;
-        if (ref && typeof ref === 'object') { out[key] = longest(blocks.map((b) => (b?.[key] && typeof b[key] === 'object' ? b[key] : {}))); continue; }
-        if (typeof ref !== 'string') continue;
-        out[key] = blocks.map((b) => b?.[key]).filter((v) => typeof v === 'string').reduce((a, v) => (v.length > a.length ? v : a), ref);
-      }
-      return out;
-    };
-    const texts = { en: longest(Object.keys(HFC_LANGUAGES).map((lang) => HFC_I18N[lang] || {})) };
-    // Wide values: one decimal everywhere, two-digit negatives for low temperatures, four-digit flow rates, power in kW. Zero
-    // stays zero and the sign of a temperature only changes below 10 °C, so running and standing parts keep their state.
-    const wideValue = (state, unit) => {
-      const v = parseFloat(state);
-      if (!Number.isFinite(v) || typeof unit !== 'string') return state;
-      const u = unit.toLowerCase();
-      if (u === '°c' || u === '°f') return (v < 10 ? -(Math.abs(v) + 10.3) : v + 0.04).toFixed(1);
-      if (u === 'w') return v >= 100 ? String(Math.round(v * 7.3 + 1234)) : state;
-      if (u === 'kw') return v > 0 ? (v + 10.25).toFixed(2) : state;
-      if (u === 'l/h') return v > 0 ? '1444' : state;
-      if (u === 'l/min' || u === 'm³/h') return v > 0 ? (v + 10.06).toFixed(2) : state;
-      if (u === 'bar') return '1.85';
-      return state;
-    };
-    const widen = (map) => Object.fromEntries(Object.entries(map).map(([id, v]) => {
-      if (Array.isArray(v)) return [id, [wideValue(v[0], v[1]), ...v.slice(1)]];
-      if (v && typeof v === 'object' && v.state !== undefined) return [id, { ...v, state: wideValue(v.state, v.attributes?.unit_of_measurement) }];
-      return [id, v];
-    }));
-    const named = (config) => {
-      const out = { ...config, texts, language: 'en' };
-      const count = config.hc_count || 1;
-      out.hc_name = 'Fußbodenheizung Erdgeschoss';
-      for (let n = 2; n <= count; n++) out[`hc${n}_name`] = `Heizkörper Obergeschoss ${n}`;
-      return out;
-    };
     for (const [i, s] of setups.entries()) {
       for (const layout of [...HFC_LAYOUTS, 'narrow']) {
         const narrow = layout === 'narrow';
@@ -451,7 +510,7 @@
         let card = null;
         for (const [scen] of scenarios) {
           const hass = hassOf(toStates(widen(s.states(scen))), s.registry || {}, s.energy, s);
-          const name = `long texts: demo ${i} ${layout} ${scen}`;
+          const name = `${LONG}: demo ${i} ${layout} ${scen}`;
           if (only) { if (want(name)) { const o = mount(config, hass, narrow); await settled(o); checkDrawing(o, name); } continue; }
           if (!card) card = mount(config, hass, narrow); else card.hass = hass;
           await settled(card);
@@ -463,7 +522,7 @@
     for (const [idx, c] of combos.entries()) {
       const config = named(installation(c, idx));
       const narrow = idx % 2 === 1;
-      const name = `long texts: combo ${c.storage} ${c.dhw} ${c.primary ? 'pp' : 'nopp'} hc${c.hcs}${c.boiler ? ' boiler' : ''} ${narrow ? 'narrow' : config.layout}`;
+      const name = `${LONG}: combo ${c.storage} ${c.dhw} ${c.primary ? 'pp' : 'nopp'} hc${c.hcs}${c.boiler ? ' boiler' : ''} ${narrow ? 'narrow' : config.layout}`;
       let card = null;
       for (const st of ['heat', 'dhw', 'cool'].filter((x) => x !== 'dhw' || c.dhw !== 'none')) {
         const hass = hassOf(toStates(widen(statesOf(c, st))));
@@ -476,6 +535,84 @@
     }
   }
 
+  /* ---------- 4. zone matrices ---------- */
+  // Labels only compete inside a zone. The circuit row and the heat source each get every combination of the options that put
+  // labels into them, once in English (labels must also fit their budgets) and once with the longest texts and widest values.
+  // The rest of the drawing stays fixed; layouts and narrow cards rotate through the cases. Collision checks only, no snapshot.
+  if (!dump) {
+    const LAYOUTS = [...HFC_LAYOUTS, 'narrow'];
+    const placed = (config, idx) => {
+      const layout = LAYOUTS[idx % LAYOUTS.length];
+      if (layout === 'narrow') { delete config.layout; return true; }
+      config.layout = layout; return false;
+    };
+    // Circuit row: emitter × mixer × curve shift × pressure × return label × flow label × one circuit or a further one × buffer.
+    // With two circuits the second gets the same options (keys that only exist for the first circuit stay on the first).
+    let idx = 0;
+    for (const emitter of EMITTERS) for (const mixer of [false, true]) for (const curve of [false, true]) for (const pressure of [false, true])
+      for (const ret of [false, true]) for (const flow of [true, false]) for (const hcs of [1, 2]) for (const buffer of [false, true]) {
+        const c = { storage: buffer ? 'parallel' : 'direct', dhw: 'tank', primary: false, hcs };
+        const config = installation(c, 0);
+        const narrow = placed(config, idx);
+        const ent = config.entities;
+        const extra = { 'sensor.t_mix': ['85', '%'], 'binary_sensor.t_mix_open': 'on', 'sensor.t_curve': ['-2.5', 'K'], 'sensor.t_pressure': ['1.8', 'bar'] };
+        for (let n = 1; n <= hcs; n++) {
+          const k = (key) => (n === 1 ? `hc_${key}` : `hc${n}_${key}`);
+          config[n === 1 ? 'hc_type' : `hc${n}_type`] = emitter;
+          Object.assign(ent, { [k('setpoint')]: `sensor.t_hc${n}_set`, [k('mode')]: `sensor.t_hc${n}_mode`, [n === 1 ? 'room' : `hc${n}_room`]: `sensor.t_hc${n}_room`,
+            [n === 1 ? 'room_target' : `hc${n}_room_target`]: `sensor.t_hc${n}_room_target` });
+          Object.assign(extra, { [`sensor.t_hc${n}_set`]: ['35', '°C'], [`sensor.t_hc${n}_mode`]: 'Heating', [`sensor.t_hc${n}_room`]: ['21.4', '°C'], [`sensor.t_hc${n}_room_target`]: ['21.5', '°C'] });
+          if (mixer) Object.assign(ent, { [k('mixer')]: 'sensor.t_mix', [k('mixer_opening')]: 'binary_sensor.t_mix_open' });
+          if (curve) ent[k('curve_offset')] = 'sensor.t_curve';
+        }
+        if (pressure) ent.hc_pressure = 'sensor.t_pressure';
+        if (ret) config.hc_return_label = true;
+        if (!flow) config.hc_flow_label = false;
+        const name = `zone circuit ${emitter}${mixer ? ' mixer' : ''}${curve ? ' curve' : ''}${pressure ? ' pressure' : ''}${ret ? ' return' : ''}${flow ? '' : ' noflow'} hc${hcs}${buffer ? ' buffer' : ''} ${narrow ? 'narrow' : config.layout}`;
+        if (!sweep) await probe(name, config, { ...statesOf(c, 'heat'), ...extra }, { narrow, english: true });
+        const long = { ...widen({ ...statesOf(c, idx % 2 ? 'cool' : 'heat'), ...extra }), 'sensor.t_hc1_mode': 'Komfortbetrieb Heizen', 'sensor.t_hc2_mode': 'Komfortbetrieb Heizen' };
+        await probe(`${LONG}: ${name}`, named(config), long, { narrow });
+        idx++;
+      }
+    // Heat source: source type × unit drawing (air only; brine and water draw the loop) × brine pressure × spread × source flow.
+    const UNITS = [...HFC_UNIT_STYLES.filter((u) => u !== 'auto').flatMap((u) => (u === 'vaillant' ? HFC_UNIT_SIZES.map((size) => [u, size])
+      : u === 'panasonic' ? [[u, 'medium'], [u, 'large']] : [[u]]))];
+    idx = 0;
+    for (const source of SOURCES) for (const [unit, size] of source === 'air' ? UNITS : [['generic']]) for (const pressure of [false, true])
+      for (const spread of [true, false]) for (const volume of [false, true]) {
+        const c = { storage: 'parallel', dhw: 'tank', primary: true, hcs: 1 };
+        const config = installation(c, 0);
+        const narrow = placed(config, idx);
+        Object.assign(config, { source_type: source, unit_style: unit, ...(size ? { unit_size: size } : {}) });
+        if (!spread) config.source_spread = false;
+        Object.assign(config.entities, { source_in: 'sensor.t_src_in', source_out: 'sensor.t_src_out' });
+        if (pressure) config.entities.brine_pressure = 'sensor.t_brine_pressure';
+        if (volume) config.entities.source_volume = 'sensor.t_src_volume';
+        const extra = { 'sensor.t_src_in': ['4.2', '°C'], 'sensor.t_src_out': ['1.1', '°C'], 'sensor.t_brine_pressure': ['1.6', 'bar'], 'sensor.t_src_volume': ['1650', 'L/h'] };
+        const name = `zone source ${source} ${unit}${size ? `-${size}` : ''}${pressure ? ' pressure' : ''}${spread ? '' : ' nospread'}${volume ? ' volume' : ''} ${narrow ? 'narrow' : config.layout}`;
+        if (!sweep) await probe(name, config, { ...statesOf(c, 'heat'), ...extra }, { narrow, english: true });
+        await probe(`${LONG}: ${name}`, named(config), widen({ ...statesOf(c, idx % 2 ? 'defrost' : 'heat'), ...extra }), { narrow });
+        idx++;
+      }
+  }
+
+  /* ---------- 5. field cases ---------- */
+  // Installations from layout bug reports (test/field-cases.js, made by scripts/report-fixture.mjs): as reported, as a narrow
+  // card and with long texts and wide values. The preset only lends its unit drawing; every entity is mapped in the case.
+  if (!dump) {
+    for (const f of window.HFC_FIELD_CASES || []) {
+      const config = { ...f.config };
+      if (!config.unit_style && HFC_PRESETS[f.preset]?.unit_style) config.unit_style = HFC_PRESETS[f.preset].unit_style;
+      const name = `field #${f.issue} ${f.name}`;
+      if (!sweep) {
+        await probe(`${name} ${config.layout || 'default'}`, config, f.states, { energy: f.energy });
+        const narrow = { ...config }; delete narrow.layout;
+        await probe(`${name} narrow`, narrow, f.states, { narrow: true, energy: f.energy });
+      }
+      await probe(`${LONG}: ${name}`, named(config), widen(f.states), { energy: f.energy });
+    }
+  }
+
   /* ---------- result ---------- */
   if (dump || (update && !fails.length)) {
     document.getElementById('dump').textContent = JSON.stringify(results);
@@ -484,9 +621,10 @@
     return;
   }
   if (!update) check(!!base, 'snapshot baseline test/topology-snapshot.js is loaded');
+  if (!only && !sweep) KNOWN.forEach((x, k) => check(x.sweepOnly || knownSeen.has(k), `known conflict no longer occurs, remove it from KNOWN: ${x.why}`));
   // The first changed cases are written out in full, so they can be compared with `topology-snapshot.mjs --out` of another state.
   let changed = '';
-  if (!update && base && !only) {
+  if (!update && base && !only && !sweep) {
     for (const [key, value] of Object.entries(results)) {
       if (!(key in base)) { check(false, `snapshot: new case ${key} (update the baseline)`); continue; }
       const [g, s] = value.split(' '); const [bg, bs] = base[key].split(' ');

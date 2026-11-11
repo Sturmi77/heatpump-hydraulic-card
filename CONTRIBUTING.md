@@ -50,7 +50,17 @@ node scripts/topology-snapshot.mjs --out before.json
 node scripts/topology-snapshot.mjs --diff before.json after.json
 ```
 
-A label whose text depends on the language, a configured name or a value gets a width budget (`data-fit`, schematic units) up to the next obstacle. The topology test draws everything once more with the longest translation of every text, wide values and long names, and English labels must fit their budget unshortened. To look at single cases, open `test/topology.html?only=<regular expression>` in the dev server.
+A label whose text depends on the language, a configured name or a value gets a width budget (`data-fit`, schematic units) up to the next obstacle. The topology test draws everything once more with the longest translation of every text, wide values and long names, and English labels must fit their budget unshortened. Zone matrices try every combination of the options that put labels into a circuit row or the heat source; the test font is Roboto (`test/fonts/`), and labels need a gap of 2 units. To look at single cases, open `test/topology.html?only=<regular expression>` in the dev server. A nightly workflow repeats the long-text passes in every language at 360, 600 and 1200 px; one language and width locally: `HFC_SWEEP_WIDTH=360 HFC_SWEEP_LANGS=de npx playwright test --project=chromium --grep "layout sweep"`.
+
+**A layout bug comes with its field case.** Turn the diagnostic report of the issue into a test case and commit it with the fix:
+
+```bash
+node scripts/report-fixture.mjs report.txt --issue 123 --name "short description" --write
+```
+
+The script replaces entity ids by neutral ones and names by placeholders of the same length; options the report does not list can be added with `--set key=value` (for example `--set hc_type=radiator`). Review `test/field-cases.js` before committing.
+
+A pull request that changes the drawing baseline gets the artifact `drawing-changes` with pictures of the changed cases before and after; locally `node scripts/topology-sheet.mjs --base origin/main` writes them to `topology-sheet/`.
 
 If `test/topology-snapshot.js` conflicts after `main` was merged into a branch, do not merge it by hand: take either side and run `npm run topology:update` again.
 

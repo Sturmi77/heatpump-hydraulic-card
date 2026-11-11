@@ -1,6 +1,7 @@
 # generated local preview with the script inlined
 test/preview.html
 node_modules/
+topology-sheet/
 playwright-report/
 test-results/
 .DS_Store
