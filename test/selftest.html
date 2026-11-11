@@ -107,6 +107,46 @@
     fixture.remove();
   }
 
+  // Geometry oracle, pipes (#395): a label on a visible pipe fails; a pipe hidden under an appliance does not count.
+  {
+    const fixture = document.createElement('div');
+    fixture.innerHTML = `<svg viewBox="0 0 200 100" width="400" height="200">
+      <path class="pipe" id="line" d="M0 40 H200" stroke="black" stroke-width="6"/>
+      <rect class="tank" x="120" y="20" width="60" height="40"/><text class="tank-temp" id="inside" x="130" y="45">40</text>
+      <text id="free" x="10" y="20">Free</text>
+    </svg>`;
+    document.body.append(fixture);
+    const svg = fixture.querySelector('svg');
+    check(!drawingCollisions(svg).length, 'pipe oracle: a label clear of the pipe and a value inside the tank over its hidden pipe are allowed');
+    svg.querySelector('#free').setAttribute('y', 44);
+    check(drawingCollisions(svg).includes('free lies on pipe line'), 'pipe oracle: a label on a visible pipe fails');
+    fixture.remove();
+  }
+
+  // Width budgets (#395): a label wider than its data-fit first drops its prefix, then ends in "…"; an update that writes the full
+  // text again is fitted again; a label that fits stays as it is.
+  {
+    const fixture = document.createElement('div');
+    fixture.innerHTML = `<svg viewBox="0 0 400 100" width="400" height="100" style="font: 13px Arial, sans-serif">
+      <style>.fit-off { display: none; }</style>
+      <text id="plain" x="10" y="20" data-fit="80">A rather long circuit name for the test</text>
+      <text id="short" x="10" y="40" data-fit="200">Short</text>
+      <text id="pre" x="10" y="60" data-fit="60"><tspan class="fit-pre">Heating pressure </tspan>1.8 bar</text>
+    </svg>`;
+    document.body.append(fixture);
+    const fit = (id) => { const el = fixture.querySelector(`#${id}`); C.prototype._fitText.call({}, el, parseFloat(el.dataset.fit)); return el; };
+    const plain = fit('plain');
+    check(plain.textContent.endsWith('…') && plain.getComputedTextLength() <= 80, `width budget: a long text is shortened to its budget (${plain.textContent})`);
+    plain.textContent = 'A rather long circuit name for the test';
+    fit('plain');
+    check(plain.textContent.endsWith('…'), 'width budget: the full text written again by an update is shortened again');
+    check(fit('short').textContent === 'Short', 'width budget: a text that fits stays unchanged');
+    const pre = fit('pre');
+    check(pre.querySelector('.fit-pre').classList.contains('fit-off') && pre.textContent.endsWith('1.8 bar'),
+      'width budget: a prefix is left out before the value is shortened');
+    fixture.remove();
+  }
+
   // 1. every installation and scenario renders, presets are detected
   for (const [i, s] of setups.entries()) {
     for (const [scen] of scenarios) {

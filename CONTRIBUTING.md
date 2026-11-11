@@ -50,6 +50,8 @@ node scripts/topology-snapshot.mjs --out before.json
 node scripts/topology-snapshot.mjs --diff before.json after.json
 ```
 
+A label whose text depends on the language, a configured name or a value gets a width budget (`data-fit`, schematic units) up to the next obstacle. The topology test draws everything once more with the longest translation of every text, wide values and long names, and English labels must fit their budget unshortened. To look at single cases, open `test/topology.html?only=<regular expression>` in the dev server.
+
 If `test/topology-snapshot.js` conflicts after `main` was merged into a branch, do not merge it by hand: take either side and run `npm run topology:update` again.
 
 The update command runs the geometric and flow checks before replacing the baseline. The full description export remains available to diagnose a failing drawing.
