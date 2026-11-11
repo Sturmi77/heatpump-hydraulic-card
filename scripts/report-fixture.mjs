@@ -74,6 +74,13 @@ const parseReport =(text, sets = []) => {
     return ids.get(id);
   };
   const states = {};
+  // One thermostat may fill two keys, each line with its own attribute (dhw_top: current_temperature, dhw_target: temperature):
+  // the attributes of both lines are kept.
+  const put = (to, v) => {
+    const old = states[to];
+    const isState = (s) => !!s && typeof s === 'object' && !Array.isArray(s);
+    states[to] = isState(old) && isState(v) ? { ...old, ...v, attributes: { ...old.attributes, ...v.attributes } } : v;
+  };
   const value = (rest) => {
     if (/^unavailable \(entity not found\)$/.test(rest)) return undefined;
     const m = /^(.*?)(?: \(([a-z_]+) (.*)\))?$/.exec(rest);
@@ -93,15 +100,18 @@ const parseReport =(text, sets = []) => {
     const to = anon(id, part ? `${key}_${part}` : key);
     if (part) entities[key] = [...(entities[key] || []), to]; else entities[key] = to;
     const v = value(rest);
-    if (v !== undefined) states[to] = v;
+    if (v !== undefined) put(to, v);
   }
   config.entities = entities;
 
-  // Value maps with their entries (a long map of a preset only shows its size and cannot be carried over).
+  // Value maps with their entries (a long map of a preset only shows its size and cannot be carried over). The report lists the
+  // preset's map before the configuration's, and the card lets the configuration win, so a later entry replaces an earlier one.
+  // A map given with --set is kept as it is.
+  const setKeys = new Set(sets.map((pair) => pair.split('=')[0]));
   for (const l of section('Maps')) {
     const m = /^([a-z_]+_map): (.*) \((preset|configuration)\)$/.exec(l);
-    if (!m || /^\d+ entries$/.test(m[2])) continue;
-    config[m[1]] = { ...Object.fromEntries(m[2].split(', ').map((e) => e.split('='))), ...(config[m[1]] || {}) };
+    if (!m || /^\d+ entries$/.test(m[2]) || setKeys.has(m[1])) continue;
+    config[m[1]] = { ...(config[m[1]] || {}), ...Object.fromEntries(m[2].split(', ').map((e) => e.split('='))) };
   }
 
   // Power sources of the Energy dashboard: each source with its power sensor and value.
@@ -116,7 +126,7 @@ const parseReport =(text, sets = []) => {
       const s = /^([a-z_]+\.[^ ]+) = (.*?)( \(not a power value, ignored\))?$/.exec(text);
       if (!s) return undefined;
       const to = anon(s[1], `${type}_${n}${suffix}`);
-      const v = value(s[2]); if (v !== undefined) states[to] = v;
+      const v = value(s[2]); if (v !== undefined) put(to, v);
       return to;
     };
     const both = /^from (.*); to (.*)$/.exec(rest);

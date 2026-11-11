@@ -1,4 +1,33 @@
+import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
+
+// Field case from a diagnostic report (scripts/report-fixture.mjs, #395): the configuration's map wins over the preset's, as in the
+// card, and a thermostat that fills two keys keeps the attribute of each line.
+test('report fixture keeps configuration maps and thermostat attributes', async ({}, testInfo) => {
+  const report = testInfo.outputPath('report.txt');
+  writeFileSync(report, [
+    'Heat Pump Hydraulic Card diagnostic report',
+    'Preset: kronoterm',
+    '',
+    'Entity mappings:',
+    '- dhw_top: climate.kronoterm_dhw_temperature = heat (current_temperature 49.6)',
+    '- dhw_target: climate.kronoterm_dhw_temperature = heat (temperature 50)',
+    '',
+    'Maps:',
+    '- mode_map: heat=heating, off=off (preset)',
+    '- mode_map: heat=dhw (configuration)',
+    '- valve_map: on=dhw, off=heating (preset)',
+    '',
+  ].join('\n'));
+  const run = (...extra) => JSON.parse(execFileSync(process.execPath, ['scripts/report-fixture.mjs', report, '--issue', '1', ...extra], { encoding: 'utf8' }));
+  const fixture = run();
+  expect(fixture.config.mode_map).toEqual({ heat: 'dhw', off: 'off' });
+  expect(fixture.config.valve_map).toEqual({ on: 'dhw', off: 'heating' });
+  expect(fixture.config.entities).toEqual({ dhw_top: 'climate.f_dhw_top', dhw_target: 'climate.f_dhw_top' });
+  expect(fixture.states['climate.f_dhw_top']).toEqual({ state: 'heat', attributes: { current_temperature: 49.6, temperature: 50 } });
+  expect(run('--set', 'valve_map=custom').config.valve_map).toBe('custom');
+});
 
 test('browser self-test passes', async ({ page }, testInfo) => {
   test.setTimeout(150_000);

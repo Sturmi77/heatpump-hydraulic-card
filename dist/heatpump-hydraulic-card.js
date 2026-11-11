@@ -2485,7 +2485,7 @@ const hfcValveSide = (v) => HFC_VALVE_SIDES[String(v ?? '').trim().toLowerCase()
 const HFC_DRAWING_KEYS = ['title', 'hc_type', 'hc2_type', 'hc3_type', 'hc4_type', 'hc5_type', 'hc6_type', 'hc_name', 'hc2_name', 'hc3_name', 'hc4_name',
   'hc5_name', 'hc6_name', 'unit_style', 'unit_size', 'source_spread', 'narrow_values', 'buffer_values', 'timeline'];
 // Value maps of a preset or the configuration, listed in the diagnostic report.
-const HFC_MAP_KEYS =['valve_map', 'mode_map', 'dhw_mode_map', 'buffer_mode_map', 'hc_mode_map', 'program_map', 'sg_ready_map'];
+const HFC_MAP_KEYS = ['valve_map', 'mode_map', 'dhw_mode_map', 'buffer_mode_map', 'hc_mode_map', 'program_map', 'sg_ready_map'];
 // How the tap water is heated: a coil in the tank, a fresh-water station on the storage, or a tank in the combined storage.
 const HFC_DHW_TYPES = ['coil', 'fresh_water', 'tank_in_tank'];
 // Drawing of the outdoor unit: `auto` takes the style of the preset; `unit_size` picks the Vaillant aroTHERM plus class.
