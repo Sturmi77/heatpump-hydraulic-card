@@ -4939,7 +4939,8 @@
     const oldOverflow = document.body.style.overflow;
     card.shadowRoot.getElementById('fullscreen-toggle').click();
     let shell = card.shadowRoot.querySelector('ha-card');
-    check(shell.classList.contains('fullscreen') && card.shadowRoot.getElementById('fullscreen-layer').matches(':popover-open') && shell.getAttribute('role') === 'dialog' && shell.getAttribute('aria-modal') === 'true'      && !card.shadowRoot.getElementById('fullscreen-backdrop').hidden && document.body.style.overflow === 'hidden', 'full-screen opens one modal card layer and locks background scrolling');
+    check(shell.classList.contains('fullscreen') && card.shadowRoot.getElementById('fullscreen-layer').matches(':popover-open') && shell.getAttribute('role') === 'dialog' && shell.getAttribute('aria-modal') === 'true' 
+        && !card.shadowRoot.getElementById('fullscreen-backdrop').hidden && document.body.style.overflow === 'hidden', 'full-screen opens one modal card layer and locks background scrolling');
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     shell = card.shadowRoot.querySelector('ha-card');
     check(!shell.classList.contains('fullscreen') && card.shadowRoot.getElementById('fullscreen-backdrop').hidden
@@ -4973,6 +4974,14 @@
     dlg.close(); dlg.remove();
     backdrop.click();
     check(!nested._fullscreenOpen && document.body.style.overflow === oldOverflow, 'a tap on the backdrop closes a top-layer full-screen card');
+    nested.remove(); clip.remove();
+    // A view switch detaches the card while full screen is open; reinserted, it is a normal, visible card again.
+    nested.shadowRoot.getElementById('fullscreen-toggle').click();
+    nested.remove(); clip.appendChild(nested); nested.hass = { ...h };
+    const back = nested.shadowRoot.querySelector('ha-card');
+    check(!nested._fullscreenOpen && !back.classList.contains('fullscreen') && back.getClientRects().length > 0
+      && nested.shadowRoot.getElementById('fullscreen-backdrop').hidden && document.body.style.overflow === oldOverflow,
+      'a card detached in full screen comes back as a normal, visible card');
     nested.remove(); clip.remove();
     const noFull = mount({ ...s.config, fullscreen: false }, h);
     check(!noFull.shadowRoot.getElementById('fullscreen-toggle'), 'fullscreen: false removes the button');

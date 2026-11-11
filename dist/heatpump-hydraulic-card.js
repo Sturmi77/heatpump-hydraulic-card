@@ -6454,7 +6454,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const drawer = this._$('drawer-body');
     if (drawer && !drawer.hidden) { this._drawerOpen = false; drawer.hidden = true; this._$('drawer-toggle')?.setAttribute('aria-expanded', 'false'); }
   }
-  disconnectedCallback() { clearTimeout(this._sleepTimer); clearTimeout(this._diagnosticTimer); this._closeFullscreen(false, false); }
+  // Detached in full screen (a view switch): rebuilt as a normal card, so a reinserted card is neither hidden in a closed popover nor
+  // left full screen without a way back.
+  disconnectedCallback() { clearTimeout(this._sleepTimer); clearTimeout(this._diagnosticTimer); this._closeFullscreen(false); }
 
   // Tiles: the actions of the tile under the pointer.
   _tileEvents(box) {
