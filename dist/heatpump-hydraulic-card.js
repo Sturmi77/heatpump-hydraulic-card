@@ -4076,7 +4076,9 @@ class HeatpumpFlowCard extends HTMLElement {
   }
   _fitText(el, max) {
     const pre = el.querySelector('.pre, .fit-pre');
-    const font = getComputedStyle(el).fontSize;
+    // Size, weight and family: a theme that changes only the font family is measured again.
+    const cs = getComputedStyle(el);
+    const font = `${cs.fontSize} ${cs.fontWeight} ${cs.fontFamily}`;
     const text = el.textContent;
     // A plain label that still shows its last fitted text keeps it; an update that wrote the full text again is fitted again. A label
     // with a prefix is rebuilt by _txtPre and measured each time.
