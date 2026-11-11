@@ -4253,8 +4253,9 @@ class HeatpumpFlowCard extends HTMLElement {
 
     this._renderRoot().innerHTML = `
       <style>${HeatpumpFlowCard.styles}</style>
+      ${this._fullscreenOpen ? '<div class="fullscreen-layer" id="fullscreen-layer" popover="manual">' : ''}
       <div class="fullscreen-backdrop" id="fullscreen-backdrop" ${this._fullscreenOpen ? '' : 'hidden'}></div>
-      <ha-card class="layout-${this._layout} motion-${this._animations} theme-${this._theme}${this._config.narrow_values ? ' narrow-values' : ''}${nf ? ' narrow-focus' : ''}${equalBuffer ? ' buffer-values-equal' : ''}${this._fullscreenOpen ? ' fullscreen' : ''}"${this._fullscreenOpen ? ` popover="manual" role="dialog" aria-modal="true" aria-label="${T}"` : ''}>
+      <ha-card class="layout-${this._layout} motion-${this._animations} theme-${this._theme}${this._config.narrow_values ? ' narrow-values' : ''}${nf ? ' narrow-focus' : ''}${equalBuffer ? ' buffer-values-equal' : ''}${this._fullscreenOpen ? ' fullscreen' : ''}"${this._fullscreenOpen ? ` role="dialog" aria-modal="true" aria-label="${T}"` : ''}>
         <div class="head">
           ${T ? `<div class="title">${T}</div>` : '<div></div>'}
           <div class="head-right">
@@ -4391,12 +4392,16 @@ class HeatpumpFlowCard extends HTMLElement {
           ${this._drawerHtml()}
         </div>
         </div>
-      </ha-card>`;
+      </ha-card>
+      ${this._fullscreenOpen ? '</div>' : ''}`;
 
     this._wireTools();
-    // Native popovers enter the top layer, escaping a transformed/clipped parent popup.
-    const fullscreenCard = this.shadowRoot.querySelector('ha-card.fullscreen');
-    if (fullscreenCard?.isConnected && typeof fullscreenCard.showPopover === 'function') fullscreenCard.showPopover();
+    // Lift the backdrop and card together into the browser's top layer.
+    // Without Popover API support, retain the fixed-position fallback.
+    const fullscreenLayer = this.shadowRoot.getElementById('fullscreen-layer');
+    if (fullscreenLayer?.isConnected && typeof fullscreenLayer.showPopover === 'function') {
+      fullscreenLayer.showPopover();
+    }
     if (this._layout === 'wall') {
       const card = this.shadowRoot.querySelector('ha-card');
       ['pointerdown', 'pointermove', 'keydown', 'focusin'].forEach((t) => card.addEventListener(t, () => this._wake(), { passive: true }));
@@ -6401,17 +6406,6 @@ class HeatpumpFlowCard extends HTMLElement {
     this._bodyOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden';
     this._fullscreenKeyHandler = this._fullscreenKeyHandler || ((ev) => this._fullscreenKey(ev));
     document.addEventListener('keydown', this._fullscreenKeyHandler);
-    // The old sibling backdrop is trapped by a parent popup. Catch clicks on the native
-    // popover backdrop or the page outside the card instead.
-    this._fullscreenOutsideHandler ||= (ev) => {
-      const shell = this.shadowRoot?.querySelector('ha-card.fullscreen');
-      if (!this._fullscreenOpen || !shell?.matches(':popover-open')) return;
-      const box = shell.getBoundingClientRect();
-      if (ev.composedPath().includes(shell)
-          && ev.clientX >= box.left && ev.clientX <= box.right && ev.clientY >= box.top && ev.clientY <= box.bottom) return;
-      this._closeFullscreen();
-    };
-    document.addEventListener('pointerdown', this._fullscreenOutsideHandler, true);
     this._render(); this._update();
     this._$('fullscreen-toggle')?.focus({ preventScroll: true });
   }
@@ -6420,7 +6414,6 @@ class HeatpumpFlowCard extends HTMLElement {
     if (!this._fullscreenOpen) return;
     this._fullscreenOpen = false;
     document.removeEventListener('keydown', this._fullscreenKeyHandler);
-    document.removeEventListener('pointerdown', this._fullscreenOutsideHandler, true);
     if (this._bodyOverflow !== undefined) { document.body.style.overflow = this._bodyOverflow; delete this._bodyOverflow; }
     if (render && this.shadowRoot && this._hass && this._config) { this._render(); this._update(); }
     if (restoreFocus) this._$('fullscreen-toggle')?.focus({ preventScroll: true });
@@ -7080,7 +7073,9 @@ HeatpumpFlowCard.styles = `
   :host { display: block; --hfc-muted: var(--secondary-text-color, #888); }
   ha-card { padding: 12px 12px 8px; overflow: hidden; background: var(--card-background-color, #fff); }
   .fullscreen-backdrop { position: fixed; inset: 0; z-index: 2147483645; background: rgba(0,0,0,.62); }
-  ha-card.fullscreen::backdrop { background: rgba(0,0,0,.62); }
+  /* The top-layer container covers the viewport without a look of its own; the user-agent popover styles are reset. */
+  .fullscreen-layer { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 0;
+    border: 0; background: transparent; color: inherit; overflow: visible; }
   ha-card.fullscreen { position: fixed; inset: 0; z-index: 2147483646; box-sizing: border-box; width: 100vw; height: 100dvh; margin: 0;
     border-radius: 0; overflow: auto; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
   @media (min-width: 1640px) and (min-height: 800px) { ha-card.fullscreen { inset: 20px; width: min(1600px, calc(100vw - 40px)); height: calc(100dvh - 40px); margin: auto; border-radius: 14px; } }
