@@ -161,9 +161,10 @@
   // anything in a full run fails, so the fix that solves it also removes it here. Never add an entry to make a new change pass.
   const KNOWN = [
     // Hits two circuits (narrow in English, every layout with long texts) and one circuit with a buffer on a narrow card with long
-    // texts; one circuit without a buffer must stay clear.
+    // texts; in the nightly sweep, where every layout is drawn at the sweep width, one circuit with a buffer in every layout. One
+    // circuit without a buffer must stay clear.
     { why: 'narrow card or long texts: with a heating curve shift the two-line target next to a buffer or further circuits reaches the circuit title',
-      case: /^(zone circuit .*\bcurve\b.* hc2( buffer)? narrow|[^:]+: zone circuit .*\bcurve\b.* (hc2( buffer)? [a-z]+|hc1 buffer narrow))$/, hit: /^t-hc\d* (overlaps|is closer than \d+ units to) tank-title / },
+      case: /^(zone circuit .*\bcurve\b.* hc2( buffer)? narrow|[^:]+: zone circuit .*\bcurve\b.* (hc2( buffer)? [a-z]+|hc1 buffer narrow)|[a-z]{2} \d+ px: zone circuit .*\bcurve\b.* hc1 buffer [a-z]+)$/, hit: /^t-hc\d* (overlaps|is closer than \d+ units to) tank-title / },
     { why: 'cards narrower than 400 px (nightly sweep): with a heating curve shift and a mixer the flow temperature under the pump reaches the mixer bypass',
       case: /^[a-z]{2} 3\d\d px: zone circuit .*\bmixer curve\b/, hit: /^t-hc-now\d* lies on pipe p-hc-mix\d*$/, sweepOnly: true },
   ];
