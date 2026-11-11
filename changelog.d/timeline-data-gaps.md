@@ -1,0 +1,1 @@
+- Timeline: a gap without data shorter than two minutes between two running states, as a Modbus timeout or an integration reload leaves it, no longer divides a run into two runs with a pause. The bar still shows the gap as "No data". Durations below a minute read "< 1 min" instead of "1 min".
