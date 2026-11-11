@@ -892,6 +892,9 @@
     check(stale === 'Electricity: 0.80 kWh', `#327: an hour-old heat value of a running unit gives no heat and no COP for the run (${stale})`);
     const noLimit = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, { units: [{ power: 'sensor.u1', heat: 'sensor.h1' }, { power: 'sensor.u2', heat: 'sensor.h2old', heat_max_age: 0 }] });
     check(noLimit === 'Electricity: 0.80 kWh | Heat: 2.93 kWh | COP: 3.7', `#327: heat_max_age 0 counts an unchanged heat value over the run (${noLimit})`);
+    // #173: a unit below its power_threshold adds no heat to the run while the other unit runs.
+    const idleUnit = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, { units: [{ power: 'sensor.u1', heat: 'sensor.h1' }, { power: 'sensor.u2', heat: 'sensor.h2', power_threshold: 600 }] });
+    check(idleUnit === 'Electricity: 0.80 kWh | Heat: 1.60 kWh | COP: 2.0', `#173: a unit below its power_threshold adds no heat to the run (${idleUnit})`);
     // Review of #347: freshness applies to each member of a unit's heat list, so a fresh member does not renew a stale one.
     const member = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units(['sensor.h2', 'sensor.h2old']));
     check(member === 'Electricity: 0.80 kWh', `#327: a stale member of a unit's heat list leaves the run without heat (${member})`);

@@ -6144,7 +6144,7 @@ class HeatpumpFlowCard extends HTMLElement {
     let estimated = false; let heat = NaN;
     if (units) {
       heat = integrate(combine(units.map((u) => combine([sumW([u.power].flat()), combine([u.heat].flat().map((id) => fresh(watts(id, 1000), hfcUnitMaxAge(u))), total)],
-        ([p, h]) => (!Number.isFinite(p) ? NaN : p <= 50 ? 0 : h))), total));
+        ([p, h]) => (!Number.isFinite(p) ? NaN : p <= hfcUnitRunW(u) ? 0 : h))), total));
     } else if (this._has('heat')) heat = integrate(sumW(idsOf('heat'), 1000));
     else if (['volume', 'flow', 'return'].every((k) => this._has(k))) {
       heat = integrate(combine([nums('volume'), nums('flow'), nums('return')], ([v, f, r]) => (v * Math.max(f - r, 0) * 1.163)));
