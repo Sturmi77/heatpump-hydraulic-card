@@ -2340,6 +2340,12 @@ const hfcUnitMaxAge = (unit) => {
   if (minutes === undefined || minutes === null) return HFC_UNIT_MAX_AGE;
   return +minutes === 0 ? Infinity : +minutes * 60000;
 };
+// The power in W above which a unit of a cascade runs: its `power_threshold`, else HFC_RUN_SIGNAL.unitW. A unit that keeps its
+// electronics or a crankcase heater at 60 W after a hot-water charge needs a higher one (#173).
+const hfcUnitRunW = (unit) => {
+  const w = unit?.power_threshold;
+  return w === undefined || w === null ? HFC_RUN_SIGNAL.unitW : +w;
+};
 // Share of a run that the history of power and heat must cover with valid values before its energy and COP are shown (#327).
 const HFC_RUN_COVER = 0.95;
 // Keys whose list of entities is averaged (#23): room temperature and humidity of each circuit. Power, heat and the power
@@ -2586,7 +2592,7 @@ const HFC_LOSS = { hours: 48, minWindow: 3, settle: 0.5, drawOff: 1.5, rise: 1.0
 // Runs of the timeline (#300): a pause shorter than seriesGap minutes continues a series of runs, so short cycling shows as
 // "3rd run since 21:00"; a longer standstill starts a new series.
 const HFC_RUNS = { seriesGap: 60 };
-// Runs from fast signals (`run_signal`, #365): a unit of a cascade runs above `unitW`; a dip below the threshold shorter than
+// Runs from fast signals (`run_signal`, #365): a unit of a cascade runs above `unitW` or its `power_threshold`; a dip below the threshold shorter than
 // `dip` minutes does not end a run, and a stretch above it shorter than `min` minutes is no run (a short spike without the compressor).
 const HFC_RUN_SIGNAL = { values: ['auto', 'units', 'power'], unitW: 50, dip: 2, min: 1 };
 
@@ -3045,6 +3051,7 @@ class HeatpumpFlowCard extends HTMLElement {
       config.units.forEach((u) => {
         if (!u || typeof u !== 'object' || !ids(u.power) || !ids(u.heat)) throw new Error('units: every unit needs a power and a heat entity');
         if (u.heat_max_age !== undefined && u.heat_max_age !== null && !(+u.heat_max_age >= 0)) throw new Error('units: heat_max_age must be a number of minutes, 0 or more');
+        if (u.power_threshold !== undefined && u.power_threshold !== null && !(+u.power_threshold >= 0)) throw new Error('units: power_threshold must be a number of watts, 0 or more');
       });
     }
     if (config.unit_style !== undefined && config.unit_style !== null && !HFC_UNIT_STYLES.includes(config.unit_style)) {
@@ -3463,7 +3470,7 @@ class HeatpumpFlowCard extends HTMLElement {
       // Where runs and the running state come from (#365).
       `Runs from: ${(() => {
         const threshold = Number.isFinite(+config.power_threshold) && config.power_threshold !== '' && config.power_threshold !== undefined && config.power_threshold !== null ? +config.power_threshold : 100;
-        if (config.run_signal === 'units') return Array.isArray(config.units) && config.units.length ? `unit power above ${HFC_RUN_SIGNAL.unitW} W (run_signal: units)` : 'compressor or operating mode (run_signal: units, but no units are configured)';
+        if (config.run_signal === 'units') return Array.isArray(config.units) && config.units.length ? `unit power above ${[...new Set(config.units.map((u) => `${hfcUnitRunW(u)} W`))].join(' / ')} (run_signal: units)` : 'compressor or operating mode (run_signal: units, but no units are configured)';
         if (config.run_signal === 'power') return r.entities.power ? `power above ${threshold} W (run_signal: power)` : 'compressor or operating mode (run_signal: power, but power is not mapped)';
         return 'compressor or operating mode';
       })()}`,
@@ -3503,7 +3510,7 @@ class HeatpumpFlowCard extends HTMLElement {
       '',
       // Units of a cascade (#173) with the age of each heat value, which decides whether it is paired.
       ...(Array.isArray(config.units) ? ['Units (power and heat per unit):', ...config.units.flatMap((u, n) => [
-        ...[u.power].flat().map((id) => entityLine(`unit ${n + 1} power`, id)),
+        ...[u.power].flat().map((id, k) => `${entityLine(`unit ${n + 1} power`, id)}${k === 0 ? ` (runs above ${hfcUnitRunW(u)} W)` : ''}`),
         ...[u.heat].flat().map((id) => { const st = hass.states[id]; const t = Date.parse(st?.last_reported || st?.last_updated || '');
           const limit = hfcUnitMaxAge(u) === Infinity ? 'no age limit' : `limit ${hfcUnitMaxAge(u) / 60000} min`;
           return `${entityLine(`unit ${n + 1} heat`, id)}${Number.isFinite(t) ? ` (written ${Math.round((Date.now() - t) / 60000)} min ago, ${limit})` : ''}`; }),
@@ -3755,7 +3762,7 @@ class HeatpumpFlowCard extends HTMLElement {
     return values.length ? values.reduce((a, b) => a + b, 0) : NaN;
   }
   // Units of a cascade (#173): power and heat paired per unit, each a single entity or a list that is added up. A unit runs
-  // above 50 W. Its pair is complete when its power reports a number and, while it runs, its heat reports a number written
+  // above 50 W or its `power_threshold`. Its pair is complete when its power reports a number and, while it runs, its heat reports a number written
   // within the unit's age limit; a standing unit adds no heat. Null without the `units` option.
   _units() {
     const list = this._config.units;
@@ -3767,7 +3774,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const age =(v) => Math.max(...[v].flat().map((id) => Date.now() - (Date.parse(st(id)?.last_reported || st(id)?.last_updated || '') || 0)));
     return list.map((u, n) => {
       const power = sum(u.power, 1); const heat = sum(u.heat, 1000);
-      const running = power > 50;
+      const running = power > hfcUnitRunW(u);
       const fresh = Number.isFinite(heat) && age(u.heat) <= hfcUnitMaxAge(u);
       return { n: n + 1, name: u.name || `${this._i.unit} ${n + 1}`, entity: [u.power].flat()[0], power, heat: running ? heat : 0, running, fresh,
         complete: Number.isFinite(power) && (!running || fresh), cop: running && fresh && heat > 0 ? (heat * 1000) / power : NaN };
@@ -5562,21 +5569,21 @@ class HeatpumpFlowCard extends HTMLElement {
     return signal === 'units' ? this._config.units.flatMap((u) => [u.power].flat()) : (this._sums?.power || [this._e.power]);
   }
 
-  // Running now by the run signal: a unit above HFC_RUN_SIGNAL.unitW, or `power` above power_threshold.
+  // Running now by the run signal: a unit above its threshold (hfcUnitRunW), or `power` above power_threshold.
   _runSignalNow(signal) {
-    return signal === 'units' ? !!this._units()?.some((u) => u.power > HFC_RUN_SIGNAL.unitW) : this._w('power') > this._threshold;
+    return signal === 'units' ? !!this._units()?.some((u) => u.running) : this._w('power') > this._threshold;
   }
 
   // The run signal over the recorder history as [{ t, s: 'on' | 'off' | 'unavailable' }], like the history of a compressor:
-  // on while a unit is above HFC_RUN_SIGNAL.unitW (or the summed power above power_threshold), a dip shorter than
+  // on while a unit is above its threshold (or the summed power above power_threshold), a dip shorter than
   // HFC_RUN_SIGNAL.dip minutes stays on, a stretch shorter than HFC_RUN_SIGNAL.min minutes is off. Empty without recorded power.
   _runSignalSeries(hist, ids) {
     const signal = this._runSignal();
     if (!signal || !ids?.sig?.length) return [];
-    const memo = `${signal}|${this._threshold}|${ids.sig.join(',')}`;
-    if (this._sigMemo?.hist === hist && this._sigMemo.key === memo) return this._sigMemo.series;
     const groups = signal === 'units' ? this._config.units.map((u) => [u.power].flat()) : [ids.sig];
-    const limit = signal === 'units' ? HFC_RUN_SIGNAL.unitW : this._threshold;
+    const limits = signal === 'units' ? this._config.units.map(hfcUnitRunW) : [this._threshold];
+    const memo = `${signal}|${limits.join(',')}|${ids.sig.join(',')}`;
+    if (this._sigMemo?.hist === hist && this._sigMemo.key === memo) return this._sigMemo.series;
     const members = [...new Set(groups.flat())];
     const series = Object.fromEntries(members.map((id) => {
       const attributes = this._hass?.states[id]?.attributes;
@@ -5596,7 +5603,7 @@ class HeatpumpFlowCard extends HTMLElement {
           const ok = vs.filter(Number.isFinite);
           return ok.length ? ok.reduce((a, b) => a + b, 0) : NaN;
         });
-        const state = sums.some((w) => w > limit) ? 'on' : sums.every((w) => !Number.isFinite(w)) || (signal === 'power' && !Number.isFinite(sums[0])) ? 'unavailable' : 'off';
+        const state = sums.some((w, n) => w > limits[n]) ? 'on' : sums.every((w) => !Number.isFinite(w)) || (signal === 'power' && !Number.isFinite(sums[0])) ? 'unavailable' : 'off';
         if (points[points.length - 1]?.s !== state) points.push({ t, s: state });
       });
       // Stretches with their length; the last one is still going.
