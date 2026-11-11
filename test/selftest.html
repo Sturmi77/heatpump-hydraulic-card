@@ -130,6 +130,15 @@
     const fit = (id) => { const el = fixture.querySelector(`#${id}`); C.prototype._fitText.call({}, el, parseFloat(el.dataset.fit)); return el; };
     const plain = fit('plain');
     check(plain.textContent.endsWith('…') && plain.getComputedTextLength() <= 80, `width budget: a long text is shortened to its budget (${plain.textContent})`);
+    // A theme that changes only the font family (same size) is measured again: a wider font keeps the budget, a narrower one
+    // gets back more of the text.
+    const svgEl = fixture.querySelector('svg');
+    const arial = plain.textContent;
+    svgEl.style.font = '13px monospace'; fit('plain');
+    check(plain.getComputedTextLength() <= 80 && plain.textContent.length < arial.length,
+      `width budget: a wider theme font of the same size is measured again (${plain.textContent})`);
+    svgEl.style.font = '13px Arial, sans-serif'; fit('plain');
+    check(plain.textContent === arial, `width budget: back to the narrower font the label shows as much as before (${plain.textContent})`);
     plain.textContent = 'A rather long circuit name for the test';
     fit('plain');
     check(plain.textContent.endsWith('…'), 'width budget: the full text written again by an update is shortened again');

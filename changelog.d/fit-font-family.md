@@ -1,0 +1,1 @@
+- A theme that changes only the font family, not its size, no longer leaves shortened labels measured with the old font (#395).
