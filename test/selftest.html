@@ -4974,7 +4974,6 @@
     dlg.close(); dlg.remove();
     backdrop.click();
     check(!nested._fullscreenOpen && document.body.style.overflow === oldOverflow, 'a tap on the backdrop closes a top-layer full-screen card');
-    nested.remove(); clip.remove();
     // A view switch detaches the card while full screen is open; reinserted, it is a normal, visible card again.
     nested.shadowRoot.getElementById('fullscreen-toggle').click();
     nested.remove(); clip.appendChild(nested); nested.hass = { ...h };
