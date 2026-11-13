@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.19.0-beta.4 – 2026-11-13
+- Full screen also works inside transformed or clipped dashboard popups: the card and its backdrop move into the browser's top layer. A more-info dialog opened from a tile stays above the card, also when the card is rebuilt, and a card that a view switch detaches in full screen comes back as a normal card (#370, by @graememorgan).
+- With the Heatpump Flow Card by Xerolux installed as well, this card no longer takes the shared element name `heatpump-flow-card` when it happens to load first: it waits until the other card's script has run, so the other card's dashboards keep working. The card picker now always adds this card as `custom:heatpump-hydraulic-card`, and the notice about an older copy no longer suggests deleting the other card's folder (forum).
+- Timeline: a gap without data shorter than two minutes between two running states, as a Modbus timeout or an integration reload leaves it, no longer divides a run into two runs with a pause. The bar still shows the gap as "No data". Durations below a minute read "< 1 min" instead of "1 min".
+- Units of a cascade take an optional `power_threshold` in W (default 50). A unit that draws about 60 W with the compressor off after a hot-water charge no longer creates a heating run with an implausible COP, with `run_signal: units` and in the live view. The diagnostic report names the threshold of each unit (#173).
 
 ## 0.19.0-beta.3 – 2026-11-11
 - EMS-ESP: a heat total that reads less than one of its parts (heating, hot water or cooling) is not used. On a Nefit EnviLine with long entity names "total energy supplied" equals the heater rod's energy, so the total COP read 0.1; it is now left out instead (#349). The counters are compared in kWh, also when one of them is shown in Wh or MWh, and after a restart the total is only mapped once the parts report a value.

@@ -1,1 +1,0 @@
-- Fix full-screen mode inside transformed or clipped dashboard popups by using the browser top layer.

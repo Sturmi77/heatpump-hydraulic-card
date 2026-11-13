@@ -1,14 +1,12 @@
 # Issue plan for the roadmap draft
 
-**GitHub assignments · 3 November 2026, updated on 11 November with 0.19.0-beta.3.** The milestone table records the assigned issues, including three lead issues. The recommendations below give the scope and evidence for each item. A field report can belong to a milestone without committing an entire preset or layout to that release. [Roadmap and milestone criteria](ROADMAP-DRAFT.md) · [Open issues](https://github.com/Sturmi77/heatpump-hydraulic-card/issues?q=is%3Aissue+is%3Aopen)
+**GitHub assignments · 3 November 2026, updated on 13 November with 0.19.0-beta.4.** The milestone table records the assigned issues, including three lead issues. The recommendations below give the scope and evidence for each item. A field report can belong to a milestone without committing an entire preset or layout to that release. [Roadmap and milestone criteria](ROADMAP-DRAFT.md) · [Open issues](https://github.com/Sturmi77/heatpump-hydraulic-card/issues?q=is%3Aissue+is%3Aopen)
 
 ## Pull requests
 
-| PR | State at review | Proposed treatment |
-| --- | --- | --- |
-| [#370 · Full screen in nested dashboard popups](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/370) | Contributor PR from a fork. Reviewed on 8 November with seven suggestions; the author applied them on 11 November. Second review the same day: a card detached in full screen (a view switch) comes back invisible, fix and test suggested. The fork's checks wait for approval. | Wait for the author's update, then approve the checks and test with a real more-info dialog. Not needed for 0.19.0; only through a beta. |
+No open pull requests. [#370](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/370) (full screen in nested dashboard popups, by graememorgan) is merged after two reviews; the last fix (a more-info dialog stays above the card when it is rebuilt) was pushed to the branch on 13 November.
 
-Everything on `main` up to 11 November is in `0.19.0-beta.3`: since beta.2 #364, #368, #369, #371, #374–#377, #387, #389/#390, #391, #395 (#396, #397, #398) and the Polish changelog line (#342).
+Everything on `main` up to 13 November is in `0.19.0-beta.4`: since beta.3 #370, #400 (short data gaps no longer divide a run), #401 (`power_threshold` per unit, beta feedback from #173) and #404 (the generic element name next to the Xerolux card, forum).
 
 ## GitHub milestones
 
@@ -47,16 +45,16 @@ Agreed on 4 November after the mockup of the run details. One pull request per s
 | 4 · Independent | 11 | [#289](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/289) | Flow rates in l/min as a display option. | done ([#348](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/348)) |
 | | 12 | [#4](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/4) | Phone readability: `narrow_focus` by n42net. | done ([#330](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/330)) |
 | | 13 | [#365](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/365) | Beta feedback from [#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173): opt-in `run_signal`, run bounds from unit power and the kind from the valve where the mode updates only hourly. Does not block the release; moves to 0.20.0 if the field answers come late. | done ([#377](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/377)), in `0.19.0-beta.3` |
-| 5 · Acceptance and release | 14 | [#300](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/300) | Compare the run details with recorder traces of at least two installations (the maintainer's Lambda, the cascade in [#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173) or the Daikin in [#254](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/254)); then release 0.19.0. | in progress: the Lambda is checked against its counters ([#353](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/353) came out of it); the cascade in #173 reports runs on beta.2, whose bounds follow hourly signals there (→ #365, in beta.3) |
+| 5 · Acceptance and release | 14 | [#300](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/300) | Compare the run details with recorder traces of at least two installations (the maintainer's Lambda, the cascade in [#173](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/173) or the Daikin in [#254](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/254)); then release 0.19.0. | in progress: the Lambda is checked against its counters ([#353](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/353) came out of it); the cascade in #173 checked beta.3 on 11 November: run bounds, hot water and the totals match its recorder and counters within a few percent; a unit's standby after a hot-water charge made extra heating runs (→ [#401](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/401), in beta.4) |
 
 ### Open before 0.19.0 final
 
-State on 11 November. Everything decided on 9 November is merged and in `0.19.0-beta.3` (#349 in #375, one rule for "compressor on" in #374, the keyboard in #376, `run_signal` in #377, the drawing tests of #395 with their fixes in #396–#398). The final follows after a few quiet days.
+State on 13 November. Everything decided on 9 November is in `0.19.0-beta.3`; the field feedback on it is in `0.19.0-beta.4` (#401 for the cascade of #173, #404 for the card next to the Xerolux card, #370). The final follows after a few quiet days.
 
 | Item | State |
 | --- | --- |
-| **Second installation for #300:** the cascade of #173 with `run_signal: units` on beta.3. | waiting for the field |
-| **Confirmations** of #344, #349, #359 and #360 on beta.3. | waiting; the issues close with 0.19.0 either way |
+| **Second installation for #300:** the cascade of #173 with `run_signal: units` and `power_threshold` for WP1 on beta.4. | beta.3 matched the counters; waiting for the check of the standby fix |
+| **Confirmations** of #344, #349, #359 and #360. | #360 confirmed on beta.3; the others close with 0.19.0 either way |
 | Release PR `0.19.0`: compile the fragments, rename the beta sections, close #23, #4 and #300, move #395 (stage 3) to 0.20.0. | after the field test |
 
 ## Scope and follow-up by issue
