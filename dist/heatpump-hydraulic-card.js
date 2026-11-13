@@ -128,7 +128,7 @@ const HFC_PRESETS = {
       const hc = `heatingCircuits:hc${i.hc}`; const dhw = `dhwCircuits:dhw${i.dhw}`;
       // TC1, the heat pump's flow behind the auxiliary heater. Where it exists, the gateway's supply temperature is the flow of
       // the heating side (behind a buffer cylinder) and goes to the first circuit; without TC1 it stays the heat pump's flow.
-      const tc1 = r('heatSources:additionalHeater:flowTemp');
+      const tc1 = r('heatSources:additionalHeater:flowTemp') || s('local_only:signals:SRC.IntFlowTemp');
       const supply = s('gateway:supply_temperature', 'heatSources:actualSupplyTemperature');
       // Electric power of the compressor and the auxiliary heater; without the compressor's own power there is none.
       const compressorPower = r('heatSources:compressor:powerElecActual');
@@ -136,20 +136,26 @@ const HFC_PRESETS = {
       return {
         mode: r('heatSources:compressor:status', 'heatSources:hs1:refrigerant:status'),
         status: r('heatSources:hs1:refrigerant:status'),
-        compressor: r('heatSources:hs1:refrigerant:compressorActualSpeed'),
+        // Controller signals (`local_only:signals:<signal>`) follow the gateway's signal list; the resource paths stay the base.
+        compressor: s('local_only:signals:SRC.CUHP.HMI.CompressorActive') || r('heatSources:hs1:refrigerant:compressorActualSpeed'),
+        valve: s('local_only:signals:SRC.CUHP.HP1.DHWValve'),
         power: compressorPower ? { sum: [compressorPower, heaterPower] } : undefined,
+        // Despite its name the compressor's heat output, not its electric power (it matches the heat meter).
+        heat: s('local_only:signals:SRC.CUHP.HP1.CompressorPower'),
         heater: heaterPower,
         flow: tc1 || supply,
         return: s('gateway:return_temperature', 'heatSources:returnTemperature'),
-        volume: r('heatSources:hs1:pumpVolumeFlow'),
+        volume: r('heatSources:hs1:pumpVolumeFlow') || s('local_only:signals:SRC.SystemPumpVolumeFlow'),
         outdoor: s('gateway:outdoor_temperature', 'system:sensors:temperatures:outdoor_t1'),
         source_in: r('heatSources:sensors:evaporatorTemp_tl2'),
         fan_speed: r('heatSources:hs1:oduFanSpeed'),
         dhw_top: s(...(i.dhw === 1 ? ['gateway:hot_water_temperature'] : [])) || r(`${dhw}:actualTemp`),
         dhw_target: r(`${dhw}:currentSetpoint`),
         hc_flow: r(`${hc}:actualSupplyTemperature`) || (tc1 && i.hc === 1 ? supply : undefined),
-        hc_setpoint: i.hc === 1 ? r('heatSources:currentSupplySetpoint') : undefined,
+        hc_setpoint: i.hc === 1 ? r('heatSources:currentSupplySetpoint') || s('local_only:signals:SC.HC1.FlowTempSetp') : undefined,
         hc_pump: r(`${hc}:pumpStatus`),
+        // The circuit flow rate is a signal of circuit 1 only.
+        hc_volume: i.hc === 1 ? s('local_only:signals:SRC.HC1.FlowCtrl.PumpVolumeFlow') : undefined,
         hc_pressure: s('gateway:system_pressure', 'heatSources:systemPressure'),
         room: r(`${hc}:roomtemperature`),
         room_target: r(`${hc}:currentRoomSetpoint`),
@@ -159,6 +165,7 @@ const HFC_PRESETS = {
         liquid_temp: r('heatSources:hs1:refrigerant:liquidPipeHeatingTemp'),
         evap_temp: r('heatSources:hs1:refrigerant:lowPressureTemp'),
         cond_temp: r('heatSources:hs1:refrigerant:highPressureTemp'),
+        eev: s('local_only:signals:SRC.CUHP.HP1.ExpansionValveActual'),
         hours: s('heatSources:hs1:workingTime:total'),
         starts_total: s('heatSources:hs1:numberOfStarts:total'),
         energy_total: s('gateway:total_electricity', 'heatSources:emon:totalConsumption:total_electricity'),
@@ -212,8 +219,10 @@ const HFC_PRESETS = {
         `${dhw}:operationMode`, ...(i.dhw === 1 ? ['gateway:hot_water_status'] : []), `${dhw}:overallStatus`,
         `${dhw}:chargeRemainingTime`, 'active_faults', 'active_notifications', 'system_pressure_status',
       ].map((key) => pointt.find('sensor', key)).concat(
-        // The speed of the primary pump PC0; the card has no input for it.
+        // The primary pump PC0 and the 4-way valve VR4; the card has no input for them.
         pointt.path('sensor', 'heatSources:hs1:refrigerant:heatCarrierPumpSpeed'),
+        pointt.find('sensor', 'local_only:signals:SRC.CUHP.HP1.CHPumpRelay'),
+        pointt.find('sensor', 'local_only:signals:SRC.CUHP.HP1.FourwayValve'),
       ).filter(Boolean);
     },
     // The refrigerant circuit status stands in for the compressor status where only the local access reports; it adds

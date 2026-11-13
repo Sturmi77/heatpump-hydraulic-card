@@ -761,6 +761,18 @@ function pointtSetup(scenario = 'heat', gateway = 'demo-pointt', suffix = '', ac
     ['sensor', 'local_only:heatSources:hs1:refrigerant:liquidPipeHeatingTemp', 30, '°C'],
     ['sensor', 'local_only:heatSources:hs1:refrigerant:lowPressureTemp', -2, '°C'],
     ['sensor', 'local_only:heatSources:hs1:refrigerant:highPressureTemp', pick({ heat: 36, dhw: 54 }), '°C'],
+    // Controller signals: the gateway lists them, the integration names them after the controller.
+    ['sensor', 'local_only:signals:SRC.CUHP.HMI.CompressorActive', run ? 'on' : 'off', '', { translation_key: 'on_off_state' }],
+    ['sensor', 'local_only:signals:SRC.CUHP.HP1.DHWValve', scenario === 'dhw' ? 'on' : 'off', '', { translation_key: 'dhw_valve_position' }],
+    ['sensor', 'local_only:signals:SRC.CUHP.HP1.FourwayValve', scenario === 'defrost' ? 'on' : 'off', '', { translation_key: 'four_way_valve_position' }],
+    ['sensor', 'local_only:signals:SRC.CUHP.HP1.CHPumpRelay', run ? 'on' : 'off', '', { translation_key: 'on_off_state' }],
+    ['sensor', 'local_only:signals:SRC.CUHP.HP1.CompressorPower', pick({ heat: 3.6, dhw: 4.4, defrost: 0, idle: 0 }), 'kW'],
+    ['sensor', 'local_only:signals:SRC.CUHP.HP1.ExpansionValveActual', pick({ heat: 12, dhw: 18, defrost: 100, idle: 0 }), '%'],
+    ['sensor', 'local_only:signals:SRC.HC1.FlowCtrl.PumpVolumeFlow', run ? 1100 : 0, 'L/h', { translation_key: 'volume_flow' }],
+    ['sensor', 'local_only:signals:SC.HC1.FlowTempSetp', 34, '°C'],
+    // Second sources of readings above: disabled by default.
+    ['sensor', 'local_only:signals:SRC.IntFlowTemp', pick({ heat: 35.4, dhw: 51.9, defrost: 22, idle: 30 }), '°C', { disabled_by: 'integration' }],
+    ['sensor', 'local_only:signals:SRC.SystemPumpVolumeFlow', pick({ heat: 1452, dhw: 2081, defrost: 1899, idle: 0 }), 'L/h', { disabled_by: 'integration' }],
   ] : [];
   // With the cloud as well, paired readings have copies for the comparison of both sources; the preset never takes them.
   if (access === 'both') localRows.push(['sensor', 'gateway:supply_temperature:source_local', 31, '°C'], ['sensor', 'heatSources:hs1:heatPumpType:source_local', 'air_water', '', { translation_key: 'heat_pump_type' }]);

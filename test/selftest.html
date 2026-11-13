@@ -1588,7 +1588,12 @@
     check(r.entities.heater === idOf(f, L('heatSources:eHeater:powerElecActual')), 'Home Comfort auxiliary heater from its electric power');
     check(r.entities.fan_speed === idOf(f, L('heatSources:hs1:oduFanSpeed')) && r.entities.source_in === idOf(f, L('heatSources:sensors:evaporatorTemp_tl2')),
       'Home Comfort fan speed PL3 and air intake TL2');
-    check(r.entities.compressor === idOf(f, L('heatSources:hs1:refrigerant:compressorActualSpeed')), 'Home Comfort compressor runs with its speed');
+    const noSignals = structuredClone(f);
+    Object.keys(noSignals.registry).filter((id) => noSignals.registry[id].unique_id.includes(':local_only:signals:')).forEach((id) => { delete noSignals.registry[id]; });
+    const pathsOnly = resolve(noSignals);
+    check(pathsOnly.entities.compressor === idOf(f, L('heatSources:hs1:refrigerant:compressorActualSpeed')), 'Home Comfort without the signal the compressor runs with its speed');
+    check(pathsOnly.entities.flow === r.entities.flow && pathsOnly.entities.volume === r.entities.volume && pathsOnly.sums.power?.length === 2
+      && !pathsOnly.entities.valve && !pathsOnly.entities.heat && !pathsOnly.entities.hc_volume, 'Home Comfort resource paths do not depend on the signals');
     check(r.entities.compressor_speed === idOf(f, 'gateway:modulation'), 'Home Comfort compressor speed stays the modulation');
     check(r.entities.hot_gas === idOf(f, L('heatSources:hs1:refrigerant:hotGasTemp'))
       && r.entities.suction_temp === idOf(f, L('heatSources:hs1:refrigerant:suctionGasTemp'))
@@ -1619,7 +1624,7 @@
       'Home Comfort without TC1 the supply temperature stays the heat pump flow');
     // A path the cloud offers keeps the cloud's key (the integration hands the local-only entity over): same mapping.
     const handed = structuredClone(f);
-    Object.values(handed.registry).forEach((e) => { e.unique_id = e.unique_id.replace(':local_only:', ':'); });
+    Object.values(handed.registry).forEach((e) => { e.unique_id = e.unique_id.replace(/:local_only:(?!signals:)/, ':'); });
     const handedResult = resolve(handed);
     check(JSON.stringify(handedResult.entities) === JSON.stringify(r.entities) && JSON.stringify(handedResult.sums) === JSON.stringify(r.sums),
       'Home Comfort cloud form of the same paths maps the same entities');
@@ -1684,6 +1689,37 @@
     check(!below.failed && Number.isNaN(below.vol) && below.primaryPump === true && below.toHeat, 'Home Comfort PC0 below its measuring range keeps the primary pump running');
     const standing = flowOf(both, 'idle');
     check(standing.vol === 0 && standing.primaryPump === false, 'Home Comfort PC0 at 0 l/h stops the primary pump');
+
+    // Controller signals: compressor, VW1, heat output, PC1, setpoint, VR1, and PC0 relay and VR4 in the details.
+    const sig = (name) => idOf(f, L(`signals:${name}`));
+    check(r.entities.compressor === sig('SRC.CUHP.HMI.CompressorActive'), 'Home Comfort compressor signal');
+    check(r.entities.valve === sig('SRC.CUHP.HP1.DHWValve'), 'Home Comfort hot water valve VW1');
+    check(r.entities.heat === sig('SRC.CUHP.HP1.CompressorPower'), 'Home Comfort heat output of the compressor');
+    check(r.entities.hc_volume === sig('SRC.HC1.FlowCtrl.PumpVolumeFlow') && !second.entities.hc_volume && !multi.entities.hc2_volume,
+      'Home Comfort circuit flow rate PC1 at circuit 1 only');
+    check(r.entities.eev === sig('SRC.CUHP.HP1.ExpansionValveActual'), 'Home Comfort expansion valve VR1');
+    check(r.details.includes(sig('SRC.CUHP.HP1.CHPumpRelay')) && r.details.includes(sig('SRC.CUHP.HP1.FourwayValve')), 'Home Comfort PC0 relay and VR4 are additional values');
+    check(r.entities.hc_setpoint === idOf(f, L('heatSources:currentSupplySetpoint')) && pathsOnly.entities.hc_setpoint === r.entities.hc_setpoint,
+      'Home Comfort the supply setpoint path wins over its signal');
+    const setpointSignal = structuredClone(f); delete setpointSignal.registry[idOf(f, L('heatSources:currentSupplySetpoint'))];
+    check(resolve(setpointSignal).entities.hc_setpoint === sig('SC.HC1.FlowTempSetp'), 'Home Comfort supply setpoint signal of circuit 1 as the second source');
+    check(r.entities.flow !== sig('SRC.IntFlowTemp') && r.entities.volume !== sig('SRC.SystemPumpVolumeFlow'), 'Home Comfort disabled second sources are not used');
+    const enabledSecond = structuredClone(f);
+    delete enabledSecond.registry[idOf(f, L('heatSources:additionalHeater:flowTemp'))]; delete enabledSecond.registry[idOf(f, L('heatSources:hs1:pumpVolumeFlow'))];
+    delete enabledSecond.registry[sig('SRC.IntFlowTemp')].disabled_by; delete enabledSecond.registry[sig('SRC.SystemPumpVolumeFlow')].disabled_by;
+    const second2 = resolve(enabledSecond);
+    check(second2.entities.flow === sig('SRC.IntFlowTemp') && second2.entities.hc_flow === idOf(f, 'gateway:supply_temperature')
+      && second2.entities.volume === sig('SRC.SystemPumpVolumeFlow'), 'Home Comfort enabled second sources stand in for missing paths');
+    // A signal the gateway stops listing turns unavailable: the power still says the heat pump runs.
+    const dropped = flowOf(both, 'heat', (st, fx) => {
+      ['SRC.CUHP.HMI.CompressorActive', 'SRC.CUHP.HP1.DHWValve', 'SRC.CUHP.HP1.CompressorPower'].forEach((name) => { st[idOf(fx, L(`signals:${name}`))].state = 'unavailable'; });
+    });
+    check(!dropped.failed && dropped.running && dropped.hp === 'heating', 'Home Comfort unavailable signals do not stop a heat pump that draws power');
+    const dhwValve = flowOf(alone, 'dhw');
+    check(dhwValve.valveDhw && dhwValve.toDhw, 'Home Comfort VW1 on means hot water');
+    const cop = mount({ ...cfg, buffer: true, primary_pump: true }, hassOf(toStates(f.states), f.registry));
+    check(cop.shadowRoot.getElementById('t-hp-cop').textContent !== '', 'Home Comfort live COP from heat output and power');
+    cop.remove();
     const shown = mount({ ...cfg, buffer: true, primary_pump: true, tiles: ['power', 'volume'] }, hassOf(toStates(f.states), f.registry));
     check(ok(shown) && /910/.test(shown.shadowRoot.textContent.replace(/\D+/g, ' ')), 'Home Comfort the compressor power is shown');
     shown.remove();
