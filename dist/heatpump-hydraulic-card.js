@@ -3675,6 +3675,22 @@ class HeatpumpFlowCard extends HTMLElement {
     return this._ownedRoot;
   }
 
+  // The markup of the card. While full screen is open in the top layer, the open popover stays and only its content is replaced:
+  // a new popover would be shown above a dialog opened after it (more-info), and removing the open one would close it.
+  _setRootHtml(html) {
+    const root = this._renderRoot();
+    const keep = root.querySelector('#fullscreen-layer');
+    const open = this._fullscreenOpen && typeof keep?.showPopover === 'function' && keep.matches(':popover-open');
+    const t = open ? document.createElement('template') : null;
+    if (t) t.innerHTML = html;
+    const fresh = t?.content.querySelector('#fullscreen-layer');
+    if (!fresh || fresh.parentNode !== t.content) { root.innerHTML = html; return; }
+    const nodes = [...t.content.childNodes]; const at = nodes.indexOf(fresh);
+    keep.replaceChildren(...fresh.childNodes);
+    [...root.childNodes].forEach((n) => { if (n !== keep) n.remove(); });
+    keep.before(...nodes.slice(0, at)); keep.after(...nodes.slice(at + 1));
+  }
+
   _apply() {
     if (this._preset?.entity_registry) {
       const revision = HeatpumpFlowCard._pointtRevision(this._hass);
@@ -4258,8 +4274,9 @@ class HeatpumpFlowCard extends HTMLElement {
       ? Object.fromEntries(bufferKeys.map((key, n) => [key, bufferKeys.length === 1 ? 446 : 382 + n * (118 / (bufferKeys.length - 1))]))
       : { buffer_top: 392, buffer_middle: 446, buffer_bottom: 502 };
 
-    this._renderRoot().innerHTML = `
+    this._setRootHtml(`
       <style>${HeatpumpFlowCard.styles}</style>
+      ${this._fullscreenOpen ? '<div class="fullscreen-layer" id="fullscreen-layer" popover="manual">' : ''}
       <div class="fullscreen-backdrop" id="fullscreen-backdrop" ${this._fullscreenOpen ? '' : 'hidden'}></div>
       <ha-card class="layout-${this._layout} motion-${this._animations} theme-${this._theme}${this._config.narrow_values ? ' narrow-values' : ''}${nf ? ' narrow-focus' : ''}${equalBuffer ? ' buffer-values-equal' : ''}${this._fullscreenOpen ? ' fullscreen' : ''}"${this._fullscreenOpen ? ` role="dialog" aria-modal="true" aria-label="${T}"` : ''}>
         <div class="head">
@@ -4398,9 +4415,16 @@ class HeatpumpFlowCard extends HTMLElement {
           ${this._drawerHtml()}
         </div>
         </div>
-      </ha-card>`;
+      </ha-card>
+      ${this._fullscreenOpen ? '</div>' : ''}`);
 
     this._wireTools();
+    // Lift the backdrop and card together into the browser's top layer.
+    // Without Popover API support, retain the fixed-position fallback.
+    const fullscreenLayer = this.shadowRoot.getElementById('fullscreen-layer');
+    if (fullscreenLayer?.isConnected && typeof fullscreenLayer.showPopover === 'function' && !fullscreenLayer.matches(':popover-open')) {
+      fullscreenLayer.showPopover();
+    }
     if (this._layout === 'wall') {
       const card = this.shadowRoot.querySelector('ha-card');
       ['pointerdown', 'pointermove', 'keydown', 'focusin'].forEach((t) => card.addEventListener(t, () => this._wake(), { passive: true }));
@@ -6453,7 +6477,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const drawer = this._$('drawer-body');
     if (drawer && !drawer.hidden) { this._drawerOpen = false; drawer.hidden = true; this._$('drawer-toggle')?.setAttribute('aria-expanded', 'false'); }
   }
-  disconnectedCallback() { clearTimeout(this._sleepTimer); clearTimeout(this._diagnosticTimer); this._closeFullscreen(false, false); }
+  // Detached in full screen (a view switch): rebuilt as a normal card, so a reinserted card is neither hidden in a closed popover nor
+  // left full screen without a way back.
+  disconnectedCallback() { clearTimeout(this._sleepTimer); clearTimeout(this._diagnosticTimer); this._closeFullscreen(false); }
 
   // Tiles: the actions of the tile under the pointer.
   _tileEvents(box) {
@@ -7072,6 +7098,9 @@ HeatpumpFlowCard.styles = `
   :host { display: block; --hfc-muted: var(--secondary-text-color, #888); }
   ha-card { padding: 12px 12px 8px; overflow: hidden; background: var(--card-background-color, #fff); }
   .fullscreen-backdrop { position: fixed; inset: 0; z-index: 2147483645; background: rgba(0,0,0,.62); }
+  /* The top-layer container covers the viewport without a look of its own; the user-agent popover styles are reset. */
+  .fullscreen-layer { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 0;
+    border: 0; background: transparent; color: inherit; overflow: visible; }
   ha-card.fullscreen { position: fixed; inset: 0; z-index: 2147483646; box-sizing: border-box; width: 100vw; height: 100dvh; margin: 0;
     border-radius: 0; overflow: auto; padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
   @media (min-width: 1640px) and (min-height: 800px) { ha-card.fullscreen { inset: 20px; width: min(1600px, calc(100vw - 40px)); height: calc(100dvh - 40px); margin: auto; border-radius: 14px; } }

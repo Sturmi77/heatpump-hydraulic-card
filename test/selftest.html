@@ -5010,7 +5010,7 @@
     const oldOverflow = document.body.style.overflow;
     card.shadowRoot.getElementById('fullscreen-toggle').click();
     let shell = card.shadowRoot.querySelector('ha-card');
-    check(shell.classList.contains('fullscreen') && shell.getAttribute('role') === 'dialog' && shell.getAttribute('aria-modal') === 'true'
+    check(shell.classList.contains('fullscreen') && card.shadowRoot.getElementById('fullscreen-layer').matches(':popover-open') && shell.getAttribute('role') === 'dialog' && shell.getAttribute('aria-modal') === 'true' 
       && !card.shadowRoot.getElementById('fullscreen-backdrop').hidden && document.body.style.overflow === 'hidden', 'full-screen opens one modal card layer and locks background scrolling');
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     shell = card.shadowRoot.querySelector('ha-card');
@@ -5020,6 +5020,45 @@
     card.shadowRoot.getElementById('fullscreen-backdrop').click();
     check(!card.shadowRoot.querySelector('ha-card').classList.contains('fullscreen'), 'a backdrop click closes full-screen');
     card.remove();
+    // A transformed/clipped parent reproduces a dashboard popup's containing block.
+    const clip = document.createElement('div');
+    clip.style.cssText = 'width:240px;height:160px;overflow:hidden;transform:translateZ(0)';
+    document.body.appendChild(clip);
+    const nested = mount(s.config, h); await wait(20);
+    clip.appendChild(nested);
+    nested.shadowRoot.getElementById('fullscreen-toggle').click();
+    let expanded = nested.shadowRoot.querySelector('ha-card');
+    check(nested.shadowRoot.getElementById('fullscreen-layer').matches(':popover-open') && expanded.getBoundingClientRect().width > clip.getBoundingClientRect().width,
+      'full-screen enters the top layer even inside a transformed, clipped parent');
+    nested._render(); nested._update();
+    expanded = nested.shadowRoot.querySelector('ha-card');
+    check(nested.shadowRoot.getElementById('fullscreen-layer').matches(':popover-open') && expanded.classList.contains('fullscreen'), 'full-screen reopens its popover after a card rebuild');
+    // The backdrop sits in the top layer with the card: it covers the page (also outside the clipped parent) and catches the tap.
+    const backdrop = nested.shadowRoot.getElementById('fullscreen-backdrop');
+    const bb = backdrop.getBoundingClientRect();
+    check(backdrop.parentElement.matches('#fullscreen-layer:popover-open') && bb.left <= 0 && bb.top <= 0 && bb.right >= innerWidth && bb.bottom >= innerHeight,
+      `in the top layer the backdrop covers the whole page, also outside the clipped parent (${Math.round(bb.width)} × ${Math.round(bb.height)})`);
+    // Home Assistant opens more-info as a modal dialog above the card: a tap in it keeps full screen open.
+    const dlg = document.createElement('dialog'); document.body.appendChild(dlg); dlg.showModal();
+    dlg.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true })); dlg.click();
+    check(nested._fullscreenOpen, 'a tap inside a dialog above the card keeps full screen open');
+    // A rebuild while the dialog is open keeps the open popover: a new one would be shown above the dialog.
+    const layerBefore = nested.shadowRoot.getElementById('fullscreen-layer');
+    nested._render(); nested._update();
+    const layerAfter = nested.shadowRoot.getElementById('fullscreen-layer');
+    check(layerAfter === layerBefore && layerAfter.matches(':popover-open') && dlg.open && nested.shadowRoot.querySelector('ha-card').classList.contains('fullscreen'),
+      'a card rebuild while a dialog is open keeps the card below the dialog');
+    dlg.close(); dlg.remove();
+    nested.shadowRoot.getElementById('fullscreen-backdrop').click();
+    check(!nested._fullscreenOpen && document.body.style.overflow === oldOverflow, 'a tap on the backdrop closes a top-layer full-screen card');
+    // A view switch detaches the card while full screen is open; reinserted, it is a normal, visible card again.
+    nested.shadowRoot.getElementById('fullscreen-toggle').click();
+    nested.remove(); clip.appendChild(nested); nested.hass = { ...h };
+    const back = nested.shadowRoot.querySelector('ha-card');
+    check(!nested._fullscreenOpen && !back.classList.contains('fullscreen') && back.getClientRects().length > 0
+      && nested.shadowRoot.getElementById('fullscreen-backdrop').hidden && document.body.style.overflow === oldOverflow,
+      'a card detached in full screen comes back as a normal, visible card');
+    nested.remove(); clip.remove();
     const noFull = mount({ ...s.config, fullscreen: false }, h);
     check(!noFull.shadowRoot.getElementById('fullscreen-toggle'), 'fullscreen: false removes the button');
     noFull.remove();
