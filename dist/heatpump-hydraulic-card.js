@@ -47,14 +47,23 @@ function hfcPointT(ctx) {
       return { id, device: e.device_id, gateway: e.unique_id.slice(0, colon), key: e.unique_id.slice(colon + 1) };
     }).filter((e) => e.gateway && e.key);
   const selected = new Set(rows.filter((e) => !ctx.device || e.device === ctx.device).map((e) => e.gateway));
-  const gateways = [...new Set(rows.filter((e) => selected.has(e.gateway)
-    && e.key === 'heatSources:compressor:status' && e.id.startsWith('sensor.')).map((e) => e.gateway))];
+  // A reading only the local access provides has the key `local_only:<resource path>` (Home Comfort 0.9.0); a reading the
+  // cloud offers keeps the resource key. `plain` compares both forms of the same resource.
+  const plain = (key) => key.replace(/^local_only:/, '');
+  const anchored = (test) => [...new Set(rows.filter((e) => selected.has(e.gateway) && e.id.startsWith('sensor.') && test(plain(e.key)))
+    .map((e) => e.gateway))];
+  // The cloud's compressor status marks a heat pump. A gateway with the local access alone has no such resource; there the
+  // heat pump type or the refrigerant circuit status of its heat source does. The second anchor only applies when no
+  // gateway reports a compressor status, so a cloud installation resolves as before.
+  const byStatus = anchored((key) => key === 'heatSources:compressor:status');
+  const gateways = byStatus.length ? byStatus
+    : anchored((key) => /^heatSources:hs[^:]+:(?:heatPumpType|refrigerant:status)$/.test(key));
   // An explicit device is required when several gateways report a compressor.
   if (gateways.length !== 1 || ctx.idx.hp !== 1) return null;
   const own = rows.filter((e) => e.gateway === gateways[0]);
   // The compressor mode and energy resources are gateway totals. Do not assign those totals
   // to a particular heat pump in a cascade; that topology needs an explicit manual mapping.
-  const sources = new Set(own.filter((e) => /^heatSources:hs[^:]+:heatPumpType$/.test(e.key)).map((e) => e.key));
+  const sources = new Set(own.map((e) => plain(e.key)).filter((key) => /^heatSources:hs[^:]+:heatPumpType$/.test(key)));
   if (sources.size > 1) return null;
   const find = (domain, ...keys) => {
     for (const key of keys) {
@@ -64,7 +73,10 @@ function hfcPointT(ctx) {
     }
     return undefined;
   };
-  return (ctx._pointt = { find });
+  // A resource path in either form, the cloud's first: the integration hands a local-only entity over to the cloud's
+  // resource key when the cloud starts to offer the same path, so only one of them is normally registered.
+  const path = (domain, ...keys) => find(domain, ...keys.flatMap((key) => [key, `local_only:${key}`]));
+  return (ctx._pointt = { find, path });
 }
 
 // Wolf: the prefix '' marks the wolf_smartset branch (sensors by translation key), a device slug the wolflink branch (entity ids).
@@ -98,30 +110,55 @@ function hfcEbusdInstances(ctx, requested) {
 const hfcEbusdStem = (ctx, p) => hfcEbusdInstances(ctx, p)[0]?.stem || String(p || '').replace(/[^a-z0-9_]/g, '');
 const HFC_PRESETS = {
   bosch_buderus_heating: {
-    name: 'Bosch/Buderus Home Comfort (PointT cloud)',
+    name: 'Bosch/Buderus Home Comfort',
     unit_style: 'bosch',
     entity_registry: true,
     // The compact registry suffices to offer this preset in a new card. Resource mappings
     // wait for the full local registry, loaded only when this preset is selected.
-    detect: (ctx) => hfcPointT(ctx) || ctx.key('bosch_buderus_heating', 'sensor', 'compressor_status') ? '' : undefined,
+    detect: (ctx) => hfcPointT(ctx) || ['compressor_status', 'heat_pump_type', 'refrigerant_status']
+      .some((tk) => ctx.key('bosch_buderus_heating', 'sensor', tk)) ? '' : undefined,
     ready: (ctx) => !!hfcPointT(ctx),
     auto_circuits: false,
+    // The cloud's compressor status follows the local compressor reading with a delay of up to one cloud update.
+    compressor_over_idle: true,
     entities: (p, i, ctx) => {
       const pointt = hfcPointT(ctx); if (!pointt) return {};
       const s = (...keys) => pointt.find('sensor', ...keys);
+      const r = (...paths) => pointt.path('sensor', ...paths);
       const hc = `heatingCircuits:hc${i.hc}`; const dhw = `dhwCircuits:dhw${i.dhw}`;
+      // TC1, the heat pump's flow behind the auxiliary heater. Where it exists, the gateway's supply temperature is the flow of
+      // the heating side (behind a buffer cylinder) and goes to the first circuit; without TC1 it stays the heat pump's flow.
+      const tc1 = r('heatSources:additionalHeater:flowTemp');
+      const supply = s('gateway:supply_temperature', 'heatSources:actualSupplyTemperature');
+      // Electric power of the compressor and the auxiliary heater; without the compressor's own power there is none.
+      const compressorPower = r('heatSources:compressor:powerElecActual');
+      const heaterPower = r('heatSources:eHeater:powerElecActual');
       return {
-        mode: s('heatSources:compressor:status'),
-        flow: s('gateway:supply_temperature', 'heatSources:actualSupplyTemperature'),
+        mode: r('heatSources:compressor:status', 'heatSources:hs1:refrigerant:status'),
+        status: r('heatSources:hs1:refrigerant:status'),
+        compressor: r('heatSources:hs1:refrigerant:compressorActualSpeed'),
+        power: compressorPower ? { sum: [compressorPower, heaterPower] } : undefined,
+        heater: heaterPower,
+        flow: tc1 || supply,
         return: s('gateway:return_temperature', 'heatSources:returnTemperature'),
+        volume: r('heatSources:hs1:pumpVolumeFlow'),
         outdoor: s('gateway:outdoor_temperature', 'system:sensors:temperatures:outdoor_t1'),
-        dhw_top: s(...(i.dhw === 1 ? ['gateway:hot_water_temperature'] : []), `${dhw}:actualTemp`),
-        dhw_target: s(`${dhw}:currentSetpoint`),
-        hc_flow: s(`${hc}:actualSupplyTemperature`),
+        source_in: r('heatSources:sensors:evaporatorTemp_tl2'),
+        fan_speed: r('heatSources:hs1:oduFanSpeed'),
+        dhw_top: s(...(i.dhw === 1 ? ['gateway:hot_water_temperature'] : [])) || r(`${dhw}:actualTemp`),
+        dhw_target: r(`${dhw}:currentSetpoint`),
+        hc_flow: r(`${hc}:actualSupplyTemperature`) || (tc1 && i.hc === 1 ? supply : undefined),
+        hc_setpoint: i.hc === 1 ? r('heatSources:currentSupplySetpoint') : undefined,
+        hc_pump: r(`${hc}:pumpStatus`),
         hc_pressure: s('gateway:system_pressure', 'heatSources:systemPressure'),
-        room: s(`${hc}:roomtemperature`),
-        room_target: s(`${hc}:currentRoomSetpoint`),
-        compressor_speed: s('gateway:modulation', 'heatSources:actualModulation'),
+        room: r(`${hc}:roomtemperature`),
+        room_target: r(`${hc}:currentRoomSetpoint`),
+        compressor_speed: s('gateway:modulation', 'heatSources:actualModulation') || r('heatSources:hs1:refrigerant:compressorActualSpeed'),
+        hot_gas: r('heatSources:hs1:refrigerant:hotGasTemp'),
+        suction_temp: r('heatSources:hs1:refrigerant:suctionGasTemp'),
+        liquid_temp: r('heatSources:hs1:refrigerant:liquidPipeHeatingTemp'),
+        evap_temp: r('heatSources:hs1:refrigerant:lowPressureTemp'),
+        cond_temp: r('heatSources:hs1:refrigerant:highPressureTemp'),
         hours: s('heatSources:hs1:workingTime:total'),
         starts_total: s('heatSources:hs1:numberOfStarts:total'),
         energy_total: s('gateway:total_electricity', 'heatSources:emon:totalConsumption:total_electricity'),
@@ -174,9 +211,15 @@ const HFC_PRESETS = {
         `${hc}:operationMode`, ...(i.hc === 1 ? ['gateway:heating_status'] : []), `${hc}:overallStatus`,
         `${dhw}:operationMode`, ...(i.dhw === 1 ? ['gateway:hot_water_status'] : []), `${dhw}:overallStatus`,
         `${dhw}:chargeRemainingTime`, 'active_faults', 'active_notifications', 'system_pressure_status',
-      ].map((key) => pointt.find('sensor', key)).filter(Boolean);
+      ].map((key) => pointt.find('sensor', key)).concat(
+        // The speed of the primary pump PC0; the card has no input for it.
+        pointt.path('sensor', 'heatSources:hs1:refrigerant:heatCarrierPumpSpeed'),
+      ).filter(Boolean);
     },
-    mode_map: { off: 'idle', heating: 'heating', cooling: 'cooling', dhw: 'dhw', defrost: 'defrost', alarm: 'off' },
+    // The refrigerant circuit status stands in for the compressor status where only the local access reports; it adds
+    // idle, startup, shutoff, passive_defrost and test_mode to the states both share.
+    mode_map: { off: 'idle', idle: 'idle', startup: 'idle', shutoff: 'idle', heating: 'heating', cooling: 'cooling', dhw: 'dhw',
+      defrost: 'defrost', passive_defrost: 'defrost', alarm: 'off' },
     program_map: { on: 'holiday', off: 'none' },
   },
   lambda: {

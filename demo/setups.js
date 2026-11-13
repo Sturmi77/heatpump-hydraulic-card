@@ -681,19 +681,23 @@ const setups = [
     },
   },
 ];
-// Synthetic PointT installation. Resource keys follow Home Comfort 0.8.2-beta.7;
+// Synthetic PointT installation. Resource keys follow Home Comfort 0.8.2-beta.7 (cloud) and 0.9.0 (local access);
 // gateway identifiers, entity ids and values are invented, not a registry export.
-function pointtSetup(scenario = 'heat', gateway = 'demo-pointt', suffix = '') {
+// `access`: 'cloud' (the cloud alone), 'both' (cloud and local access) or 'local' (the local access alone).
+function pointtSetup(scenario = 'heat', gateway = 'demo-pointt', suffix = '', access = 'cloud') {
+  const local = access !== 'cloud';
+  const pick = (values) => values[scenario] ?? values.heat;
   const rows = [
     ['sensor', 'heatSources:compressor:status', { heat: 'heating', dhw: 'dhw', defrost: 'defrost', idle: 'off', cool: 'cooling' }[scenario], '', { translation_key: 'compressor_status' }],
-    ['sensor', 'gateway:supply_temperature', scenario === 'dhw' ? 49 : 33, '°C'],
+    // With the local access the primary flow TC1 is known; this is then the flow behind the buffer cylinder.
+    ['sensor', 'gateway:supply_temperature', local ? pick({ heat: 32, dhw: 30, defrost: 29, idle: 30 }) : scenario === 'dhw' ? 49 : 33, '°C'],
     ['sensor', 'gateway:return_temperature', 28, '°C'],
     ['sensor', 'gateway:outdoor_temperature', 6, '°C'],
     ['sensor', 'gateway:modulation', scenario === 'idle' ? 0 : 42, '%'],
     ['sensor', 'gateway:system_pressure', 1.7, 'bar'],
     ['sensor', 'gateway:hot_water_temperature', 48, '°C'],
     ['sensor', 'dhwCircuits:dhw1:currentSetpoint', 50, '°C'],
-    ['sensor', 'heatSources:hs1:heatPumpType', 'air_water'],
+    ['sensor', 'heatSources:hs1:heatPumpType', 'air_water', '', { translation_key: 'heat_pump_type' }],
     ['sensor', 'heatSources:hs1:numberOfStarts:total', 120],
     ['sensor', 'heatSources:hs1:numberOfStarts:ch', 90],
     ['sensor', 'heatSources:hs1:numberOfStarts:dhw', 30],
@@ -738,8 +742,37 @@ function pointtSetup(scenario = 'heat', gateway = 'demo-pointt', suffix = '') {
     ['select', 'system:seasonOptimizer:mode:control', 'auto'],
     ['switch', 'system:awayMode:enabled:control', 'off'],
   ];
+  // Readings of the local access (Home Comfort 0.9.0), enabled by default: `<gateway>:local_only:<resource path>`.
+  const run = scenario !== 'idle';
+  const localRows = local ? [
+    ['sensor', 'local_only:heatSources:hs1:refrigerant:status', { heat: 'heating', dhw: 'dhw', defrost: 'defrost', idle: 'idle', cool: 'cooling' }[scenario], '', { translation_key: 'refrigerant_status' }],
+    ['sensor', 'local_only:heatSources:additionalHeater:flowTemp', pick({ heat: 35.5, dhw: 52, defrost: 22, idle: 30 }), '°C'],
+    ['sensor', 'local_only:heatSources:compressor:powerElecActual', pick({ heat: 910, dhw: 1450, defrost: 620, idle: 0 }), 'W'],
+    ['sensor', 'local_only:heatSources:eHeater:powerElecActual', 0, 'W'],
+    ['sensor', 'local_only:heatSources:hs1:pumpVolumeFlow', pick({ heat: 1450, dhw: 2080, defrost: 1900, idle: 0 }), 'L/h', { translation_key: 'volume_flow' }],
+    ['sensor', 'local_only:heatSources:hs1:oduFanSpeed', pick({ heat: 42, dhw: 60, defrost: 0, idle: 0 }), '%'],
+    ['sensor', 'local_only:heatSources:sensors:evaporatorTemp_tl2', pick({ heat: 7.5, defrost: 3.5 }), '°C'],
+    ['sensor', 'local_only:heatSources:currentSupplySetpoint', pick({ heat: 34, dhw: 55 }), '°C'],
+    ['sensor', 'local_only:heatingCircuits:hc1:pumpStatus', run ? 'on' : 'off', '', { translation_key: 'on_off_state' }],
+    ['sensor', 'local_only:heatSources:hs1:refrigerant:compressorActualSpeed', pick({ heat: 40, dhw: 65, defrost: 50, idle: 0 }), '%'],
+    ['sensor', 'local_only:heatSources:hs1:refrigerant:heatCarrierPumpSpeed', pick({ heat: 55, dhw: 100, defrost: 100, idle: 0 }), '%'],
+    ['sensor', 'local_only:heatSources:hs1:refrigerant:hotGasTemp', pick({ heat: 45, dhw: 66, defrost: 38, idle: 20 }), '°C'],
+    ['sensor', 'local_only:heatSources:hs1:refrigerant:suctionGasTemp', 8, '°C'],
+    ['sensor', 'local_only:heatSources:hs1:refrigerant:liquidPipeHeatingTemp', 30, '°C'],
+    ['sensor', 'local_only:heatSources:hs1:refrigerant:lowPressureTemp', -2, '°C'],
+    ['sensor', 'local_only:heatSources:hs1:refrigerant:highPressureTemp', pick({ heat: 36, dhw: 54 }), '°C'],
+  ] : [];
+  // With the cloud as well, paired readings have copies for the comparison of both sources; the preset never takes them.
+  if (access === 'both') localRows.push(['sensor', 'gateway:supply_temperature:source_local', 31, '°C'], ['sensor', 'heatSources:hs1:heatPumpType:source_local', 'air_water', '', { translation_key: 'heat_pump_type' }]);
+  // With the local access the circuits have no flow sensor of their own, as on the installation the local mapping was checked
+  // on. The local access alone has no compressor status, no fault and holiday state and no controls (it never writes); paired
+  // readings keep the cloud's keys, and a circuit's room temperature is a local-only reading.
+  const cloudOnly = ([domain, key]) => key === 'heatSources:compressor:status' || domain !== 'sensor';
+  const kept = !local ? rows : rows.filter(([, key]) => !/^heatingCircuits:hc\d+:actualSupplyTemperature$/.test(key))
+    .filter((row) => access !== 'local' || !cloudOnly(row))
+    .map(([domain, key, ...rest]) => [domain, access === 'local' && /:roomtemperature$/.test(key) ? `local_only:${key}` : key, ...rest]);
   const states = {}; const registry = {};
-  rows.forEach(([domain, key, value, unit, extra], n) => {
+  [...kept, ...localRows].forEach(([domain, key, value, unit, extra], n) => {
     // Deliberately unrelated to the resource names: test renamed entities and mixed languages.
     const id = `${domain}.pointt_${suffix}value_${n}`;
     const attributes = { friendly_name: key.replace(/:/g, ' / '), ...(unit ? { unit_of_measurement: unit } : {}) };
@@ -932,6 +965,20 @@ setups.push({
       circulation_start: 'time.cw_start', circulation_end: 'time.cw_end', circulation_schedule: 'schedule.cw',
     },
   },
+});
+// Home Comfort 0.9.0 with the local access: an air-to-water unit with a parallel buffer cylinder in the indoor unit and a
+// primary pump (PC0) next to the circuit pump (PC1), as on the installation the local keys were taken from.
+setups.push({
+  name: 'Bosch/Buderus Home Comfort (cloud and local)', sub: 'PointT cloud and local access, synthetic data; preset awaiting installation testing',
+  states: (s) => pointtSetup(s, 'demo-pointt', '', 'both').states, registry: pointtSetup('heat', 'demo-pointt', '', 'both').registry,
+  config: { preset: 'bosch_buderus_heating', title: 'Home Comfort', buffer: true, primary_pump: true, power_sources: 'manual',
+    tiles: ['cop_live', 'power', 'volume', 'energy:total', 'heat:total', 'starts:total'] },
+});
+setups.push({
+  name: 'Bosch/Buderus Home Comfort (local only)', sub: 'local access without the cloud, synthetic data; detection not yet seen on a real installation',
+  states: (s) => pointtSetup(s, 'demo-pointt', '', 'local').states, registry: pointtSetup('heat', 'demo-pointt', '', 'local').registry,
+  config: { preset: 'bosch_buderus_heating', title: 'Home Comfort', buffer: true, primary_pump: true, power_sources: 'manual',
+    tiles: ['cop_live', 'power', 'energy:total', 'heat:total', 'starts:total', 'hours:total'] },
 });
 
 const scenarios = [['heat', 'Heating'], ['dhw', 'Hot water'], ['defrost', 'Defrost'], ['idle', 'Standby + error']];
