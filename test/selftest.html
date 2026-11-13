@@ -3268,8 +3268,10 @@
     await wait(30);
     check(ok(a) && !!a.shadowRoot.querySelector('.lam-body'), 'the alias renders the same card');
     a.remove();
-    check(window.customCards.filter((c) => /^heatpump-(flow|hydraulic)-card$/.test(c.type)).length === 1 && window.customCards.some((c) => c.type === 'heatpump-flow-card'), 'the card picker lists the card once, under the generic name');
-    const pick = window.customCards.find((c) => c.type === 'heatpump-flow-card');
+    check(window.customCards.filter((c) => /^heatpump-(flow|hydraulic)-card$/.test(c.type)).length === 1 && window.customCards.some((c) => c.type === 'heatpump-hydraulic-card'),
+      'the card picker lists the card once, under its own name, also while it owns the generic one');
+    check(customElements.get('heatpump-flow-card') === C, 'without another card the generic name still belongs to this card');
+    const pick = window.customCards.find((c) => c.type === 'heatpump-hydraulic-card');
     check(pick.name === 'Heat Pump Hydraulic Card' && /Viessmann/.test(pick.description) && pick.description.length < 260, `#144: the card picker shows "Heat Pump Hydraulic Card" (${pick.name})`);
     // another card got the generic names first (iframe with a stand-in)
     const fr = document.createElement('iframe');
@@ -3295,6 +3297,42 @@
     w.document.head.appendChild(other);
     check(!w.eval('hfcCardScripts()').some((u) => u.endsWith('/heatpump-flow-card.js')), 'the script of a foreign card with the generic name is not listed as a copy of this card');
     fr.remove();
+    // Forum, 11 November: the other card's script is on the page but runs after this one (Home Assistant inserts all resources at
+    // once). The generic names wait for it; it defines them without an error, and this card stays reachable under its own name.
+    // A stand-in script element that never loads; the test fires its load or error event.
+    const lateFrame = async () => {
+      const f = document.createElement('iframe');
+      f.srcdoc = `<!doctype html><meta charset="utf-8"><script>
+        window.__warns = []; window.__errors = []; const warn = console.warn;
+        console.warn = (...a) => { window.__warns.push(a.join(' ')); warn.apply(console, a); };
+        window.addEventListener('error', (e) => window.__errors.push(e.message));
+        const x = document.createElement('script'); x.type = 'text/plain'; x.src = 'https://ha.example/hacsfiles/heatpump-flow-card/heatpump-flow-card.js?hacstag=1';
+        document.head.appendChild(x); window.__other = x;
+        <\/script><script src="../dist/heatpump-hydraulic-card.js"><\/script>`;
+      f.style.cssText = 'width:10px;height:10px;position:absolute;left:-99px';
+      document.body.appendChild(f);
+      await new Promise((resolve) => { f.onload = resolve; setTimeout(resolve, 3000); });
+      return f;
+    };
+    let lf = await lateFrame(); let lw = lf.contentWindow;
+    check(!!lw && !lw.customElements.get('heatpump-flow-card') && lw.customElements.get('heatpump-hydraulic-card')?.hfcOwner === 'sturmi77'
+      && lw.customCards.length === 1 && lw.customCards[0].type === 'heatpump-hydraulic-card',
+      'while another script with the generic file name has not run, the generic name stays free and the picker lists the own name');
+    let defineError = '';
+    try {
+      lw.customElements.define('heatpump-flow-card', class extends lw.HTMLElement {});
+      lw.customElements.define('heatpump-flow-card-editor', class extends lw.HTMLElement {});
+    } catch (e) { defineError = e.message; }
+    lw.__other.dispatchEvent(new lw.Event('load')); await wait(20);
+    check(!defineError && lw.customElements.get('heatpump-flow-card').hfcOwner === undefined && lw.customElements.get('heatpump-hydraulic-card')?.hfcOwner === 'sturmi77'
+      && lw.__warns.some((m) => /custom:heatpump-hydraulic-card/.test(m)) && !lw.__warns.some((m) => /older copy/.test(m)),
+      `a card with the generic name that loads later gets it, and the console says which name to use (${defineError || 'no error'})`);
+    lf.remove();
+    lf = await lateFrame(); lw = lf.contentWindow;
+    lw.__other.dispatchEvent(new lw.Event('error')); await wait(20);
+    check(lw.customElements.get('heatpump-flow-card')?.hfcOwner === 'sturmi77' && lw.customElements.get('heatpump-flow-card-editor')?.hfcOwner === 'sturmi77'
+      && !lw.__warns.some((m) => /another card/.test(m)), 'a script that fails to load leaves the generic names to this card');
+    lf.remove();
 
     // #171: an older copy of this card took the names first (a resource from before the rename); and the same version twice
     // Another project's card with the same element and class name (Xerolux/heatpump-flow-card) is foreign: an unmarked old copy of
