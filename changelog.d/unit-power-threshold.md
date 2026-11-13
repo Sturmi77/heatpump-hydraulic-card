@@ -1,0 +1,1 @@
+- Units of a cascade take an optional `power_threshold` in W (default 50). A unit that draws about 60 W with the compressor off after a hot-water charge no longer creates a heating run with an implausible COP, with `run_signal: units` and in the live view. The diagnostic report names the threshold of each unit (#173).

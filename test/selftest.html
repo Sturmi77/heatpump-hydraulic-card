@@ -775,6 +775,36 @@
     const report = (c) => C._diagnosticReport(c, hassOf(toStates(live)));
     check(report(cfg()).includes('Runs from: unit power above 50 W (run_signal: units)') && report(cfg({ units: undefined })).includes('run_signal: units, but no units are configured')
       && report({ entities: { power: 'sensor.p1' } }).includes('Runs from: compressor or operating mode'), 'the diagnostic report names the run source');
+    {
+      // #173: WP1 draws about 60 W for 6.4 minutes after a hot-water charge and for about 78 s before it, with the compressor off.
+      // Above 50 W that was a heating run; `power_threshold` per unit keeps it out of the runs and the live view.
+      const tail = { ...hist, 'sensor.p1': h([[0, 20], [60, 1500], [90, 30], [91, 1400], [205, 25], [389.7, 60], [391, 1800], [412, 61], [418.4, 20],
+        [429, 1700], [446, 20], [500, 60], [500 + 1 / 3, 20]]) };
+      const tcfg = (w) => cfg({ units: [{ power: 'sensor.p1', heat: 'sensor.h1', power_threshold: w }, { power: 'sensor.p2', heat: 'sensor.h2' }] });
+      const runsOf = (c) => { const tid = c._timelineIds(); return fmt(c._timelineRuns(tail, tid, segsOf(c, tail, tid), 0, 600 * M)); };
+      card = mount(tcfg(undefined), hassOf(toStates(live))); await wait(20);
+      const before = runsOf(card);
+      card.remove();
+      card = mount(tcfg(100), hassOf(toStates(live))); await wait(20);
+      const after = runsOf(card);
+      check(before !== 'heat:60-205 dhw:391-412 dhw:429-446' && after === 'heat:60-205 dhw:391-412 dhw:429-446',
+        `#173: power_threshold of a unit keeps its standby power around a hot-water charge out of the runs (50 W: ${before}; 100 W: ${after})`);
+      card.remove();
+      const idle = { ...live, 'sensor.p1': ['61', 'W'] };
+      card = mount(tcfg(100), hassOf(toStates(idle))); await wait(20);
+      const off = card._flowModel().running || card._units()[0].running;
+      card.remove();
+      card = mount(tcfg(undefined), hassOf(toStates(idle))); await wait(20);
+      const on = card._flowModel().running && card._units()[0].running;
+      card.remove();
+      check(!off && on, `#173: the live view uses the same threshold per unit (100 W: ${off ? 'running' : 'off'}; 50 W: ${on ? 'running' : 'off'})`);
+      const rep = C._diagnosticReport(tcfg(100), hassOf(toStates(live)));
+      check(rep.includes('Runs from: unit power above 100 W / 50 W (run_signal: units)') && /unit 1 power: sensor\.p1.*\(runs above 100 W\)/.test(rep) && /unit 2 power: sensor\.p2.*\(runs above 50 W\)/.test(rep),
+        '#173: the diagnostic report names the threshold of each unit');
+      let err = '';
+      try { C.prototype.setConfig.call(Object.create(C.prototype), { units: [{ power: 'sensor.u1', heat: 'sensor.h1', power_threshold: 'high' }] }); } catch (e) { err = e.message; }
+      check(/power_threshold must be a number of watts/.test(err), `#173: a power_threshold that is no number is rejected (${err})`);
+    }
     // Review of #377: a valve that reports 1 is on hot water in the timeline as it is live; a lock stays a lock above the
     // threshold; `power` adds the members that report a number; the PV-share query gets flat entity ids.
     const pcfg = (extra = {}) => cfg({ run_signal: 'power', units: undefined, power_threshold: 100,
@@ -900,6 +930,9 @@
     check(stale === 'Electricity: 0.80 kWh', `#327: an hour-old heat value of a running unit gives no heat and no COP for the run (${stale})`);
     const noLimit = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, { units: [{ power: 'sensor.u1', heat: 'sensor.h1' }, { power: 'sensor.u2', heat: 'sensor.h2old', heat_max_age: 0 }] });
     check(noLimit === 'Electricity: 0.80 kWh | Heat: 2.93 kWh | COP: 3.7', `#327: heat_max_age 0 counts an unchanged heat value over the run (${noLimit})`);
+    // #173: a unit below its power_threshold adds no heat to the run while the other unit runs.
+    const idleUnit = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, { units: [{ power: 'sensor.u1', heat: 'sensor.h1' }, { power: 'sensor.u2', heat: 'sensor.h2', power_threshold: 600 }] });
+    check(idleUnit === 'Electricity: 0.80 kWh | Heat: 1.60 kWh | COP: 2.0', `#173: a unit below its power_threshold adds no heat to the run (${idleUnit})`);
     // Review of #347: freshness applies to each member of a unit's heat list, so a fresh member does not renew a stale one.
     const member = await rowsOf({ power: ['sensor.u1', 'sensor.u2', 'sensor.st'] }, units(['sensor.h2', 'sensor.h2old']));
     check(member === 'Electricity: 0.80 kWh', `#327: a stale member of a unit's heat list leaves the run without heat (${member})`);
