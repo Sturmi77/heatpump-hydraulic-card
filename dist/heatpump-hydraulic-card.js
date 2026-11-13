@@ -3675,6 +3675,22 @@ class HeatpumpFlowCard extends HTMLElement {
     return this._ownedRoot;
   }
 
+  // The markup of the card. While full screen is open in the top layer, the open popover stays and only its content is replaced:
+  // a new popover would be shown above a dialog opened after it (more-info), and removing the open one would close it.
+  _setRootHtml(html) {
+    const root = this._renderRoot();
+    const keep = root.querySelector('#fullscreen-layer');
+    const open = this._fullscreenOpen && typeof keep?.showPopover === 'function' && keep.matches(':popover-open');
+    const t = open ? document.createElement('template') : null;
+    if (t) t.innerHTML = html;
+    const fresh = t?.content.querySelector('#fullscreen-layer');
+    if (!fresh || fresh.parentNode !== t.content) { root.innerHTML = html; return; }
+    const nodes = [...t.content.childNodes]; const at = nodes.indexOf(fresh);
+    keep.replaceChildren(...fresh.childNodes);
+    [...root.childNodes].forEach((n) => { if (n !== keep) n.remove(); });
+    keep.before(...nodes.slice(0, at)); keep.after(...nodes.slice(at + 1));
+  }
+
   _apply() {
     if (this._preset?.entity_registry) {
       const revision = HeatpumpFlowCard._pointtRevision(this._hass);
@@ -4258,7 +4274,7 @@ class HeatpumpFlowCard extends HTMLElement {
       ? Object.fromEntries(bufferKeys.map((key, n) => [key, bufferKeys.length === 1 ? 446 : 382 + n * (118 / (bufferKeys.length - 1))]))
       : { buffer_top: 392, buffer_middle: 446, buffer_bottom: 502 };
 
-    this._renderRoot().innerHTML = `
+    this._setRootHtml(`
       <style>${HeatpumpFlowCard.styles}</style>
       ${this._fullscreenOpen ? '<div class="fullscreen-layer" id="fullscreen-layer" popover="manual">' : ''}
       <div class="fullscreen-backdrop" id="fullscreen-backdrop" ${this._fullscreenOpen ? '' : 'hidden'}></div>
@@ -4400,13 +4416,13 @@ class HeatpumpFlowCard extends HTMLElement {
         </div>
         </div>
       </ha-card>
-      ${this._fullscreenOpen ? '</div>' : ''}`;
+      ${this._fullscreenOpen ? '</div>' : ''}`);
 
     this._wireTools();
     // Lift the backdrop and card together into the browser's top layer.
     // Without Popover API support, retain the fixed-position fallback.
     const fullscreenLayer = this.shadowRoot.getElementById('fullscreen-layer');
-    if (fullscreenLayer?.isConnected && typeof fullscreenLayer.showPopover === 'function') {
+    if (fullscreenLayer?.isConnected && typeof fullscreenLayer.showPopover === 'function' && !fullscreenLayer.matches(':popover-open')) {
       fullscreenLayer.showPopover();
     }
     if (this._layout === 'wall') {

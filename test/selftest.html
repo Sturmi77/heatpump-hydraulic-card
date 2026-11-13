@@ -5042,8 +5042,14 @@
     const dlg = document.createElement('dialog'); document.body.appendChild(dlg); dlg.showModal();
     dlg.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true })); dlg.click();
     check(nested._fullscreenOpen, 'a tap inside a dialog above the card keeps full screen open');
+    // A rebuild while the dialog is open keeps the open popover: a new one would be shown above the dialog.
+    const layerBefore = nested.shadowRoot.getElementById('fullscreen-layer');
+    nested._render(); nested._update();
+    const layerAfter = nested.shadowRoot.getElementById('fullscreen-layer');
+    check(layerAfter === layerBefore && layerAfter.matches(':popover-open') && dlg.open && nested.shadowRoot.querySelector('ha-card').classList.contains('fullscreen'),
+      'a card rebuild while a dialog is open keeps the card below the dialog');
     dlg.close(); dlg.remove();
-    backdrop.click();
+    nested.shadowRoot.getElementById('fullscreen-backdrop').click();
     check(!nested._fullscreenOpen && document.body.style.overflow === oldOverflow, 'a tap on the backdrop closes a top-layer full-screen card');
     // A view switch detaches the card while full screen is open; reinserted, it is a normal, visible card again.
     nested.shadowRoot.getElementById('fullscreen-toggle').click();
