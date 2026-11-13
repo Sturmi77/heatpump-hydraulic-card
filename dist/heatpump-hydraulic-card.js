@@ -7821,7 +7821,8 @@ const hfcOldCopyText = (conflict, scripts = hfcCardScripts()) => {
   return `An older copy of the Heat Pump Hydraulic Card (${conflict.version}) was loaded before version ${HFC_VERSION}, so dashboards still run the old one.`
     + `${others.length ? ` Card scripts on this page: ${others.join(', ')}.` : ''}`
     + ' In Settings → Dashboards → ⋮ → Resources, delete the resource of the old copy (on installations from before the rename: every entry with'
-    + ' "heatpump-flow-card"), delete the folder /config/www/community/heatpump-flow-card/ if it exists, and reload the browser.'
+    + ' "heatpump-flow-card"), delete the folder /config/www/community/heatpump-flow-card/ if it holds an old copy of this card (the'
+    + ' Heatpump Flow Card by Xerolux uses a folder of that name too: keep it if you use that card), and reload the browser.'
     + ' Details: https://github.com/Sturmi77/heatpump-hydraulic-card#upgrading-an-installation-from-before-the-rename';
 };
 const hfcNotifyOldCopy = (text, getHass = () => document.querySelector('home-assistant')?.hass, tries = 20) => {
@@ -7833,26 +7834,50 @@ const hfcNotifyOldCopy = (text, getHass = () => document.querySelector('home-ass
     notification_id: 'heatpump_hydraulic_card_old_copy', title: 'Heat Pump Hydraulic Card: an older copy is loaded', message: text,
   })).catch(() => {});
 };
-const hfcConflict = hfcOlderCopy(customElements.get('heatpump-flow-card')) || hfcOlderCopy(customElements.get('heatpump-hydraulic-card'));
+// Another script with the generic file name on the page (Xerolux/heatpump-flow-card, or an old copy of this card): Home Assistant
+// inserts the script elements of all resources at once and runs them in the order they arrive. Until that script has run, the
+// generic names stay free for it, so a card that happens to load first does not take them from the other card (forum, 11 November).
+const HFC_GENERIC_WAIT = 10000;
+const hfcGenericScripts = () => {
+  const own = HFC_SCRIPT_URL.replace(/[?#].*$/, '');
+  try {
+    return [...document.querySelectorAll('script[src]')].filter((s) => /\/heatpump-flow-card[^/?#]*\.js/.test(s.src) && s.src.replace(/[?#].*$/, '') !== own);
+  } catch (e) { return []; }
+};
+// Resolves when every script has loaded or failed, at the latest after HFC_GENERIC_WAIT (a script that ran before this one fires
+// no more events). A module script fires load after it has run, so its element names are defined by then.
+const hfcAfterScripts = (scripts, ms = HFC_GENERIC_WAIT) => new Promise((resolve) => {
+  let left = scripts.length;
+  const done = () => { left -= 1; if (left <= 0) resolve(); };
+  scripts.forEach((s) => { s.addEventListener('load', done, { once: true }); s.addEventListener('error', done, { once: true }); });
+  setTimeout(resolve, ms);
+});
+// The generic names, once they are settled: taken when still free, then the warnings for an older copy or a foreign card.
+const hfcSettleGeneric = (hydraulicConflict) => {
+  const conflict = hfcOlderCopy(customElements.get('heatpump-flow-card')) || hydraulicConflict;
+  hfcDefine('heatpump-flow-card-editor', HeatpumpFlowCardEditor);
+  hfcDefine('heatpump-flow-card', HeatpumpFlowCard);
+  if (conflict) {
+    const text = hfcOldCopyText(conflict);
+    console.warn(`heatpump-flow-card: ${text}`);
+    hfcNotifyOldCopy(text);
+  } else if (!(hfcMine('heatpump-flow-card') && hfcMine('heatpump-flow-card-editor'))) {
+    console.warn('heatpump-flow-card: the element name "heatpump-flow-card" is already used by another card, so "type: custom:heatpump-flow-card" opens that card. '
+      + 'Use "type: custom:heatpump-hydraulic-card" for this card (github.com/Sturmi77/heatpump-hydraulic-card).');
+  }
+};
+const hfcHydraulicConflict = hfcOlderCopy(customElements.get('heatpump-hydraulic-card'));
 hfcDefine('heatpump-hydraulic-card-editor', HeatpumpHydraulicCardEditor);
 hfcDefine('heatpump-hydraulic-card', HeatpumpHydraulicCard);
-hfcDefine('heatpump-flow-card-editor', HeatpumpFlowCardEditor);
-hfcDefine('heatpump-flow-card', HeatpumpFlowCard);
-if (hfcConflict) {
-  const text = hfcOldCopyText(hfcConflict);
-  console.warn(`heatpump-flow-card: ${text}`);
-  hfcNotifyOldCopy(text);
-}
-// The card picker lists the card once: with the generic element name when this card owns it, otherwise with the unique one; the
-// shown name is always "Heat Pump Hydraulic Card", as in HACS and the README (#144).
-const hfcGeneric = hfcMine('heatpump-flow-card') && hfcMine('heatpump-flow-card-editor');
-if (!hfcGeneric) {
-  console.warn('heatpump-flow-card: the element name "heatpump-flow-card" is already used by another card, so "type: custom:heatpump-flow-card" opens that card. '
-    + 'Use "type: custom:heatpump-hydraulic-card" for this card (github.com/Sturmi77/heatpump-hydraulic-card).');
-}
-const hfcType = hfcGeneric ? 'heatpump-flow-card' : 'heatpump-hydraulic-card';
+const hfcWaitFor = customElements.get('heatpump-flow-card') ? [] : hfcGenericScripts();
+if (hfcWaitFor.length) hfcAfterScripts(hfcWaitFor).then(() => hfcSettleGeneric(hfcHydraulicConflict));
+else hfcSettleGeneric(hfcHydraulicConflict);
+// The card picker lists the card once and always with its own element name, so a new card never depends on which card owns the
+// generic one; the shown name is "Heat Pump Hydraulic Card", as in HACS and the README (#144). Dashboards with
+// "type: custom:heatpump-flow-card" keep working while this card owns that name.
+const hfcType = 'heatpump-hydraulic-card';
 window.customCards = window.customCards || [];
-if (!window.customCards.some((c) => c.type === hfcType)) {
+if (!window.customCards.some((c) => c.type === hfcType || (c.type === 'heatpump-flow-card' && c.name === 'Heat Pump Hydraulic Card'))) {
   window.customCards.push({
     type: hfcType,
     name: 'Heat Pump Hydraulic Card',
