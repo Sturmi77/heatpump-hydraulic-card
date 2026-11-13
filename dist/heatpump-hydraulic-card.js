@@ -126,7 +126,7 @@ const HFC_PRESETS = {
       const s = (...keys) => pointt.find('sensor', ...keys);
       const r = (...paths) => pointt.path('sensor', ...paths);
       const hc = `heatingCircuits:hc${i.hc}`; const dhw = `dhwCircuits:dhw${i.dhw}`;
-      // TC1, the heat pump's flow behind the auxiliary heater. Where it exists, the gateway's supply temperature is the flow of
+      // TC1, the heat pump's own flow in the indoor unit (reported with the auxiliary heater). Where it exists, the gateway's supply temperature is the flow of
       // the heating side (behind a buffer cylinder) and goes to the first circuit; without TC1 it stays the heat pump's flow.
       const tc1 = r('heatSources:additionalHeater:flowTemp') || s('local_only:signals:SRC.IntFlowTemp');
       const supply = s('gateway:supply_temperature', 'heatSources:actualSupplyTemperature');
