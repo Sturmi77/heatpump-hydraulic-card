@@ -978,8 +978,8 @@ setups.push({
     },
   },
 });
-// Home Comfort 0.9.0 with the local access: an air-to-water unit with a parallel buffer cylinder in the indoor unit and a
-// primary pump (PC0) next to the circuit pump (PC1), as on the installation the local keys were taken from.
+// Home Comfort 0.9.0 with the local access: a heat pump with a parallel buffer and a
+// primary pump (PC0) next to the circuit pump (PC1).
 setups.push({
   name: 'Bosch/Buderus Home Comfort (cloud and local)', sub: 'PointT cloud and local access, synthetic data; preset awaiting installation testing',
   states: (s) => pointtSetup(s, 'demo-pointt', '', 'both').states, registry: pointtSetup('heat', 'demo-pointt', '', 'both').registry,
