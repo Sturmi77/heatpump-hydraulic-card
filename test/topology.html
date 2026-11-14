@@ -81,7 +81,7 @@
   };
   const hassOf = (states, registry = {}, energy, setup = {}) => ({
     // Snapshot timestamps must use the same Home Assistant zone on developer machines and UTC CI runners.
-    states, entities: registry, config: { time_zone: 'Europe/Vienna' }, locale: { language: 'en' }, language: 'en',
+    states, entities: registry, devices: setup.devices || {}, config: { time_zone: 'Europe/Vienna' }, locale: { language: 'en' }, language: 'en',
     callWS: (m) => (m.type === 'recorder/statistic_during_period' ? statChange(setup, m)
       : m.type === 'history/history_during_period' && setup.states ? historySim(setup, m)
       : m.type === 'energy/get_prefs' && energy ? Promise.resolve(energy) : Promise.reject(new Error('n/a'))),
@@ -582,7 +582,7 @@
       }
     // Heat source: source type × unit drawing (air only; brine and water draw the loop) × brine pressure × spread × source flow.
     const UNITS = [...HFC_UNIT_STYLES.filter((u) => u !== 'auto').flatMap((u) => (u === 'vaillant' ? HFC_UNIT_SIZES.map((size) => [u, size])
-      : u === 'panasonic' ? [[u, 'medium'], [u, 'large']] : [[u]]))];
+      : ['panasonic', 'bosch', 'buderus', 'bosch_compact', 'buderus_compact'].includes(u) ? [[u, 'medium'], [u, 'large']] : [[u]]))];
     idx = 0;
     for (const source of SOURCES) for (const [unit, size] of source === 'air' ? UNITS : [['generic']]) for (const pressure of [false, true])
       for (const spread of [true, false]) for (const volume of [false, true]) {

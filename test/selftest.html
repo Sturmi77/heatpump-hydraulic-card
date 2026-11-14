@@ -41,7 +41,7 @@
     return out;
   };
   const hassOf = (states, registry = {}, energy, setup = {}) => ({
-    states, entities: registry, locale: { language: 'en' }, language: 'en',
+    states, entities: registry, devices: setup.devices || {}, locale: { language: 'en' }, language: 'en',
     callWS: (m) => (m.type === 'recorder/statistic_during_period' ? statChange(setup, m)
       : m.type === 'history/history_during_period' && setup.states ? historySim(setup, m)
       : m.type === 'energy/get_prefs' && energy ? Promise.resolve(energy) : Promise.reject(new Error('n/a'))),
@@ -1725,6 +1725,144 @@
     shown.remove();
   }
 
+  // Home Comfort 0.9.1: the outdoor-unit drawing, the buffer cylinder and the primary pump from the heat generator sensor; the
+  // operating settings of the circuit and the DHW circuit; the DHW heater, circulation and SG Ready signals.
+  {
+    const cfg = { preset: 'bosch_buderus_heating', power_sources: 'manual', tiles: [] };
+    const setupOf = (name) => setups.find((s) => s.name === name);
+    const idOf = (f, key, domain = 'sensor') => Object.keys(f.registry).find((id) => id.startsWith(`${domain}.`)
+      && f.registry[id].unique_id.slice(f.registry[id].unique_id.indexOf(':') + 1) === key);
+    const show = async (setup, scenario = 'heat', extra = {}, change = () => {}, devices = setup.devices) => {
+      const st = toStates(setup.states(scenario)); const registry = structuredClone(setup.registry); change(st, registry);
+      const card = mount({ ...cfg, ...extra }, { ...hassOf(st, registry, null, setup), devices: devices || {} }); await wait(20);
+      const sr = card.shadowRoot;
+      const out = { unit: card._unitKey(), ok: ok(card), buffer: !!card._parts?.buffer, primary: card._primaryPump(), fans: sr.querySelectorAll('.fan').length,
+        fanOn: !!sr.getElementById('fan')?.classList.contains('on'), snowOn: !!sr.getElementById('snow')?.classList.contains('on'),
+        rings: sr.querySelectorAll('.fan .spin-ring').length, model: card._flowModel(), e: { ...card._e },
+        hcText: sr.getElementById('t-hc-mode')?.textContent || '', dhwText: sr.getElementById('t-dhw-mode')?.textContent || '',
+        sg: sr.getElementById('chip-sg')?._kind || '', circ: !!sr.getElementById('t-circ')?.classList.contains('on') };
+      card.remove(); return out;
+    };
+    // Every drawing the heat generator selects, idle, running and defrosting: the fan (or the ring of a closed front) turns with the
+    // compressor and its speed PL3, so it stands still while the unit defrosts, and the snowflake shows the defrost.
+    const drawn = setups.filter((s) => s.drawing);
+    check(drawn.length === 14, `one demo setup per drawing of the heat generator (${drawn.length})`);
+    for (const s of drawn) {
+      const heat = await show(s, 'heat'); const idle = await show(s, 'idle'); const thaw = await show(s, 'defrost');
+      check(heat.ok && heat.unit === s.drawing && idle.unit === s.drawing, `${s.name}: draws ${s.drawing} (${heat.unit})`);
+      check(heat.fanOn && !idle.fanOn && !thaw.fanOn && thaw.snowOn && !heat.snowOn, `${s.name}: the fan turns while heating, stands still in standby and defrost, snowflake in defrost`);
+      const closed = /^bosch(-large)?$|^bosch_(cs8800i|compact|tall_silent)|^buderus(-large)?$|^buderus_(compact|tall_silent)/.test(s.drawing);
+      check(closed === (heat.rings > 0), `${s.name}: ${closed ? 'a ring turns on the closed front' : 'blades turn behind the open grille'}`);
+      check(heat.fans === (/compact-large$/.test(s.drawing) ? 2 : 1), `${s.name}: ${heat.fans} fan(s)`);
+    }
+    const both = setupOf('Bosch/Buderus Home Comfort (cloud and local)'); const cloud = setupOf('Bosch/Buderus Home Comfort');
+    const alone = setupOf('Bosch/Buderus Home Comfort (local only)');
+    let o = await show(both);
+    check(o.unit === 'buderus-large' && o.e.model === idOf(both, 'heat_generator'), `WLW176i-12 TP70 with WLW-10 MB AR draws the large Logatherm WLW MB AR (${o.unit})`);
+    o = await show(both, 'defrost');
+    check(!o.fanOn && o.snowOn && o.rings === 1, 'with the fan speed PL3 the ring of the grille stands still while the unit defrosts');
+    // The configuration wins: unit_style, unit_size, and the size read from the installation only goes with the drawing it found.
+    check((await show(both, 'heat', { unit_style: 'lambda' })).unit === 'lambda', 'an explicit unit_style wins over the heat generator');
+    check((await show(both, 'heat', { unit_style: 'bosch' })).unit === 'bosch', 'the size of the installation does not carry over to another drawing');
+    check((await show(both, 'heat', { unit_size: 'medium' })).unit === 'buderus', 'an explicit unit_size wins over the reported power');
+    check((await show(setupOf('Home Comfort heat generator: CS3800i AW 7 O-S'), 'heat', { unit_size: 'large' })).unit === 'bosch_compact-large', 'unit_size large draws the two-fan compact casing');
+    check((await show(both, 'heat', { source_type: 'brine' })).unit === 'generic', 'a brine source keeps its loop symbol');
+    // Without the sensor (integration before 0.9.1) the brand of the gateway's devices decides, else the Bosch drawing as before.
+    check((await show(cloud)).unit === 'bosch' && (await show(alone)).unit === 'bosch', 'without the heat generator sensor and without a brand the Bosch drawing stays');
+    check((await show(cloud, 'heat', {}, () => {}, { 'device-demo-pointt': { manufacturer: 'Buderus' } })).unit === 'buderus', 'without the sensor a Buderus gateway draws the Logatherm WLW MB AR');
+    check((await show(cloud, 'heat', {}, () => {}, { 'device-demo-pointt': { manufacturer: 'Bosch Thermotechnology' } })).unit === 'bosch', 'without the sensor another brand keeps the Bosch drawing');
+    o = await show(setupOf('Home Comfort heat generator: WLW196i AR'), 'heat', {}, (st, reg) => { st[idOf({ registry: reg }, 'heat_generator')].state = 'unavailable'; });
+    check(o.unit === 'buderus', `an unavailable heat generator falls back to the brand (${o.unit})`);
+    o = await show(setupOf('Home Comfort heat generator: WLW196i AR'), 'heat', {}, (st, reg) => { reg[idOf({ registry: reg }, 'heat_generator')].disabled_by = 'user'; }, {});
+    check(o.unit === 'bosch' && !o.e.model, 'a disabled heat generator sensor is not used');
+    // The rules themselves, on the attributes of the sensor.
+    const unitOf = (attrs, state = 'x', devices) => {
+      const hass = { states: { 'sensor.g': { state, attributes: attrs } }, entities: { 'sensor.g': { device_id: 'd' } }, devices: devices || {} };
+      return HFC_PRESETS.bosch_buderus_heating.defaults({ model: 'sensor.g' }, hass);
+    };
+    const gen = (modules) => pointtGenerator(modules);
+    const rule = (modules) => { const g = gen(modules); return unitOf(g.attributes, g.state); };
+    check(rule([['heat_source', 'Logatherm WLW196i-11 AR S+']]).unit_style === 'buderus_tall_silent' && rule([['heat_source', 'Logatherm WLW196i-11 IR']]).unit_style === 'buderus_tall_indoor'
+      && rule([['heat_source', 'Logatherm WLW196i-11 AR']]).unit_style === 'buderus_tall', 'WLW196i: S+ before IR before AR');
+    check(rule([['heat_source', 'WLW176i-12 E', 'wlw176i'], ['outdoor_unit', 'WLW-12 MB AR', 'wlw_mb_ar', 'monobloc', null]]).unit_size === 'large'
+      && rule([['heat_source', 'WLW176i-12 E', 'wlw176i'], ['outdoor_unit', 'Logatherm WLW-5 MB AR', 'wlw_mb_ar', 'monobloc', 5]]).unit_size === 'medium'
+      && rule([['outdoor_unit', 'unnamed', 'wlw_mb_ar', 'monobloc', 10]]).unit_size === 'large', 'WLW MB AR: 10 and 12 kW from the name or the power are the large casing');
+    check(rule([['heat_source', 'CS6800i AW 12 MB', 'cs6800i_aw'], ['outdoor_unit', 'AW 5 OR-S', 'aw_or', null, 10]]).unit_size === 'medium'
+      && rule([['heat_source', 'CS6800i AW 12 MB', 'cs6800i_aw'], ['outdoor_unit', 'AW 10 OR-T', 'aw_or', null, 10]]).unit_size === 'large'
+      && rule([['outdoor_unit', 'AW', 'aw_or', null, 12]]).unit_style === 'bosch' && rule([['outdoor_unit', 'AW', 'aw_or', null, 12]]).unit_size === 'large', 'AW OR: OR-S medium, OR-T and 10 kW and more large');
+    check(rule([['heat_source', 'Logatherm WLW166i-10']]).unit_size === 'medium' && rule([['heat_source', 'Logatherm WLW166i-13']]).unit_size === 'large'
+      && rule([['heat_source', 'CS3800i AW 13 O-T', 'cs3800i_aw']]).unit_size === 'large' && rule([['heat_source', 'CS3800i AW 4 O-S', 'cs3800i_aw']]).unit_size === 'medium'
+      && rule([['outdoor_unit', 'unnamed', 'cs3800i_aw']]).unit_style === 'bosch_compact', 'compact casing: WLW166i 13 kW and CS3800i O-T with two grilles; the CS3800i family alone draws it');
+    check(rule([['heat_source', 'Compress CS7400i AW 7']]).unit_style === 'bosch_tall_silent' && rule([['heat_source', 'Compress CS7001i AW 9']]).unit_style === 'bosch_tall'
+      && rule([['heat_source', 'CS5001 AW 7']]).unit_style === 'bosch_square' && rule([['outdoor_unit', 'CS8800i AW 11 O-T (B)', 'cs8800i_aw']]).unit_style === 'bosch_cs8800i'
+      && rule([['heat_source', 'CS5800i AW 12 E', 'cs5800i_aw']]).unit_style === 'bosch', 'Bosch lines: CS7400i, CS7001i, 5000 AW, CS8800i AW and CS5800i/CS6800i AW');
+    check(unitOf({ heat_generators: 'broken', primary: null, outdoor_unit: 7 }).unit_style === undefined && unitOf({}, 'unknown', { d: { manufacturer: 'Buderus' } }).unit_style === 'buderus'
+      && unitOf({ heat_generators: [null, 5, { role: 'heat_source', product_name: 42 }] }).unit_style === undefined, 'malformed attributes fall back without an error');
+    check(rule([['heat_source', 'Some new heat pump']]).unit_style === undefined && unitOf(gen([['heat_source', 'Some new heat pump']]).attributes, 'Some new heat pump', { d: { manufacturer: 'Buderus' } }).unit_style === 'buderus',
+      'an unknown product keeps the default drawing of its brand');
+
+    // Buffer cylinder and primary pump: TP70 holds a parallel buffer, WLW176i and WLW186i have PC0; the configuration wins.
+    o = await show(both);
+    check(o.buffer && o.primary, 'WLW176i-12 TP70: parallel buffer and primary pump from the heat generator');
+    o = await show(both, 'heat', { buffer: false, primary_pump: false });
+    check(!o.buffer && !o.primary, 'buffer: false and primary_pump: false win over the heat generator');
+    o = await show(both, 'heat', { series_buffer: true });
+    check(!o.buffer && o.model.bypass === false, 'a series buffer in the configuration replaces the parallel buffer of the heat generator');
+    o = await show(both, 'heat', { storage: 'combined' });
+    check(o.ok, 'a combined storage still renders with the heat generator');
+    o = await show(setupOf('Home Comfort heat generator: WLW186i-12 E with WLW-7 MB AR'));
+    check(!o.buffer && o.primary, 'WLW186i-12 E: no buffer, a primary pump');
+    o = await show(setupOf('Home Comfort heat generator: CS6800i AW with AW 7 OR-S'));
+    check(!o.buffer && !o.primary, 'a Compress indoor unit gets neither from the heat generator');
+    check(!(await show(cloud)).buffer && !(await show(cloud)).primary, 'without the sensor nothing changes');
+    const st = toStates(both.states('heat'));
+    const reportLine = (/\nStorage: [^\n]+/.exec(C._diagnosticReport(cfg, { ...hassOf(st, both.registry), devices: both.devices })) || [''])[0].trim();
+    check(reportLine === 'Storage: separate · hot water: coil · parallel buffer: yes, from the heat generator · series buffer: no · primary pump: yes', `the report names the buffer of the heat generator (${reportLine})`);
+    const editor = document.createElement('heatpump-flow-card-editor'); editor.setConfig(cfg); editor.hass = hassOf(st, both.registry); await wait(20);
+    let emitted; editor.addEventListener('config-changed', (ev) => { emitted = ev.detail.config; });
+    editor._changed({ ...editor._form.data, buffer: false });
+    check(emitted?.buffer === false, 'the editor keeps buffer: false where the preset reads the buffer from the installation');
+    editor._changed({ ...editor._form.data, buffer: undefined });
+    check(emitted && !('buffer' in emitted), 'an untouched buffer switch writes nothing');
+    editor.remove();
+    const keysOf = (n) => (n.schema ? n.schema.flatMap(keysOf) : [n]);
+    const sizes = (c) => C._formSchema(c).schema.flatMap(keysOf).find((x) => x.name === 'unit_size')?.selector.select.options.map((x) => x.label).join();
+    check(sizes({ unit_style: 'buderus_compact' }) === '1 fan,2 fans' && sizes({ unit_style: 'bosch' }) === '4 to 7 kW,10 and 12 kW' && !sizes({ unit_style: 'buderus_tall' }),
+      'the editor offers the sizes of the casings that have two');
+
+    // The operation modes are settings, not states: not mapped until the card reads auto and manual as settings.
+    const r = C._resolve(cfg, hassOf(toStates(both.states('heat')), both.registry));
+    check(!r.entities.hc_mode && !r.entities.dhw_mode && r.details.includes(idOf(both, 'heatingCircuits:hc1:operationMode'))
+      && r.details.includes(idOf(both, 'dhwCircuits:dhw1:operationMode')), 'Home Comfort operation modes stay additional values');
+    // Additional values that report nothing are left out; the preset looks again every minute and adds them once they report.
+    const valueOf = (state) => C._resolve(cfg, hassOf({ ...toStates(both.states('heat')), [idOf(both, 'heatSources:hs1:supplyFlowCondenserTemp')]: { state, attributes: {} } }, both.registry)).details;
+    const tc3 = idOf(both, 'heatSources:hs1:supplyFlowCondenserTemp');
+    check(valueOf('32.5').includes(tc3) && !valueOf('unknown').includes(tc3) && !valueOf('unavailable').includes(tc3) && valueOf('0').includes(tc3),
+      'Home Comfort additional values without a reading are left out, a reading of 0 stays');
+    check(HFC_PRESETS.bosch_buderus_heating.dynamic === true, 'Home Comfort looks again for additional values that report late');
+
+    // DHW heater, circulation and SG Ready: generic signals, disabled by default; mapped once enabled.
+    check(!r.entities.dhw_heater && !r.entities.circulation && !r.entities.sg_ready, 'disabled signals are not mapped');
+    const enable = (values = {}) => (s, reg) => ['SRC.CUHP.HP1.DHWHeater', 'SRC.IntDHW.CircPumpStatus', 'SRC.CUHP.SmartGridMode'].forEach((name) => {
+      const id = idOf({ registry: reg }, `local_only:signals:${name}`); delete reg[id].disabled_by; if (values[name]) s[id].state = values[name];
+    });
+    const enabled = structuredClone(both.registry); enable()(toStates(both.states('heat')), enabled);
+    const re = C._resolve(cfg, hassOf(toStates(both.states('heat')), enabled));
+    check(re.entities.dhw_heater === idOf(both, 'local_only:signals:SRC.CUHP.HP1.DHWHeater') && re.entities.circulation === idOf(both, 'local_only:signals:SRC.IntDHW.CircPumpStatus')
+      && re.entities.sg_ready === idOf(both, 'local_only:signals:SRC.CUHP.SmartGridMode'), 'enabled signals: DHW heater, circulation pump and SG Ready');
+    const second = C._resolve({ ...cfg, index: { dhw: 2 } }, hassOf(toStates(both.states('heat')), enabled));
+    check(!second.entities.dhw_heater && !second.entities.circulation && second.entities.sg_ready, 'the DHW signals belong to the first DHW circuit only');
+    for (const [raw, kind] of [['preferred', 'boost'], ['forced', 'forced'], ['blocked', 'blocked'], ['normal', ''], ['not_used', ''], ['unavailable', '']]) {
+      o = await show(both, 'heat', {}, enable({ 'SRC.CUHP.SmartGridMode': raw }));
+      check(o.sg === kind, `SG Ready ${raw} shows ${kind || 'no chip'} (${o.sg})`);
+    }
+    o = await show(both, 'heat', {}, enable({ 'SRC.IntDHW.CircPumpStatus': 'on', 'SRC.CUHP.HP1.DHWHeater': 'on' }));
+    check(o.circ && o.ok, 'the circulation pump signal on animates the circulation');
+    const rod = mount({ ...cfg }, hassOf(toStates({ ...both.states('heat') }), enabled)); await wait(20);
+    check(!!rod.shadowRoot.querySelector('#heater-dhw, [id^="heater-dhw"]') && ok(rod), 'the DHW heater signal draws the heater rod of the tank');
+    rod.remove();
+  }
+
   // PointT registry loading is local, shared, bounded and isolated by HA connection.
   {
     const fixture = pointtSetup();
@@ -3280,7 +3418,7 @@
     check(o.lam === 0 && o.ok, 'ground sources keep their loop symbol');
     const keysOf = (n) => (n.schema ? n.schema.flatMap(keysOf) : [n.name]);
     const names = (cfg) => C._formSchema(cfg).schema.flatMap(keysOf);
-    check(names({}).includes('unit_style') && !names({ preset: 'lambda' }).includes('unit_size') && names({ preset: 'vaillant' }).includes('unit_size') && names({ unit_style: 'vaillant' }).includes('unit_size') && !names({ preset: 'vaillant', unit_style: 'bosch' }).includes('unit_size'), 'editor offers unit_style, and unit_size for Vaillant');
+    check(names({}).includes('unit_style') && !names({ preset: 'lambda' }).includes('unit_size') && names({ preset: 'vaillant' }).includes('unit_size') && names({ unit_style: 'vaillant' }).includes('unit_size') && !names({ preset: 'vaillant', unit_style: 'lambda' }).includes('unit_size'), 'editor offers unit_style, and unit_size for Vaillant');
 
     // Panasonic with two fans for the large units (#176): from the HeishaMon model, from unit_size, and in the editor
     const pana = setups.find((s) => s.config.preset === 'heishamon');

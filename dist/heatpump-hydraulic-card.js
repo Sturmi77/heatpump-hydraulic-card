@@ -27,11 +27,12 @@ const HFC_SCRIPT_URL = (() => {
 //   error_ok                   → text states that mean "no error"; any other known text shows the chip
 //   tiles(prefix, idx, ctx)    → { tile: { period: entity_id | [candidates…] } } for the stat tile catalog (HFC_TILES);
 //                                a "total" counter with long-term statistics also gives today, yesterday, week, month and year
-//   dynamic                    → true when entities() maps parts by their readings (ctx.state): the card resolves again every
+//   dynamic                    → true when entities() or details() map parts by their readings (ctx.state): the card resolves again every
 //                                minute and rebuilds when a mapping appears, so parts that report late are not lost
 //   *_mode_map                 → raw state → normalized mode
 //   sg_ready_map               → raw state → normal | blocked | boost | forced
 //   valve_map                  → raw state of the `valve` entity → dhw | heating (default: on, Tank, DHW … mean hot water)
+//   defaults(entities, hass)   → { unit_style, unit_size, buffer, primary_pump } the installation reports; the card configuration wins
 // ctx.key(platform, domain, translation_key) finds entities via the entity registry (language-independent),
 // ctx.match(regex, platform) finds the first entity id matching a pattern, ctx.state(entity_id) reads a current state.
 // PointT uses stable resource keys in unique_id; entity ids can be translated or renamed.
@@ -108,10 +109,66 @@ function hfcEbusdInstances(ctx, requested) {
 // Entity-id stem for the ebusd regexes: always one concrete group, so the fields never mix daemons; the prefix itself only when
 // no entity of any group exists.
 const hfcEbusdStem = (ctx, p) => hfcEbusdInstances(ctx, p)[0]?.stem || String(p || '').replace(/[^a-z0-9_]/g, '');
+// Home Comfort 0.9.1 reports the heat generators of a gateway in one sensor (`<gateway>:heat_generator`): the product name of the
+// main heat generator as its state, and the attributes heat_generators, primary and outdoor_unit. Families, roles and names come
+// from the integration's model table; nothing here is derived from a part of a name that the rules below do not list.
+// Returns the installation defaults of the preset (unit_style, unit_size, buffer, primary_pump); the card configuration always wins.
+function hfcPointTDefaults(e, hass) {
+  const live = (st) => !!st && typeof st.state === 'string' && !['unknown', 'unavailable', ''].includes(st.state);
+  const st = hass?.states?.[e?.model];
+  const a = live(st) && st.attributes && typeof st.attributes === 'object' ? st.attributes : {};
+  const text = (v) => (typeof v === 'string' ? v : '');
+  const list = Array.isArray(a.heat_generators) ? a.heat_generators.filter((g) => g && typeof g === 'object') : [];
+  const primary = a.primary && typeof a.primary === 'object' ? a.primary : {};
+  const indoor = list.filter((g) => g.role === 'heat_source');
+  const names = [text(a.outdoor_unit), live(st) ? st.state : ''].filter(Boolean);
+  const indoorNames = [live(st) ? st.state : '', ...indoor.map((g) => text(g.product_name))].filter(Boolean);
+  const families = new Set([primary.family, ...list.map((g) => g.family)].filter((v) => typeof v === 'string'));
+  const indoorFamilies = new Set([primary.family, ...indoor.map((g) => g.family)].filter((v) => typeof v === 'string'));
+  const has = (...keys) => keys.some((k) => families.has(k));
+  let unit;
+  const named = (re) => names.some((n) => re.test(n));
+  if (named(/WLW196i.*S\+/)) unit = 'buderus_tall_silent';
+  else if (named(/WLW196i.*\bIR\b/)) unit = 'buderus_tall_indoor';
+  else if (named(/WLW196i/)) unit = 'buderus_tall';
+  // Bosch lines without an entry in the integration's model table: only their product names tell them apart.
+  else if (named(/CS7400i/)) unit = 'bosch_tall_silent';
+  else if (named(/CS7001i/)) unit = 'bosch_tall';
+  else if (named(/CS5001|Compress 5000 AW/)) unit = 'bosch_square';
+  else if (named(/WLW166i/)) unit = 'buderus_compact';
+  else if (named(/CS3800i/) || has('cs3800i_aw')) unit = 'bosch_compact';
+  else if (has('wlw_mb_ar', 'wlw176i', 'wlw186i')) unit = 'buderus';
+  else if (has('cs8800i_aw')) unit = 'bosch_cs8800i';
+  else if (has('cs5800i_aw', 'cs6800i_aw', 'aw_or')) unit = 'bosch';
+  else {
+    // Without a known model (or before 0.9.1): the brand of the gateway's devices, which the integration reads from the gateway.
+    const ids = [e?.model, e?.mode, e?.flow, e?.outdoor, e?.dhw_top].filter((id) => typeof id === 'string');
+    const maker = ids.map((id) => hass?.devices?.[hass?.entities?.[id]?.device_id]?.manufacturer).find((m) => typeof m === 'string');
+    unit = maker === 'Buderus' ? 'buderus' : undefined;
+  }
+  // Sizes. The compact casing has two grilles for the CS3800i AW outdoor units O-T (10 and 13 kW; O-S, 4 and 7 kW, have one)
+  // and for the WLW166i of 13 kW (from the name or the power). The WLW MB AR outdoor units of 10 and 12 kW are squarer than those
+  // up to 7 kW (from the power or the name), and so are the AW OR-T outdoor units (10 and 12 kW) than the AW OR-S (4 to 7 kW).
+  const power = [primary.outdoor_power_kw, primary.power_kw].find((p) => typeof p === 'number' && Number.isFinite(p));
+  let size;
+  if (unit === 'bosch_compact') size = named(/O-T\b/) ? 'large' : 'medium';
+  else if (unit === 'buderus_compact') size = named(/\b13\b/) || power >= 13 ? 'large' : 'medium';
+  else if (unit === 'buderus' && has('wlw_mb_ar', 'wlw176i', 'wlw186i')) size = named(/WLW-1[02] MB/) || power >= 10 ? 'large' : 'medium';
+  else if (unit === 'bosch' && has('cs5800i_aw', 'cs6800i_aw', 'aw_or')) size = named(/OR-T\b/) || (!named(/OR-S\b/) && power >= 10) ? 'large' : 'medium';
+  return {
+    unit_style: unit,
+    unit_size: size,
+    // The TP70 indoor units hold a 70 l parallel buffer cylinder; the WLW176i and WLW186i indoor units have the primary pump PC0.
+    buffer: indoorNames.some((n) => /\bTP70\b/.test(n)) || undefined,
+    primary_pump: ['wlw176i', 'wlw186i'].some((k) => indoorFamilies.has(k)) || undefined,
+  };
+}
 const HFC_PRESETS = {
   bosch_buderus_heating: {
     name: 'Bosch/Buderus Home Comfort',
     unit_style: 'bosch',
+    // The drawing, the buffer cylinder and the primary pump from the reported heat generator (hfcPointTDefaults).
+    defaults: (e, hass) => hfcPointTDefaults(e, hass),
     entity_registry: true,
     // The compact registry suffices to offer this preset in a new card. Resource mappings
     // wait for the full local registry, loaded only when this preset is selected.
@@ -121,6 +178,8 @@ const HFC_PRESETS = {
     auto_circuits: false,
     // The cloud's compressor status follows the local compressor reading with a delay of up to one cloud update.
     compressor_over_idle: true,
+    // The additional values depend on their readings: one that starts to report is added within a minute.
+    dynamic: true,
     entities: (p, i, ctx) => {
       const pointt = hfcPointT(ctx); if (!pointt) return {};
       const s = (...keys) => pointt.find('sensor', ...keys);
@@ -154,6 +213,10 @@ const HFC_PRESETS = {
         hc_flow: r(`${hc}:actualSupplyTemperature`) || (tc1 && i.hc === 1 ? supply : undefined),
         hc_setpoint: i.hc === 1 ? r('heatSources:currentSupplySetpoint') || s('local_only:signals:SC.HC1.FlowTempSetp') : undefined,
         hc_pump: r(`${hc}:pumpStatus`),
+        // Controller signals of the first DHW circuit and the SG Ready input (disabled by default in the integration).
+        dhw_heater: i.dhw === 1 ? s('local_only:signals:SRC.CUHP.HP1.DHWHeater') : undefined,
+        circulation: i.dhw === 1 ? s('local_only:signals:SRC.IntDHW.CircPumpStatus') : undefined,
+        sg_ready: s('local_only:signals:SRC.CUHP.SmartGridMode'),
         // The circuit flow rate is a signal of circuit 1 only.
         hc_volume: i.hc === 1 ? s('local_only:signals:SRC.HC1.FlowCtrl.PumpVolumeFlow') : undefined,
         hc_pressure: s('gateway:system_pressure', 'heatSources:systemPressure'),
@@ -172,6 +235,8 @@ const HFC_PRESETS = {
         heat_total: s('gateway:total_heat_produced', 'heatSources:emon:totalConsumption:outputProduced'),
         env_energy: s('gateway:environmental_energy', 'heatSources:emon:totalConsumption:environmental_energy'),
         program: pointt.find('binary_sensor', 'holiday_active'),
+        // The heat generator sensor (Home Comfort 0.9.1) only picks the drawing and the hydraulic defaults (defaults above).
+        model: s('heat_generator'),
       };
     },
     errors: (p, i, ctx) => [hfcPointT(ctx)?.find('binary_sensor', 'system_fault')].filter(Boolean),
@@ -223,13 +288,17 @@ const HFC_PRESETS = {
         pointt.path('sensor', 'heatSources:hs1:refrigerant:heatCarrierPumpSpeed'),
         pointt.find('sensor', 'local_only:signals:SRC.CUHP.HP1.CHPumpRelay'),
         pointt.find('sensor', 'local_only:signals:SRC.CUHP.HP1.FourwayValve'),
-      ).filter(Boolean);
+      // A value that reports nothing (unknown or unavailable, for example the pool starts of an installation without a pool) is
+      // left out; it appears once it reports (dynamic below).
+      ).filter((id) => id && !['unknown', 'unavailable'].includes(ctx.state(id)));
     },
     // The refrigerant circuit status stands in for the compressor status where only the local access reports; it adds
     // idle, startup, shutoff, passive_defrost and test_mode to the states both share.
     mode_map: { off: 'idle', idle: 'idle', startup: 'idle', shutoff: 'idle', heating: 'heating', cooling: 'cooling', dhw: 'dhw',
       defrost: 'defrost', passive_defrost: 'defrost', alarm: 'off' },
     program_map: { on: 'holiday', off: 'none' },
+    // The integration's SG Ready states; blocked, normal and forced are the card's own names.
+    sg_ready_map: { preferred: 'boost', not_used: 'normal' },
   },
   lambda: {
     name: 'Lambda (lambda_heat_pumps)',
@@ -1711,8 +1780,8 @@ const HFC_EDITOR = {
     power_sources: 'PV / battery / grid', ps_auto: 'Energy dashboard, unless set below', ps_manual: 'Only the sensors below',
     source_type: 'Heat source', src_air: 'Air', src_brine: 'Ground (brine)', src_water: 'Groundwater',
     hc_count: 'Heating circuits', hc2_type: 'Circuit 2 emitter', hc3_type: 'Circuit 3 emitter', hc4_type: 'Circuit 4 emitter', hc5_type: 'Circuit 5 emitter', hc6_type: 'Circuit 6 emitter',
-    unit_style: 'Unit drawing', unit_auto: 'Automatic (from the preset)', unit_generic: 'Generic (fan)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
-    unit_size: 'Size of the unit drawing', size_pana_medium: '1 fan (3 to 9 kW)', size_pana_large: '2 fans (T-CAP, 12 and 16 kW)', size_small: '3.5 / 5.5 kW (1 fan, low)', size_medium: '7.5 kW (1 fan)', size_large: '10.5 / 12.5 kW (2 fans)',
+    unit_style: 'Unit drawing', unit_auto: 'Automatic (from the preset)', unit_generic: 'Generic (fan)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch Compress 5800i / 6800i AW', unit_bosch_cs8800i: 'Bosch Compress 8800i AW', unit_bosch_compact: 'Bosch Compress 3800i AW', unit_bosch_square: 'Bosch Compress 5000 AW', unit_bosch_tall: 'Bosch Compress 7001i AW', unit_bosch_tall_silent: 'Bosch Compress 7400i AW', unit_buderus: 'Buderus Logatherm WLW MB AR', unit_buderus_compact: 'Buderus Logatherm WLW166i', unit_buderus_tall: 'Buderus Logatherm WLW196i AR', unit_buderus_tall_indoor: 'Buderus Logatherm WLW196i IR', unit_buderus_tall_silent: 'Buderus Logatherm WLW196i AR S+', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
+    unit_size: 'Size of the unit drawing', size_pana_medium: '1 fan (3 to 9 kW)', size_pana_large: '2 fans (T-CAP, 12 and 16 kW)', size_compact_medium: '1 fan', size_compact_large: '2 fans', size_wide_medium: '4 to 7 kW', size_wide_large: '10 and 12 kW', size_small: '3.5 / 5.5 kW (1 fan, low)', size_medium: '7.5 kW (1 fan)', size_large: '10.5 / 12.5 kW (2 fans)',
     timeline: 'Timeline of the operating mode', timeline_hours: 'Timeline length (hours)', timeline_details: 'Run details under the timeline', timeline_marks: 'Show the badges (e.g. Boost) as extra lanes',
     layout: 'Layout', layout_default: 'Default', layout_compact: 'Compact (narrow columns)', layout_wide: 'Wide (tiles beside the schematic)', layout_wall: 'Wall display (large, controls fade out)',
     animations: 'Animations', animations_auto: 'Automatic (respect reduced motion)', animations_always: 'Always', animations_off: 'Off',
@@ -1804,8 +1873,8 @@ const HFC_EDITOR = {
     power_sources: 'PV / Akku / Netz', ps_auto: 'Energie-Dashboard, außer unten gesetzt', ps_manual: 'Nur die Sensoren unten',
     source_type: 'Wärmequelle', src_air: 'Luft', src_brine: 'Erdreich (Sole)', src_water: 'Grundwasser',
     hc_count: 'Heizkreise', hc2_type: 'Wärmeabgabe Heizkreis 2', hc3_type: 'Wärmeabgabe Heizkreis 3', hc4_type: 'Wärmeabgabe Heizkreis 4', hc5_type: 'Wärmeabgabe Heizkreis 5', hc6_type: 'Wärmeabgabe Heizkreis 6',
-    unit_style: 'Geräte-Zeichnung', unit_auto: 'Automatisch (aus der Voreinstellung)', unit_generic: 'Allgemein (Lüfter)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
-    unit_size: 'Größe der Geräte-Zeichnung', size_pana_medium: '1 Lüfter (3 bis 9 kW)', size_pana_large: '2 Lüfter (T-CAP, 12 und 16 kW)', size_small: '3,5 / 5,5 kW (1 Lüfter, niedrig)', size_medium: '7,5 kW (1 Lüfter)', size_large: '10,5 / 12,5 kW (2 Lüfter)',
+    unit_style: 'Geräte-Zeichnung', unit_auto: 'Automatisch (aus der Voreinstellung)', unit_generic: 'Allgemein (Lüfter)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch Compress 5800i / 6800i AW', unit_bosch_cs8800i: 'Bosch Compress 8800i AW', unit_bosch_compact: 'Bosch Compress 3800i AW', unit_bosch_square: 'Bosch Compress 5000 AW', unit_bosch_tall: 'Bosch Compress 7001i AW', unit_bosch_tall_silent: 'Bosch Compress 7400i AW', unit_buderus: 'Buderus Logatherm WLW MB AR', unit_buderus_compact: 'Buderus Logatherm WLW166i', unit_buderus_tall: 'Buderus Logatherm WLW196i AR', unit_buderus_tall_indoor: 'Buderus Logatherm WLW196i IR', unit_buderus_tall_silent: 'Buderus Logatherm WLW196i AR S+', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
+    unit_size: 'Größe der Geräte-Zeichnung', size_pana_medium: '1 Lüfter (3 bis 9 kW)', size_pana_large: '2 Lüfter (T-CAP, 12 und 16 kW)', size_compact_medium: '1 Lüfter', size_compact_large: '2 Lüfter', size_wide_medium: '4 bis 7 kW', size_wide_large: '10 und 12 kW', size_small: '3,5 / 5,5 kW (1 Lüfter, niedrig)', size_medium: '7,5 kW (1 Lüfter)', size_large: '10,5 / 12,5 kW (2 Lüfter)',
     timeline: 'Zeitleiste der Betriebsart', timeline_hours: 'Länge der Zeitleiste (Stunden)', timeline_details: 'Laufdetails unter der Zeitleiste', timeline_marks: 'Badges (z. B. Boost) als zusätzliche Spuren zeigen',
     layout: 'Layout', layout_default: 'Standard', layout_compact: 'Kompakt (schmale Spalten)', layout_wide: 'Breit (Kacheln neben dem Schema)', layout_wall: 'Wanddisplay (groß, Bedienelemente blenden aus)',
     animations: 'Animationen', animations_auto: 'Automatisch (reduzierte Bewegung beachten)', animations_always: 'Immer', animations_off: 'Aus',
@@ -1899,7 +1968,7 @@ const HFC_EDITOR = {
     power_sources: 'PV / akumulator / sieć', ps_auto: 'Panel energii, chyba że ustawiono poniżej', ps_manual: 'Tylko poniższe czujniki',
     source_type: 'Źródło ciepła', src_air: 'Powietrze', src_brine: 'Grunt (solanka)', src_water: 'Woda gruntowa',
     hc_count: 'Obiegi grzewcze', hc2_type: 'Emiter obiegu 2', hc3_type: 'Emiter obiegu 3', hc4_type: 'Emiter obiegu 4', hc5_type: 'Emiter obiegu 5', hc6_type: 'Emiter obiegu 6',
-    unit_style: 'Rysunek urządzenia', unit_auto: 'Automatycznie (z presetu)', unit_generic: 'Ogólny (wentylator)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono',
+    unit_style: 'Rysunek urządzenia', unit_auto: 'Automatycznie (z presetu)', unit_generic: 'Ogólny (wentylator)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch Compress 5800i / 6800i AW', unit_bosch_cs8800i: 'Bosch Compress 8800i AW', unit_bosch_compact: 'Bosch Compress 3800i AW', unit_bosch_square: 'Bosch Compress 5000 AW', unit_bosch_tall: 'Bosch Compress 7001i AW', unit_bosch_tall_silent: 'Bosch Compress 7400i AW', unit_buderus: 'Buderus Logatherm WLW MB AR', unit_buderus_compact: 'Buderus Logatherm WLW166i', unit_buderus_tall: 'Buderus Logatherm WLW196i AR', unit_buderus_tall_indoor: 'Buderus Logatherm WLW196i IR', unit_buderus_tall_silent: 'Buderus Logatherm WLW196i AR S+', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono',
     unit_size: 'Rozmiar Vaillant', size_small: '3.5 / 5.5 kW (1 wentylator, niski)', size_medium: '7.5 kW (1 wentylator)', size_large: '10.5 / 12.5 kW (2 wentylatory)',
     timeline: 'Oś czasu trybu pracy', timeline_hours: 'Długość osi czasu (godziny)', timeline_details: 'Szczegóły pracy pod osią czasu', timeline_marks: 'Pokaż etykiety (np. Podbicie) jako dodatkowe pasy',
     layout: 'Układ', layout_default: 'Domyślny', layout_compact: 'Kompaktowy (wąskie kolumny)', layout_wide: 'Szeroki (kafelki obok schematu)', layout_wall: 'Wyświetlacz ścienny (duży, kontrolki wygaszają się)',
@@ -1991,7 +2060,7 @@ const HFC_EDITOR = {
     buffer_heater_middle: 'Grzałka bufora pośrodku aktywna (włączona/wyłączona lub W)',
     buffer_heater_bottom: 'Grzałka bufora na dole aktywna (włączona/wyłączona lub W)',
     size_pana_medium: '1 wentylator (3 do 9 kW)',
-    size_pana_large: '2 wentylatory (T-CAP, 12 i 16 kW)',
+    size_pana_large: '2 wentylatory (T-CAP, 12 i 16 kW)', size_compact_medium: '1 wentylator', size_compact_large: '2 wentylatory', size_wide_medium: '4 do 7 kW', size_wide_large: '10 i 12 kW',
     more_fields: 'Więcej pól',
     warn_disabled: 'Preset użyłby tych encji, ale w Home Assistant są one wyłączone: {list}. Włącz je w menu Ustawienia → Urządzenia i usługi → Encje.',
     checks_title: 'Sprawdź te pola',
@@ -2029,7 +2098,7 @@ const HFC_EDITOR = {
     power_sources: 'FVE / batéria / sieť', ps_auto: 'Energetický panel, pokiaľ nie je nastavené nižšie', ps_manual: 'Iba senzory nižšie',
     source_type: 'Zdroj tepla', src_air: 'Vzduch', src_brine: 'Zem (nemrznúca zmes)', src_water: 'Podzemná voda',
     hc_count: 'Vykurovacie okruhy', hc2_type: 'Teleso okruhu 2', hc3_type: 'Teleso okruhu 3', hc4_type: 'Teleso okruhu 4', hc5_type: 'Teleso okruhu 5', hc6_type: 'Teleso okruhu 6',
-    unit_style: 'Nákres jednotky', unit_auto: 'Automaticky (z predvoľby)', unit_generic: 'Všeobecná (ventilátor)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono',
+    unit_style: 'Nákres jednotky', unit_auto: 'Automaticky (z predvoľby)', unit_generic: 'Všeobecná (ventilátor)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch Compress 5800i / 6800i AW', unit_bosch_cs8800i: 'Bosch Compress 8800i AW', unit_bosch_compact: 'Bosch Compress 3800i AW', unit_bosch_square: 'Bosch Compress 5000 AW', unit_bosch_tall: 'Bosch Compress 7001i AW', unit_bosch_tall_silent: 'Bosch Compress 7400i AW', unit_buderus: 'Buderus Logatherm WLW MB AR', unit_buderus_compact: 'Buderus Logatherm WLW166i', unit_buderus_tall: 'Buderus Logatherm WLW196i AR', unit_buderus_tall_indoor: 'Buderus Logatherm WLW196i IR', unit_buderus_tall_silent: 'Buderus Logatherm WLW196i AR S+', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono',
     unit_size: 'Veľkosť Vaillant', size_small: '3.5 / 5.5 kW (1 ventilátor, nízky)', size_medium: '7.5 kW (1 ventilátor)', size_large: '10.5 / 12.5 kW (2 ventilátory)',
     timeline: 'Časová os prevádzkového režimu', timeline_hours: 'Dĺžka časovej osi (hodiny)', timeline_details: 'Podrobnosti behu pod časovou osou', timeline_marks: 'Zobraziť odznaky (napr. Boost) ako extra riadky',
     layout: 'Rozloženie', layout_default: 'Predvolené', layout_compact: 'Kompaktné (úzke stĺpce)', layout_wide: 'Široké (dlaždice vedľa schémy)', layout_wall: 'Nástenný displej (veľký, ovládacie prvky miznú)',
@@ -2122,7 +2191,7 @@ const HFC_EDITOR = {
     buffer_heater_bottom: 'Vykurovacia tyč akumulačného zásobníka dole aktívna (zap/vyp, alebo W)',
     // Field checks, pickers, "More fields", disabled entities and the Panasonic sizes, by Havinko1991 (#191).
     size_pana_medium: '1 ventilátor (3 až 9 kW)',
-    size_pana_large: '2 ventilátory (T-CAP, 12 a 16 kW)',
+    size_pana_large: '2 ventilátory (T-CAP, 12 a 16 kW)', size_compact_medium: '1 ventilátor', size_compact_large: '2 ventilátory', size_wide_medium: '4 až 7 kW', size_wide_large: '10 a 12 kW',
     more_fields: 'Ďalšie polia',
     warn_disabled: 'Predvoľba by chcela použiť tieto entity, ale v Home Assistantovi sú zakázané: {list}. Povoľte ich v menu Nastavenia → Zariadenia a služby → Entity.',
     checks_title: 'Skontrolujte tieto polia',
@@ -2159,7 +2228,7 @@ const HFC_EDITOR = {
     power_sources: 'FVE / baterie / síť', ps_auto: 'Energetický panel, pokud není nastaveno níže', ps_manual: 'Pouze senzory níže',
     source_type: 'Zdroj tepla', src_air: 'Vzduch', src_brine: 'Země (nemrznoucí směs)', src_water: 'Podzemní voda',
     hc_count: 'Topné okruhy', hc2_type: 'Těleso okruhu 2', hc3_type: 'Těleso okruhu 3', hc4_type: 'Těleso okruhu 4', hc5_type: 'Těleso okruhu 5', hc6_type: 'Těleso okruhu 6',
-    unit_style: 'Nákres jednotky', unit_auto: 'Automaticky (z předvolby)', unit_generic: 'Obecná (ventilátor)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono',
+    unit_style: 'Nákres jednotky', unit_auto: 'Automaticky (z předvolby)', unit_generic: 'Obecná (ventilátor)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch Compress 5800i / 6800i AW', unit_bosch_cs8800i: 'Bosch Compress 8800i AW', unit_bosch_compact: 'Bosch Compress 3800i AW', unit_bosch_square: 'Bosch Compress 5000 AW', unit_bosch_tall: 'Bosch Compress 7001i AW', unit_bosch_tall_silent: 'Bosch Compress 7400i AW', unit_buderus: 'Buderus Logatherm WLW MB AR', unit_buderus_compact: 'Buderus Logatherm WLW166i', unit_buderus_tall: 'Buderus Logatherm WLW196i AR', unit_buderus_tall_indoor: 'Buderus Logatherm WLW196i IR', unit_buderus_tall_silent: 'Buderus Logatherm WLW196i AR S+', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono',
     unit_size: 'Velikost Vaillant', size_small: '3.5 / 5.5 kW (1 ventilátor, nízký)', size_medium: '7.5 kW (1 ventilátor)', size_large: '10.5 / 12.5 kW (2 ventilátory)',
     timeline: 'Časová osa provozního režimu', timeline_hours: 'Délka časové osy (hodiny)', timeline_details: 'Podrobnosti běhu pod časovou osou', timeline_marks: 'Zobrazit odznaky (např. Boost) jako extra řádky',
     layout: 'Rozvržení', layout_default: 'Výchozí', layout_compact: 'Kompaktní (úzké sloupce)', layout_wide: 'Široké (dlaždice vedle schématu)', layout_wall: 'Nástěnný displej (velký, ovládací prvky mizí)',
@@ -2252,7 +2321,7 @@ const HFC_EDITOR = {
     buffer_heater_bottom: 'Topná tyč akumulačního zásobníku dole aktivní (zap/vyp, nebo W)',
     // Field checks, pickers, "More fields", disabled entities and the Panasonic sizes, by Havinko1991 (#191).
     size_pana_medium: '1 ventilátor (3 až 9 kW)',
-    size_pana_large: '2 ventilátory (T-CAP, 12 a 16 kW)',
+    size_pana_large: '2 ventilátory (T-CAP, 12 a 16 kW)', size_compact_medium: '1 ventilátor', size_compact_large: '2 ventilátory', size_wide_medium: '4 až 7 kW', size_wide_large: '10 a 12 kW',
     more_fields: 'Další pole',
     warn_disabled: 'Předvolba by chtěla použít tyto entity, ale v Home Assistantovi jsou zakázané: {list}. Povolte je v menu Nastavení → Zařízení a služby → Entity.',
     checks_title: 'Zkontrolujte tato pole',
@@ -2288,8 +2357,8 @@ const HFC_EDITOR = {
     power_sources: 'PV / accu / net', ps_auto: 'Energiedashboard, tenzij hieronder ingesteld', ps_manual: 'Alleen de sensoren hieronder',
     source_type: 'Warmtebron', src_air: 'Lucht', src_brine: 'Bodem (brine)', src_water: 'Grondwater',
     hc_count: 'Verwarmingsgroepen', hc2_type: 'Afgifte groep 2', hc3_type: 'Afgifte groep 3', hc4_type: 'Afgifte groep 4', hc5_type: 'Afgifte groep 5', hc6_type: 'Afgifte groep 6',
-    unit_style: 'Tekening buitenunit', unit_auto: 'Automatisch (uit de preset)', unit_generic: 'Algemeen (ventilator)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch / Buderus', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
-    unit_size: 'Grootte van de buitenunit', size_pana_medium: '1 ventilator (3 tot 9 kW)', size_pana_large: '2 ventilatoren (T-CAP, 12 en 16 kW)', size_small: '3,5 / 5,5 kW (1 ventilator, laag)', size_medium: '7,5 kW (1 ventilator)', size_large: '10,5 / 12,5 kW (2 ventilatoren)',
+    unit_style: 'Tekening buitenunit', unit_auto: 'Automatisch (uit de preset)', unit_generic: 'Algemeen (ventilator)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch Compress 5800i / 6800i AW', unit_bosch_cs8800i: 'Bosch Compress 8800i AW', unit_bosch_compact: 'Bosch Compress 3800i AW', unit_bosch_square: 'Bosch Compress 5000 AW', unit_bosch_tall: 'Bosch Compress 7001i AW', unit_bosch_tall_silent: 'Bosch Compress 7400i AW', unit_buderus: 'Buderus Logatherm WLW MB AR', unit_buderus_compact: 'Buderus Logatherm WLW166i', unit_buderus_tall: 'Buderus Logatherm WLW196i AR', unit_buderus_tall_indoor: 'Buderus Logatherm WLW196i IR', unit_buderus_tall_silent: 'Buderus Logatherm WLW196i AR S+', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
+    unit_size: 'Grootte van de buitenunit', size_pana_medium: '1 ventilator (3 tot 9 kW)', size_pana_large: '2 ventilatoren (T-CAP, 12 en 16 kW)', size_compact_medium: '1 ventilator', size_compact_large: '2 ventilatoren', size_wide_medium: '4 tot 7 kW', size_wide_large: '10 en 12 kW', size_small: '3,5 / 5,5 kW (1 ventilator, laag)', size_medium: '7,5 kW (1 ventilator)', size_large: '10,5 / 12,5 kW (2 ventilatoren)',
     timeline: 'Tijdlijn van de bedrijfsstand', timeline_hours: 'Lengte tijdlijn (uren)', timeline_details: 'Rundetails onder de tijdlijn', timeline_marks: 'Badges (bijv. Boost) als extra banen tonen',
     layout: 'Opmaak', layout_default: 'Standaard', layout_compact: 'Compact (smalle kolommen)', layout_wide: 'Breed (tegels naast het schema)', layout_wall: 'Wandscherm (groot, bediening verdwijnt)',
     animations: 'Animaties', animations_auto: 'Automatisch (respecteert minder beweging)', animations_always: 'Altijd', animations_off: 'Uit',
@@ -2547,7 +2616,7 @@ const HFC_MAP_KEYS = ['valve_map', 'mode_map', 'dhw_mode_map', 'buffer_mode_map'
 // How the tap water is heated: a coil in the tank, a fresh-water station on the storage, or a tank in the combined storage.
 const HFC_DHW_TYPES = ['coil', 'fresh_water', 'tank_in_tank'];
 // Drawing of the outdoor unit: `auto` takes the style of the preset; `unit_size` picks the Vaillant aroTHERM plus class.
-const HFC_UNIT_STYLES = ['auto', 'generic', 'lambda', 'vaillant', 'panasonic', 'viessmann', 'bosch', 'saunier', 'samsung', 'wolf', 'kronoterm', 'alpha_innotec', 'stiebel'];
+const HFC_UNIT_STYLES = ['auto', 'generic', 'lambda', 'vaillant', 'panasonic', 'viessmann', 'bosch', 'bosch_cs8800i', 'bosch_compact', 'bosch_square', 'bosch_tall', 'bosch_tall_silent', 'buderus', 'buderus_compact', 'buderus_tall', 'buderus_tall_indoor', 'buderus_tall_silent', 'saunier', 'samsung', 'wolf', 'kronoterm', 'alpha_innotec', 'stiebel'];
 const HFC_UNIT_SIZES = ['small', 'medium', 'large'];
 const HFC_EMITTERS = ['underfloor', 'radiator', 'column'];
 // Wall display: seconds the quick controls and the details toggle stay visible after the last touch or mouse move.
@@ -2920,6 +2989,8 @@ class HeatpumpFlowCard extends HTMLElement {
               // Panasonic: one or two fans; left empty, the HeishaMon preset takes the size from the model (#176).
               ...(config && (config.unit_style === 'panasonic' || ((!config.unit_style || config.unit_style === 'auto') && config.preset === 'heishamon'))
                 ? [{ name: 'unit_size', selector: { select: { mode: 'dropdown', options: ['medium', 'large'].map((v) => ({ value: v, label: L[`size_pana_${v}`] })) } } }] : []),
+              ...(config && ['bosch_compact', 'buderus_compact', 'bosch', 'buderus'].includes(config.unit_style)
+                ? [{ name: 'unit_size', selector: { select: { mode: 'dropdown', options: ['medium', 'large'].map((v) => ({ value: v, label: L[`size_${config.unit_style.endsWith('_compact') ? 'compact' : 'wide'}_${v}`] || L[`size_pana_${v}`] })) } } }] : []),
               { name: 'primary_pump', selector: { boolean: {} } },
               { name: 'timeline', selector: { boolean: {} } },
               ...(config && config.timeline ? [{ name: 'timeline_hours', selector: { number: { min: 3, max: 72, step: 1, mode: 'box', unit_of_measurement: 'h' } } }, { name: 'timeline_details', selector: { boolean: {} } }, { name: 'timeline_marks', selector: { boolean: {} } }] : []),
@@ -3467,8 +3538,12 @@ class HeatpumpFlowCard extends HTMLElement {
       .map((name) => `- ${name} under entities: ignored, it belongs at the top level of the card configuration`);
     // Shared pump (#344): the same rule as the card's _sharedPump, from the configuration and the resolved entities.
     const ownPump = config.entities?.hc_pump;
+    // Defaults the preset reads from the installation (the heat generator of Home Comfort): buffer and primary pump.
+    let found = {};
+    try { found = typeof r.preset?.defaults === 'function' ? r.preset.defaults(r.entities, hass) || {} : {}; } catch (err) { found = {}; }
+    const foundBuffer = typeof config.buffer !== 'boolean' && config.storage !== 'combined' && !config.series_buffer && found.buffer === true;
     const sharedPump = !!r.preset?.shared_pump && hfcHcCount(config) === 1 && !!r.entities.hc_pump && (ownPump === undefined || ownPump === null)
-      && config.storage !== 'combined' && config.buffer !== true && !['buffer_top', 'buffer_mode'].some((k) => r.entities[k]);
+      && config.storage !== 'combined' && config.buffer !== true && !foundBuffer && !['buffer_top', 'buffer_mode'].some((k) => r.entities[k]);
     // Power sources (#357): each PV, battery and grid source of the Energy dashboard with its power sensor and value. A source
     // without a power sensor makes its share the remainder, and a battery with the opposite sign moves its share to PV.
     const energyLines = (() => {
@@ -3519,7 +3594,7 @@ class HeatpumpFlowCard extends HTMLElement {
       `Source type: ${config.source_type || 'air'}`,
       `Heating circuits: ${hfcHcCount(config)}`,
       // The hydraulic options decide what the schematic draws, so a report of a storage or flow problem needs them.
-      `Storage: ${config.storage || 'separate'} · hot water: ${config.dhw_type || 'coil'} · parallel buffer: ${config.storage === 'combined' ? 'combined storage' : config.buffer ? 'yes, configured' : ['buffer_top', 'buffer_mode'].some((k) => r.entities[k]) ? 'yes, from entities' : 'no'} · series buffer: ${config.series_buffer ? (config.series_bypass === false ? 'yes, no bypass valve' : 'yes') : 'no'} · primary pump: ${sharedPump && config.primary_pump !== false ? 'yes, the circuit pump of the preset (one circuit, no buffer)' : (config.primary_pump ?? !!r.preset?.primary_pump) ? 'yes' : 'no'}`,
+      `Storage: ${config.storage || 'separate'} · hot water: ${config.dhw_type || 'coil'} · parallel buffer: ${config.storage === 'combined' ? 'combined storage' : config.buffer ? 'yes, configured' : foundBuffer ? 'yes, from the heat generator' : ['buffer_top', 'buffer_mode'].some((k) => r.entities[k]) ? 'yes, from entities' : 'no'} · series buffer: ${config.series_buffer ? (config.series_bypass === false ? 'yes, no bypass valve' : 'yes') : 'no'} · primary pump: ${sharedPump && config.primary_pump !== false ? 'yes, the circuit pump of the preset (one circuit, no buffer)' : (config.primary_pump ?? (!!r.preset?.primary_pump || found.primary_pump === true)) ? 'yes' : 'no'}`,
       `Layout: ${config.layout || 'default'}`,
       // Where runs and the running state come from (#365).
       `Runs from: ${(() => {
@@ -4211,7 +4286,7 @@ class HeatpumpFlowCard extends HTMLElement {
     // A combined storage is one tank with the hot-water zone on top and the heating zone below: drawn without sensors, and to the
     // circuits it is a buffer that decouples them from the heat pump.
     const combined = this._config.storage === 'combined';
-    const configuredBuffer = !combined && this._config.buffer === true;
+    const configuredBuffer = !combined && this._bufferConfigured();
     const buffer = combined || configuredBuffer || this._has('buffer_top') || this._has('buffer_mode');
     const dhwType = this._config.dhw_type || 'coil';
     const station = this._station();
@@ -5023,7 +5098,7 @@ class HeatpumpFlowCard extends HTMLElement {
   // A fresh-water station next to separate storages needs a parallel buffer; without one the tank with its coil is drawn.
   _station() {
     return this._config.dhw_type === 'fresh_water' && this._config.storage !== 'combined'
-      && (this._config.buffer === true || this._has('buffer_top') || this._has('buffer_mode'));
+      && (this._bufferConfigured() || this._has('buffer_top') || this._has('buffer_mode'));
   }
 
   // Fresh-water station (dhw_type: fresh_water): a plate heat exchanger that heats the tap water from the storage; the tap side is not drawn.
@@ -5171,7 +5246,27 @@ class HeatpumpFlowCard extends HTMLElement {
 
   // The heat pump has its own primary pump (`primary_pump`, default from the preset). It is drawn on the flow pipe next to the
   // heat pump block, centred between the flow temperature and the flow rate. A single direct circuit without its own pump sensor then has no pump of its own.
-  _primaryPump(buffer = this._parts?.buffer) { return this._config.primary_pump ?? (!!this._preset?.primary_pump || this._sharedPump(buffer)); }
+  _primaryPump(buffer = this._parts?.buffer) {
+    return this._config.primary_pump ?? (!!this._preset?.primary_pump || this._presetDefaults().primary_pump === true || this._sharedPump(buffer));
+  }
+  // Defaults a preset reads from the installation (`defaults(entities, hass)`), once per state update.
+  _presetDefaults() {
+    const fn = this._preset?.defaults;
+    if (typeof fn !== 'function' || !this._hass) return {};
+    const c = this._defaultsCache;
+    if (c && c.hass === this._hass && c.e === this._e) return c.value;
+    let value;
+    try { value = fn(this._e || {}, this._hass) || {}; } catch (err) { value = {}; }
+    this._defaultsCache = { hass: this._hass, e: this._e, value };
+    return value;
+  }
+  // A parallel buffer from the configuration, else from the preset's defaults; a combined storage or a series buffer has none.
+  _bufferConfigured() {
+    const c = this._config;
+    if (c.storage === 'combined') return false;
+    if (typeof c.buffer === 'boolean') return c.buffer;
+    return !c.series_buffer && this._presetDefaults().buffer === true;
+  }
   // A preset with `shared_pump` (#344): in a single circuit without a buffer, the circuit pump it found is the indoor unit's pump in
   // front of the diverter valve. It is drawn as the primary pump and runs for heating and hot water; the circuit has no pump of its
   // own then. A circuit pump set in the card configuration stays a circuit pump.
@@ -5231,8 +5326,15 @@ class HeatpumpFlowCard extends HTMLElement {
   // Manufacturer-inspired, logo-free outdoor units. `auto` takes the style of the preset.
   _unitKey() {
     if (this._sourceType !== 'air') return 'generic';
-    const style = this._config.unit_style && this._config.unit_style !== 'auto' ? this._config.unit_style : (this._preset?.unit_style || 'generic');
+    const found = this._presetDefaults().unit_style;
+    const style = this._config.unit_style && this._config.unit_style !== 'auto' ? this._config.unit_style
+      : (HFC_UNIT_STYLES.includes(found) && found !== 'auto' ? found : (this._preset?.unit_style || 'generic'));
     if (style === 'vaillant') return `vaillant-${this._config.unit_size || 'medium'}`;
+    // The Bosch/Buderus casings with two sizes: the compact one has two grilles, the wide ones are squarer for 10 and 12 kW.
+    // unit_size wins; the size the preset reads from the installation only goes with the drawing it found.
+    if (['bosch_compact', 'buderus_compact', 'bosch', 'buderus'].includes(style)) {
+      return (this._config.unit_size || (style === found ? this._presetDefaults().unit_size : undefined)) === 'large' ? `${style}-large` : style;
+    }
     // Panasonic: one fan, or two for the large units; without unit_size the preset may tell the size from the model (#176).
     if (style === 'panasonic') {
       const size = this._config.unit_size || this._preset?.unit_size?.(this._e || {}, this._hass);
@@ -5241,12 +5343,17 @@ class HeatpumpFlowCard extends HTMLElement {
     return style;
   }
 
-  // One blade, scaled to a fan of radius r at (cx, cy); the group spins around its own centre.
-  _fanSvg(id, cx, cy, r, cls = '') {
+  // One blade, scaled to a fan of radius r at (cx, cy); the group spins around its own centre. `kind` is the number of blades
+  // (3 by default), or 'ring' for a closed front that hides the fan: a dashed ring of the grille turns instead of the blades.
+  _fanSvg(id, cx, cy, r, cls = '', kind = 3) {
+    if (kind === 'ring') {
+      return `<g class="fan ${cls}" id="${id}" style="transform-origin:${cx}px ${cy}px"><circle class="spin-ring" cx="${cx}" cy="${cy}" r="${r}" pathLength="36" stroke-dasharray="4 2"/></g>`;
+    }
     const k = r / 50;
     const p = (x, y) => `${(cx + x * k).toFixed(1)} ${(cy + y * k).toFixed(1)}`;
     const blade = `M${p(0, 0)} C${p(-10, -26)} ${p(-2, -42)} ${p(12, -44)} C${p(16, -26)} ${p(10, -10)} ${p(0, 0)}Z`;
-    return `<g class="fan ${cls}" id="${id}" style="transform-origin:${cx}px ${cy}px">${[0, 120, 240].map((a) => `<path class="blade" d="${blade}" transform="rotate(${a} ${cx} ${cy})"/>`).join('')}<circle cx="${cx}" cy="${cy}" r="${(7 * k).toFixed(1)}" class="hub"/></g>`;
+    const angles = Array.from({ length: kind }, (_, n) => +(n * (360 / kind)).toFixed(1));
+    return `<g class="fan ${cls}" id="${id}" style="transform-origin:${cx}px ${cy}px">${angles.map((a) => `<path class="blade" d="${blade}" transform="rotate(${a} ${cx} ${cy})"/>`).join('')}<circle cx="${cx}" cy="${cy}" r="${(7 * k).toFixed(1)}" class="hub"/></g>`;
   }
 
   _snowSvg(id, cx, cy, r) {
@@ -5321,15 +5428,144 @@ class HeatpumpFlowCard extends HTMLElement {
         snows: [[...abs(cx, cy), 18]],
       };
     }
-    if (key === 'bosch') {
-      // Compress 5800i/6800i AW: broad pale casing, rounded corners and one centred circular intake.
-      const x = 52; const y = 50; const w = 136; const h = 94; const cx = 120; const cy = 96; const r = 37;
-      const spokes = Array.from({ length: 16 }, (_, n) => { const a = (n * Math.PI) / 8; return `<line class="bosch-gr thin" x1="${(cx + Math.cos(a) * 8).toFixed(1)}" y1="${(cy + Math.sin(a) * 8).toFixed(1)}" x2="${(cx + Math.cos(a) * r).toFixed(1)}" y2="${(cy + Math.sin(a) * r).toFixed(1)}"/>`; }).join('');
+    if (['bosch', 'bosch-large', 'buderus', 'buderus-large'].includes(key)) {
+      // Wide casing with rounded top corners, a round grille left of the centre and a plain right side. medium (the default): about
+      // 1.4 : 1 (4 to 7 kW); large (unit_size, 10 and 12 kW): squarer, about 1.25 : 1, with a wider plain right side.
+      // bosch: Compress 5800i/6800i AW with the AW OR outdoor units, white; the grille (85 % of the height) has four wide rings with
+      // short ribs and dark gaps around a large closed white disc (65 % of the height, nearer the middle, on the large one). The fan
+      // is hidden, so a ring of the grille turns.
+      // buderus: Logatherm WLW MB AR, uniformly anthracite, a grille of concentric rings in a slightly lighter anthracite around a
+      // dark open centre, no visible blades: chunky matte rings over 80 % of the height (medium), thin rings over 70 % (large). The
+      // fan is not drawn, so a ring of the grille turns. At most 132 wide: the heater symbol starts at x 180.
+      const large = key.endsWith('-large');
+      const [x, y, w, h] = large ? (key.startsWith('bosch') ? [52, 48, 120, 96] : [52, 48, 120, 98]) : [46, 50, 132, 94];
+      const cy = y + h / 2;
+      const body = `M${x} ${y + h - 2} V${y + 13} Q${x} ${y} ${x + 13} ${y} H${x + w - 13} Q${x + w} ${y} ${x + w} ${y + 13} V${y + h - 2} Q${x + w} ${y + h} ${x + w - 2} ${y + h} H${x + 2} Q${x} ${y + h} ${x} ${y + h - 2} Z`;
+      if (key.startsWith('bosch')) {
+        // medium: the grille over 85 % of the height at the left edge; large: over 65 %, its centre at 43 % of the width.
+        const r = Math.round(h * (large ? 0.325 : 0.425)); const cx = large ? x + Math.round(w * 0.43) : x + 6 + r; const k = r / 40;
+        const rings = [38.7, 34.6, 30.5, 26.4].map((rr) => `<circle class="bosch-band" cx="${cx}" cy="${cy}" r="${(rr * k).toFixed(1)}"/>`).join('');
+        const ribs = Array.from({ length: 12 }, (_, n) => { const a = (n * Math.PI) / 6; return `<line class="bosch-rib" x1="${(cx + Math.cos(a) * 24 * k).toFixed(1)}" y1="${(cy + Math.sin(a) * 24 * k).toFixed(1)}" x2="${(cx + Math.cos(a) * r).toFixed(1)}" y2="${(cy + Math.sin(a) * r).toFixed(1)}"/>`; }).join('');
+        return {
+          below: T(`<rect class="bosch-foot" x="${x + 6}" y="${y + h - 1}" width="12" height="6" rx="3"/><rect class="bosch-foot" x="${x + w - 18}" y="${y + h - 1}" width="12" height="6" rx="3"/><path class="bosch-body" d="${body}"/><circle class="bosch-gap" cx="${cx}" cy="${cy}" r="${r}"/>${rings}${ribs}`),
+          fans: [[...abs(cx, cy), +(32.55 * k).toFixed(1), 'bosch-fan', 'ring']],
+          above: T(`<circle class="bosch-disc" cx="${cx}" cy="${cy}" r="${(24 * k).toFixed(1)}"/>`),
+          snows: [[...abs(cx, cy), 18]],
+        };
+      }
+      const r = Math.round(h * (large ? 0.35 : 0.4)); const cx = x + (large ? 9 : 6) + r;
+      const rings = (large ? [0.86, 0.74, 0.62, 0.5, 0.38] : [0.76, 0.54]).map((f) => `<circle class="bud-gr ${large ? 'thin' : 'chunky'}" cx="${cx}" cy="${cy}" r="${(r * f).toFixed(1)}"/>`).join('');
       return {
-        below: T(`<rect class="bosch-foot" x="${x + 13}" y="${y + h}" width="15" height="6" rx="2"/><rect class="bosch-foot" x="${x + w - 28}" y="${y + h}" width="15" height="6" rx="2"/><rect class="bosch-body" x="${x}" y="${y}" width="${w}" height="${h}" rx="13"/><circle class="bosch-gr" cx="${cx}" cy="${cy}" r="${r}"/><circle class="bosch-gr thin" cx="${cx}" cy="${cy}" r="${(r * 0.74).toFixed(1)}"/>${spokes}`),
-        fans: [[...abs(cx, cy), +(r * 0.83).toFixed(1), 'bosch-fan']],
-        above: T(`<path class="bosch-top" d="M${x + 13} ${y + 9} H${x + w - 13}"/><rect class="bosch-mark" x="${x + w - 19}" y="${y + 13}" width="5" height="18" rx="2.5"/>`),
+        below: T(`<rect class="bud-foot" x="${x + 14}" y="${y + h}" width="16" height="6" rx="2"/><rect class="bud-foot" x="${x + w - 30}" y="${y + h}" width="16" height="6" rx="2"/><path class="bud-body" d="${body}"/><circle class="bud-well" cx="${cx}" cy="${cy}" r="${r}"/>`),
+        fans: [[...abs(cx, cy), +(r * (large ? 0.94 : 0.89)).toFixed(1), 'bud-fan', 'ring']],
+        above: T(`<circle class="bud-gr ${large ? 'thin' : 'chunky'}" cx="${cx}" cy="${cy}" r="${r}"/>${rings}<path class="bud-seam" d="M${x + 4} ${y + h - 7} H${x + w - 4}"/><path class="bud-rim" d="${body}"/>`),
         snows: [[...abs(cx, cy), 18]],
+      };
+    }
+    if (key.startsWith('bosch_compact') || key.startsWith('buderus_compact')) {
+      // One sheet-metal casing in two colourings: bosch_compact (Compress 3800i AW) light, buderus_compact (Logatherm WLW166i) metallic
+      // grey. Square corners, a flat lid and a vertical seam at about 64 % of the width; the left panel holds a round grille of fine
+      // rings and ribs around a small closed disc, the right panel is plain; small screws along the lower edge and two mounting
+      // brackets below. medium: one fan, about 1.45 : 1; large (unit_size; CS3800i AW O-T, WLW166i 13 kW): about 0.9 : 1 with two grilles one above
+      // the other. The fine grille hides the fan, so a ring of the grille turns.
+      const grey = key.startsWith('buderus');
+      const large = key.endsWith('-large');
+      const [x, y, w, h] = large ? [60, 38, 101, 112] : [46, 52, 132, 91];
+      const seam = x + Math.round(w * 0.64);
+      const r = large ? 25 : 36;
+      const grilles = large ? [[x + 33, y + 29], [x + 33, y + 83]] : [[x + 42, y + h / 2 + 1]];
+      const body = grey ? 'budc-body' : 'bosch-body'; const disc = grey ? 'budc-disc' : 'bosch-disc';
+      const grille = ([cx, cy]) => {
+        const rings = Array.from({ length: Math.floor((r - 6) / 3) }, (_, n) => r - 3 - n * 3).map((rr) => `<circle class="bosch-gr thin" cx="${cx}" cy="${cy}" r="${rr}"/>`).join('');
+        const ribs = Array.from({ length: 16 }, (_, n) => { const a = (n * Math.PI) / 8; return `<line class="bosch-gr thin" x1="${(cx + Math.cos(a) * 6).toFixed(1)}" y1="${(cy + Math.sin(a) * 6).toFixed(1)}" x2="${(cx + Math.cos(a) * r).toFixed(1)}" y2="${(cy + Math.sin(a) * r).toFixed(1)}"/>`; }).join('');
+        return `<circle class="bosch-gr" cx="${cx}" cy="${cy}" r="${r}"/>${rings}${ribs}<circle class="${disc}" cx="${cx}" cy="${cy}" r="${large ? 5 : 6}"/>`;
+      };
+      const screws = [x + 6, x + 26, seam - 20, seam + 6, x + w - 6].map((sx) => `<circle class="boschc-screw" cx="${sx}" cy="${y + h - 4}" r="1.1"/>`).join('');
+      const bracket = (bx) => `<path class="boschc-bracket" d="M${bx} ${y + h} V${y + h + 6} H${bx + 22} V${y + h} Z"/>`;
+      return {
+        below: T(`${bracket(x + 7)}${bracket(x + w - 29)}<rect class="${body}" x="${x}" y="${y}" width="${w}" height="${h}" rx="1"/>${grilles.map(grille).join('')}`),
+        fans: grilles.map(([cx, cy]) => [...abs(cx, cy), r - 1.5, 'bosch-fan', 'ring']),
+        above: T(`<path class="bosch-seam" d="M${x + 1} ${y + 4} H${x + w - 1} M${seam} ${y + 4} V${y + h}"/>${screws}${grey ? `<rect class="budc-rim" x="${x}" y="${y}" width="${w}" height="${h}" rx="1"/>` : ''}`),
+        snows: grilles.map(([cx, cy]) => [...abs(cx, cy), large ? 15 : 18]),
+      };
+    }
+    if (key === 'bosch_cs8800i') {
+      // Compress CS8800i AW: a white, squarer casing (about 1.24 : 1) with rounded top corners, a large round grille of many fine
+      // rings around a small closed disc, and a plain grey strip on the right that runs to the edge. The fan is hidden, so a ring
+      // of the grille turns.
+      const x = 50; const y = 46; const w = 124; const h = 100; const cx = x + 44; const cy = y + h / 2; const r = 38;
+      const body = `M${x} ${y + h - 2} V${y + 13} Q${x} ${y} ${x + 13} ${y} H${x + w - 13} Q${x + w} ${y} ${x + w} ${y + 13} V${y + h - 2} Q${x + w} ${y + h} ${x + w - 2} ${y + h} H${x + 2} Q${x} ${y + h} ${x} ${y + h - 2} Z`;
+      const rings = [34.5, 31, 27.5, 24, 20.5, 17, 13.5, 10].map((rr) => `<circle class="bosch-gr thin" cx="${cx}" cy="${cy}" r="${rr}"/>`).join('');
+      return {
+        below: T(`<rect class="bosch-foot" x="${x + 14}" y="${y + h}" width="16" height="6" rx="2"/><rect class="bosch-foot" x="${x + w - 30}" y="${y + h}" width="16" height="6" rx="2"/><path class="bosch-body" d="${body}"/><circle class="bosch-gr" cx="${cx}" cy="${cy}" r="${r}"/>${rings}<circle class="bosch-disc" cx="${cx}" cy="${cy}" r="6"/>`),
+        fans: [[...abs(cx, cy), 36.2, 'bosch-fan', 'ring']],
+        above: T(`<path class="bosch-strip" d="M${cx + r + 7} ${y + 18} H${x + w - 0.75} V${y + 25} H${cx + r + 7} Z"/><path class="bosch-seam" d="M${x + 4} ${y + h - 7} H${x + w - 4}"/>`),
+        snows: [[...abs(cx, cy), 18]],
+      };
+    }
+    if (key === 'bosch_square') {
+      // Compress 5000 AW: a nearly square casing (about 1.15 : 1), a white front in a grey frame under a thin grey lid, split by a
+      // vertical seam at about 67 % of its width. The left panel is a square black grille of fine mesh with the fan faintly behind
+      // it, the right panel plain; a grey plinth with bolts below.
+      const x = 58; const y = 48; const w = 112; const h = 97; const seam = x + Math.round(w * 0.67);
+      const g = 62; const gx = x + 7; const gy = y + (h - g) / 2 + 1; const cx = gx + g / 2; const cy = gy + g / 2;
+      const mesh = [...Array.from({ length: 14 }, (_, n) => `M${gx + 4.4 * (n + 0.5)} ${gy + 1} V${gy + g - 1}`), ...Array.from({ length: 14 }, (_, n) => `M${gx + 1} ${gy + 4.4 * (n + 0.5)} H${gx + g - 1}`)].join(' ');
+      const bolts = [x + 8, x + w / 2, x + w - 8].map((bx) => `<circle class="boschs-bolt" cx="${bx}" cy="${y + h + 3}" r="1.3"/>`).join('');
+      return {
+        below: T(`<rect class="boschs-plinth" x="${x + 2}" y="${y + h}" width="${w - 4}" height="6" rx="1"/>${bolts}<rect class="boschs-frame" x="${x}" y="${y}" width="${w}" height="${h}" rx="2"/><rect class="bosch-body" x="${x + 3}" y="${y + 4}" width="${w - 6}" height="${h - 7}" rx="1"/><rect class="boschs-grille" x="${gx}" y="${gy}" width="${g}" height="${g}" rx="1.5"/><circle class="boschs-shadow" cx="${cx}" cy="${cy}" r="27"/>`),
+        fans: [[...abs(cx, cy), 25, 'boschs-fan']],
+        above: T(`<path class="boschs-mesh" d="${mesh}"/><path class="bosch-seam" d="M${seam} ${y + 5} V${y + h - 4}"/><rect class="boschs-lid" x="${x - 1}" y="${y - 2}" width="${w + 2}" height="4" rx="1.5"/>`),
+        snows: [[...abs(cx, cy), 18]],
+      };
+    }
+    if (key.startsWith('buderus_tall') || key === 'bosch_tall' || key === 'bosch_tall_silent') {
+      // Tall casings (about 0.68 : 1), one shape in two colourings each. AR (buderus_tall, Logatherm WLW196i AR): a champagne frame
+      // and lower panel around a dark upper panel with the round fan opening and a grey hub; bosch_tall (Compress 7001i AW): a white
+      // body under a silver cap with a broad silver ring around the opening and a dark fan. IR (buderus_tall_indoor, WLW196i IR for
+      // indoor installation): a black body with narrow silver edges and a square framed opening with a large five-blade fan behind a
+      // grille. Silent (buderus_tall_silent, WLW196i AR S+: dark anthracite with silver side strips; bosch_tall_silent, Compress
+      // 7400i AW: white under a silver cap with a silver ring): a closed round disc in the upper half hides the fan, a ring turns.
+      const x = 81; const y = 36; const w = 78; const h = 114; const cx = x + w / 2;
+      const white = key.startsWith('bosch');
+      const feet = (c) => `<rect class="${c}" x="${x + 6}" y="${y + h}" width="14" height="5" rx="1.5"/><rect class="${c}" x="${x + w - 20}" y="${y + h}" width="14" height="5" rx="1.5"/>`;
+      // White casings: a silver cap with rounded ends and two narrow side panels.
+      const shell = `${feet('bosch-foot')}<rect class="bosch-body" x="${x}" y="${y}" width="${w}" height="${h}" rx="3"/>`;
+      const trim = `<path class="bosch-seam" d="M${x + 6} ${y + 8} V${y + h - 3} M${x + w - 6} ${y + 8} V${y + h - 3}"/><rect class="boscht-cap" x="${x - 1}" y="${y - 1}" width="${w + 2}" height="7" rx="3.5"/>`;
+      if (key === 'buderus_tall_indoor') {
+        const cy = y + 40; const s = 64; const ox = cx - s / 2; const oy = cy - s / 2;
+        const grid = [...Array.from({ length: 7 }, (_, n) => `M${ox + 8 + n * 8} ${oy + 2} V${oy + s - 2}`), ...Array.from({ length: 7 }, (_, n) => `M${ox + 2} ${oy + 8 + n * 8} H${ox + s - 2}`)].join(' ');
+        return {
+          below: T(`${feet('budi-foot')}<rect class="budi-body" x="${x}" y="${y}" width="${w}" height="${h}" rx="3"/><rect class="budi-edge" x="${x}" y="${y}" width="5" height="${h}" rx="2"/><rect class="budi-edge" x="${x + w - 5}" y="${y}" width="5" height="${h}" rx="2"/><rect class="budi-hole" x="${ox}" y="${oy}" width="${s}" height="${s}" rx="2"/>`),
+          fans: [[...abs(cx, cy), 29, 'budi-fan', 5]],
+          above: T(`<path class="budi-grid" d="${grid}"/><rect class="budi-frame" x="${ox}" y="${oy}" width="${s}" height="${s}" rx="2"/><path class="budi-seam" d="M${x + 9} ${y + h - 14} H${x + w - 9}"/><rect class="budi-rim" x="${x}" y="${y}" width="${w}" height="${h}" rx="3"/>`),
+          snows: [[...abs(cx, cy), 17]],
+        };
+      }
+      if (key.endsWith('_silent')) {
+        const cy = y + 42; const r = 29;
+        return {
+          below: T(white ? `${shell}<circle class="boscht-ring" cx="${cx}" cy="${cy}" r="${r + 2}"/><circle class="bosch-disc" cx="${cx}" cy="${cy}" r="${r - 1}"/>`
+            : `${feet('buds-foot')}<rect class="buds-body" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/><rect class="buds-strip" x="${x + 1}" y="${y + 3}" width="4" height="${h - 6}" rx="2"/><rect class="buds-strip" x="${x + w - 5}" y="${y + 3}" width="4" height="${h - 6}" rx="2"/><circle class="buds-well" cx="${cx}" cy="${cy}" r="${r + 4.5}"/><circle class="buds-disc" cx="${cx}" cy="${cy}" r="${r}"/>`),
+          fans: [[...abs(cx, cy), r + (white ? 5.5 : 2.5), white ? 'bosch-fan' : 'buds-fan', 'ring']],
+          above: T(white ? trim : `<path class="buds-seam" d="M${x + 10} ${y + h - 14} H${x + w - 10}"/><rect class="buds-rim" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/>`),
+          snows: [[...abs(cx, cy), 17]],
+        };
+      }
+      const cy = y + 40; const r = 27;
+      if (white) {
+        const wires = [21, 14].map((rr) => `<circle class="boscht-wire" cx="${cx}" cy="${cy}" r="${rr}"/>`).join('');
+        return {
+          below: T(`${shell}<circle class="boscht-hole" cx="${cx}" cy="${cy}" r="${r}"/>`),
+          fans: [[...abs(cx, cy), 24, 'boscht-fan']],
+          above: T(`${wires}<circle class="boscht-hub" cx="${cx}" cy="${cy}" r="6"/><circle class="boscht-ring" cx="${cx}" cy="${cy}" r="${r + 2}"/>${trim}`),
+          snows: [[...abs(cx, cy), 17]],
+        };
+      }
+      return {
+        below: T(`${feet('budt-foot')}<rect class="budt-frame" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/><rect class="budt-panel" x="${x + 6}" y="${y + 6}" width="${w - 12}" height="70" rx="3"/><circle class="budt-hole" cx="${cx}" cy="${cy}" r="${r}"/>`),
+        fans: [[...abs(cx, cy), 24, 'budt-fan']],
+        above: T(`<circle class="budt-ring" cx="${cx}" cy="${cy}" r="${r}"/><circle class="budt-hub" cx="${cx}" cy="${cy}" r="7"/><rect class="budt-lower" x="${x + 6}" y="${y + 82}" width="${w - 12}" height="${h - 88}" rx="2"/><path class="budt-seam" d="M${x + 6} ${y + 79} H${x + w - 6}"/><rect class="budt-rim" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/>`),
+        snows: [[...abs(cx, cy), 17]],
       };
     }
     if (key === 'saunier') {
@@ -7363,9 +7599,9 @@ HeatpumpFlowCard.styles = `
   .lam-plinth { fill: color-mix(in srgb, var(--primary-text-color, #1f2937) 22%, var(--card-background-color, #fff)); }
   /* a rim in the theme text colour keeps the anthracite body visible on dark cards */
   .lam-rim { fill: none; stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 48%, transparent); stroke-width: 1.4; }
-  .fan.lam-fan .blade, .fan.vai-fan .blade, .fan.pana-fan .blade, .fan.vies-fan .blade, .fan.bosch-fan .blade, .fan.sd-fan .blade, .fan.sam-fan .blade, .fan.wolf-fan .blade, .fan.kro-fan .blade, .fan.ait-fan .blade, .fan.stb-fan .blade { fill: #9aa3ad; opacity: .55; }
-  .fan.lam-fan .hub, .fan.vai-fan .hub, .fan.pana-fan .hub, .fan.vies-fan .hub, .fan.bosch-fan .hub, .fan.sd-fan .hub, .fan.sam-fan .hub, .fan.wolf-fan .hub, .fan.kro-fan .hub, .fan.ait-fan .hub, .fan.stb-fan .hub { fill: #9aa3ad; }
-  .fan.lam-fan.on .blade, .fan.vai-fan.on .blade, .fan.pana-fan.on .blade, .fan.vies-fan.on .blade, .fan.bosch-fan.on .blade, .fan.sd-fan.on .blade, .fan.sam-fan.on .blade, .fan.wolf-fan.on .blade, .fan.kro-fan.on .blade, .fan.ait-fan.on .blade, .fan.stb-fan.on .blade { fill: ${hfcVar('cool')}; opacity: .95; }
+  .fan.lam-fan .blade, .fan.vai-fan .blade, .fan.pana-fan .blade, .fan.vies-fan .blade, .fan.bosch-fan .blade, .fan.sd-fan .blade, .fan.sam-fan .blade, .fan.wolf-fan .blade, .fan.kro-fan .blade, .fan.ait-fan .blade, .fan.stb-fan .blade, .fan.bud-fan .blade, .fan.budt-fan .blade, .fan.budi-fan .blade { fill: #9aa3ad; opacity: .55; }
+  .fan.lam-fan .hub, .fan.vai-fan .hub, .fan.pana-fan .hub, .fan.vies-fan .hub, .fan.bosch-fan .hub, .fan.sd-fan .hub, .fan.sam-fan .hub, .fan.wolf-fan .hub, .fan.kro-fan .hub, .fan.ait-fan .hub, .fan.stb-fan .hub, .fan.bud-fan .hub, .fan.budt-fan .hub, .fan.budi-fan .hub { fill: #9aa3ad; }
+  .fan.lam-fan.on .blade, .fan.vai-fan.on .blade, .fan.pana-fan.on .blade, .fan.vies-fan.on .blade, .fan.bosch-fan.on .blade, .fan.sd-fan.on .blade, .fan.sam-fan.on .blade, .fan.wolf-fan.on .blade, .fan.kro-fan.on .blade, .fan.ait-fan.on .blade, .fan.stb-fan.on .blade, .fan.bud-fan.on .blade, .fan.budt-fan.on .blade, .fan.budi-fan.on .blade { fill: ${hfcVar('cool')}; opacity: .95; }
   .vai-body { fill: ${hfcVar('casing')}; stroke: color-mix(in srgb, ${hfcVar('casing')} 80%, #6b7280); stroke-width: 1.5; }
   .vai-dark, .vai-foot { fill: color-mix(in srgb, ${hfcVar('anthracite')} 60%, #000); }
   .vai-gr { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 45%, #a0a8b0); stroke-width: 2; } .vai-gr.thin { stroke-width: 1; opacity: .85; }
@@ -7382,11 +7618,67 @@ HeatpumpFlowCard.styles = `
   .vies-slat { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 62%, #000); stroke-width: 2.3; stroke-linecap: round; }
   .vies-rim { fill: none; stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 42%, transparent); stroke-width: 1.2; }
   .bosch-body, .sd-body { fill: ${hfcVar('casing')}; stroke: color-mix(in srgb, ${hfcVar('casing')} 76%, #64748b); stroke-width: 1.5; }
-  .bosch-foot, .sd-foot { fill: color-mix(in srgb, ${hfcVar('anthracite')} 58%, #000); }
+  .bosch-foot, .sd-foot, .bud-foot { fill: color-mix(in srgb, ${hfcVar('anthracite')} 58%, #000); }
   .bosch-gr, .sd-gr { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 50%, #94a3b8); stroke-width: 2; }
   .bosch-gr.thin, .sd-gr.thin { stroke-width: 1; opacity: .88; }
-  .bosch-top, .sd-seam, .sd-vents { fill: none; stroke: color-mix(in srgb, ${hfcVar('casing')} 62%, #64748b); stroke-width: 1.3; }
-  .bosch-mark { fill: ${hfcVar('good')}; opacity: .8; }
+  .bosch-strip { fill: color-mix(in srgb, ${hfcVar('casing')} 55%, #8b95a1); }
+  .bosch-gap { fill: color-mix(in srgb, ${hfcVar('anthracite')} 70%, #000); }
+  .bosch-band { fill: none; stroke: ${hfcVar('casing')}; stroke-width: 2.6; }
+  .bosch-rib { stroke: ${hfcVar('casing')}; stroke-width: 1.4; }
+  .boschc-screw { fill: color-mix(in srgb, ${hfcVar('casing')} 50%, #64748b); }
+  .boschc-bracket { fill: color-mix(in srgb, ${hfcVar('casing')} 45%, #64748b); stroke: color-mix(in srgb, ${hfcVar('casing')} 30%, #475569); stroke-width: .8; }
+  .boscht-cap { fill: color-mix(in srgb, ${hfcVar('casing')} 55%, #8b95a1); }
+  .boscht-ring { fill: none; stroke: color-mix(in srgb, ${hfcVar('casing')} 55%, #8b95a1); stroke-width: 4.5; }
+  .boscht-hole { fill: color-mix(in srgb, ${hfcVar('anthracite')} 85%, #6b7280); }
+  .boscht-wire { fill: none; stroke: color-mix(in srgb, ${hfcVar('casing')} 40%, #64748b); stroke-width: .8; opacity: .8; }
+  .boscht-hub { fill: color-mix(in srgb, ${hfcVar('anthracite')} 40%, #000); }
+  .fan.boscht-fan .blade, .fan.boscht-fan .hub { fill: color-mix(in srgb, ${hfcVar('anthracite')} 35%, #000); opacity: .9; }
+  .fan.boscht-fan.on .blade { fill: ${hfcVar('cool')}; opacity: .95; }
+  .boschs-frame, .boschs-lid, .boschs-plinth { fill: color-mix(in srgb, ${hfcVar('casing')} 50%, #8b95a1); }
+  .boschs-bolt { fill: color-mix(in srgb, ${hfcVar('anthracite')} 60%, #94a3b8); }
+  .boschs-grille { fill: color-mix(in srgb, ${hfcVar('anthracite')} 25%, #000); }
+  .boschs-shadow { fill: color-mix(in srgb, ${hfcVar('anthracite')} 55%, #000); }
+  .boschs-mesh { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 75%, #94a3b8); stroke-width: .7; opacity: .75; }
+  /* the fan behind the fine mesh shows only faintly */
+  .fan.boschs-fan .blade, .fan.boschs-fan .hub { fill: #9aa3ad; opacity: .22; }
+  .fan.boschs-fan.on .blade { fill: ${hfcVar('cool')}; opacity: .45; }
+  .budc-body, .budc-disc { fill: color-mix(in srgb, ${hfcVar('casing')} 62%, #8b95a1); }
+  .budc-body { stroke: color-mix(in srgb, ${hfcVar('casing')} 40%, #64748b); stroke-width: 1.5; }
+  .budc-disc { stroke: color-mix(in srgb, ${hfcVar('anthracite')} 50%, #94a3b8); stroke-width: 1.2; }
+  .budc-rim { fill: none; stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 30%, transparent); stroke-width: 1; }
+  .bosch-disc { fill: ${hfcVar('casing')}; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 50%, #94a3b8); stroke-width: 1.4; }
+  .bosch-seam, .sd-seam, .sd-vents { fill: none; stroke: color-mix(in srgb, ${hfcVar('casing')} 62%, #64748b); stroke-width: 1.3; }
+  .bud-body { fill: ${hfcVar('anthracite')}; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 76%, #000); stroke-width: 1.5; }
+  .bud-well { fill: color-mix(in srgb, ${hfcVar('anthracite')} 30%, #000); }
+  /* the rings are a slightly lighter anthracite, never silver: the whole unit stays dark */
+  .bud-gr { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 78%, #fff); stroke-width: 2; } .bud-gr.thin { stroke-width: 1.3; }
+  .bud-gr.chunky { stroke-width: 3.6; }
+  .fan.bud-fan .spin-ring { stroke: color-mix(in srgb, ${hfcVar('anthracite')} 62%, #fff); opacity: .7; }
+  .fan.bud-fan.on .spin-ring { stroke: ${hfcVar('cool')}; opacity: .95; }
+  .bud-seam { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 62%, #000); stroke-width: 1.2; }
+  /* the tall Logatherm casings: champagne from the light casing colour, dark parts from the anthracite one */
+  .budt-frame, .budt-lower { fill: color-mix(in srgb, ${hfcVar('casing')} 38%, #a88a5f); }
+  .budt-lower { stroke: color-mix(in srgb, ${hfcVar('casing')} 20%, #8a6f48); stroke-width: .8; }
+  .budt-panel { fill: color-mix(in srgb, ${hfcVar('anthracite')} 72%, #000); }
+  .budt-hole { fill: color-mix(in srgb, ${hfcVar('anthracite')} 28%, #000); }
+  .budt-ring { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 55%, #b8c0c8); stroke-width: 1.6; }
+  .budt-hub { fill: #9aa3ad; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 60%, #000); stroke-width: .8; }
+  .budt-seam { fill: none; stroke: color-mix(in srgb, ${hfcVar('casing')} 20%, #7a6240); stroke-width: 1; }
+  .budt-foot, .budi-foot, .buds-foot { fill: color-mix(in srgb, ${hfcVar('anthracite')} 55%, #000); }
+  .budi-body { fill: color-mix(in srgb, ${hfcVar('anthracite')} 45%, #000); }
+  .budi-edge, .buds-strip { fill: color-mix(in srgb, ${hfcVar('casing')} 70%, #8b95a1); }
+  .budi-hole { fill: color-mix(in srgb, ${hfcVar('anthracite')} 18%, #000); }
+  .budi-grid { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 70%, #94a3b8); stroke-width: .8; opacity: .7; }
+  .budi-frame { fill: none; stroke: color-mix(in srgb, ${hfcVar('casing')} 60%, #8b95a1); stroke-width: 2.2; }
+  .budi-seam, .buds-seam { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 85%, #94a3b8); stroke-width: 1; opacity: .7; }
+  .buds-body { fill: color-mix(in srgb, ${hfcVar('anthracite')} 85%, #000); }
+  .buds-well { fill: color-mix(in srgb, ${hfcVar('anthracite')} 45%, #000); }
+  .buds-disc { fill: color-mix(in srgb, ${hfcVar('anthracite')} 92%, #9aa3ad); stroke: color-mix(in srgb, ${hfcVar('anthracite')} 60%, #000); stroke-width: 1.2; }
+  /* a rim in the theme text colour keeps the dark casings visible on dark cards */
+  .bud-rim, .budt-rim, .budi-rim, .buds-rim { fill: none; stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 42%, transparent); stroke-width: 1.2; }
+  /* closed or finely meshed fronts (bosch, bosch_cs8800i, the compact casings, buderus, the silent ones): the fan is hidden, a dashed ring of the grille turns with it */
+  .fan .spin-ring { fill: none; stroke: #9aa3ad; stroke-width: 2.4; opacity: .6; }
+  .fan.on .spin-ring { stroke: ${hfcVar('cool')}; opacity: .95; }
   .sd-accent { fill: none; stroke: ${hfcVar('hot')}; stroke-width: 2.5; }
   .sd-vents { stroke-linecap: round; } .sd-badge { fill: ${hfcVar('hot')}; }
   .sam-body { fill: color-mix(in srgb, ${hfcVar('anthracite')} 88%, #111827); stroke: color-mix(in srgb, ${hfcVar('anthracite')} 62%, #000); stroke-width: 1.5; }
@@ -7834,7 +8126,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     const seriesChanged = !!value.series_buffer !== !!this._config.series_buffer;
     if (value.buffer && bufferChanged) { delete config.series_buffer; delete config.series_bypass; }
     else if (value.series_buffer && seriesChanged) delete config.buffer;
-    if (!value.buffer) delete config.buffer;
+    // A preset that reads the buffer from the installation (defaults) keeps an explicit false; otherwise off is the default.
+    if (!value.buffer && !(value.buffer === false && typeof HFC_PRESETS[config.preset]?.defaults === 'function')) delete config.buffer;
     // series_bypass only matters as false next to a series buffer; the switch's default (true) is not written.
     if (!config.series_buffer || value.series_bypass !== false) delete config.series_bypass;
     if (!value.dhw_type || value.dhw_type === 'coil' || (value.dhw_type === 'tank_in_tank' && config.storage !== 'combined')) delete config.dhw_type;

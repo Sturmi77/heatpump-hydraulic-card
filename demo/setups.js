@@ -683,8 +683,19 @@ const setups = [
 ];
 // Synthetic PointT installation. Resource keys follow Home Comfort 0.8.2-beta.7 (cloud) and 0.9.0 (local access);
 // gateway identifiers, entity ids and values are invented, not a registry export.
-// `access`: 'cloud' (the cloud alone), 'both' (cloud and local access) or 'local' (the local access alone).
-function pointtSetup(scenario = 'heat', gateway = 'demo-pointt', suffix = '', access = 'cloud') {
+// `access`: 'cloud' (the cloud alone), 'both' (cloud and local access) or 'local' (the local access alone); `generator`: the heat
+// generator sensor of Home Comfort 0.9.1 (pointtGenerator below), none before 0.9.1.
+// Home Comfort 0.9.1: the heat generator sensor as the integration reports it. Each module is [role, product name, family,
+// construction, power in kW]; the state is the first heat source, the primary its family and power, outdoor_unit the first outdoor unit.
+function pointtGenerator(modules) {
+  const list = modules.map(([role, product_name, family = null, construction = null, power_kw = null]) => ({ role, product_name, hardware_type: null, family, construction, power_kw }));
+  const main = list.find((m) => m.role === 'heat_source') || list[0];
+  const outdoor = list.find((m) => m.role === 'outdoor_unit');
+  return { state: main.product_name, attributes: { friendly_name: 'Heat generator', heat_generators: list,
+    primary: { family: main.family, construction: main.construction, power_kw: main.power_kw, brand_family: 'bosch_group', outdoor_power_kw: outdoor ? outdoor.power_kw : null },
+    outdoor_unit: outdoor ? outdoor.product_name : null, source: 'local', table_version: 1, known: list.every((m) => m.family || m.construction) } };
+}
+function pointtSetup(scenario = 'heat', gateway = 'demo-pointt', suffix = '', access = 'cloud', generator) {
   const local = access !== 'cloud';
   const pick = (values) => values[scenario] ?? values.heat;
   const rows = [
@@ -729,6 +740,9 @@ function pointtSetup(scenario = 'heat', gateway = 'demo-pointt', suffix = '', ac
       ...['manualRoomSetpoint', 'temperatureLevels:comfort2', 'temperatureLevels:eco', 'maxFlowTemp']
         .map((key) => ['number', `heatingCircuits:hc${n}:${key}:control`, 21, '°C']),
     ]),
+    // Operating settings, not states: the circuit and the DHW circuit are enabled (Home Comfort translation keys).
+    ['sensor', 'heatingCircuits:hc1:operationMode', 'auto', '', { translation_key: 'heating_circuit_operation_mode' }],
+    ['sensor', 'dhwCircuits:dhw1:operationMode', { heat: 'ownprogram', dhw: 'high', defrost: 'ownprogram', idle: 'low' }[scenario] || 'ownprogram', '', { translation_key: 'hot_water_operation_mode' }],
     ['sensor', 'dhwCircuits:dhw2:actualTemp', 42, '°C'],
     ['sensor', 'dhwCircuits:dhw2:currentSetpoint', 45, '°C'],
     ['select', 'dhwCircuits:dhw1:operationMode:control', 'auto'],
@@ -773,7 +787,12 @@ function pointtSetup(scenario = 'heat', gateway = 'demo-pointt', suffix = '', ac
     // Second sources of readings above: disabled by default.
     ['sensor', 'local_only:signals:SRC.IntFlowTemp', pick({ heat: 35.4, dhw: 51.9, defrost: 22, idle: 30 }), '°C', { disabled_by: 'integration' }],
     ['sensor', 'local_only:signals:SRC.SystemPumpVolumeFlow', pick({ heat: 1452, dhw: 2081, defrost: 1899, idle: 0 }), 'L/h', { disabled_by: 'integration' }],
+    // Generic controller signals: disabled by default, a user enables them where the installation has the part.
+    ['sensor', 'local_only:signals:SRC.CUHP.HP1.DHWHeater', 'off', '', { disabled_by: 'integration' }],
+    ['sensor', 'local_only:signals:SRC.IntDHW.CircPumpStatus', run ? 'on' : 'off', '', { disabled_by: 'integration' }],
+    ['sensor', 'local_only:signals:SRC.CUHP.SmartGridMode', 'normal', '', { disabled_by: 'integration' }],
   ] : [];
+  if (generator) localRows.push(['sensor', 'heat_generator', generator]);
   // With the cloud as well, paired readings have copies for the comparison of both sources; the preset never takes them.
   if (access === 'both') localRows.push(['sensor', 'gateway:supply_temperature:source_local', 31, '°C'], ['sensor', 'heatSources:hs1:heatPumpType:source_local', 'air_water', '', { translation_key: 'heat_pump_type' }]);
   // With the local access the circuits have no flow sensor of their own, as on the installation the local mapping was checked
@@ -792,7 +811,7 @@ function pointtSetup(scenario = 'heat', gateway = 'demo-pointt', suffix = '', ac
     if (domain === 'number') Object.assign(attributes, { min: 5, max: 80, step: 0.5 });
     if (unit === 'kWh' || unit === 'h' || key.includes(':numberOfStarts:')) attributes.state_class = 'total_increasing';
     if (key === 'gateway:environmental_energy') attributes.state_class = 'total';
-    states[id] = { state: String(value), attributes };
+    states[id] = value && typeof value === 'object' ? { state: value.state, attributes: { ...attributes, ...value.attributes } } : { state: String(value), attributes };
     registry[id] = { platform: 'bosch_buderus_heating', unique_id: `${gateway}:${key}`, device_id: `device-${gateway}`, ...extra };
   });
   return { states, registry };
@@ -978,12 +997,14 @@ setups.push({
     },
   },
 });
-// Home Comfort 0.9.0 with the local access: a heat pump with a parallel buffer and a
-// primary pump (PC0) next to the circuit pump (PC1).
+// Home Comfort 0.9.1 with the local access: a heat pump with a parallel buffer and a
+// primary pump (PC0) next to the circuit pump (PC1), both known from the heat generator.
+const homeComfortTP70 = pointtGenerator([['heat_source', 'Logatherm WLW176i-12 TP70', 'wlw176i', 'monobloc'], ['outdoor_unit', 'WLW-10 MB AR', 'wlw_mb_ar', 'monobloc', 10]]);
 setups.push({
-  name: 'Bosch/Buderus Home Comfort (cloud and local)', sub: 'PointT cloud and local access, synthetic data; preset awaiting installation testing',
-  states: (s) => pointtSetup(s, 'demo-pointt', '', 'both').states, registry: pointtSetup('heat', 'demo-pointt', '', 'both').registry,
-  config: { preset: 'bosch_buderus_heating', title: 'Home Comfort', buffer: true, primary_pump: true, power_sources: 'manual',
+  name: 'Bosch/Buderus Home Comfort (cloud and local)', sub: 'PointT cloud and local access, heat generator WLW176i-12 TP70 with WLW-10 MB AR (buffer and primary pump from it), synthetic data',
+  states: (s) => pointtSetup(s, 'demo-pointt', '', 'both', homeComfortTP70).states, registry: pointtSetup('heat', 'demo-pointt', '', 'both', homeComfortTP70).registry,
+  devices: { 'device-demo-pointt': { manufacturer: 'Buderus' } },
+  config: { preset: 'bosch_buderus_heating', title: 'Home Comfort', power_sources: 'manual',
     tiles: ['cop_live', 'power', 'volume', 'energy:total', 'heat:total', 'starts:total'] },
 });
 setups.push({
@@ -991,6 +1012,33 @@ setups.push({
   states: (s) => pointtSetup(s, 'demo-pointt', '', 'local').states, registry: pointtSetup('heat', 'demo-pointt', '', 'local').registry,
   config: { preset: 'bosch_buderus_heating', title: 'Home Comfort', buffer: true, primary_pump: true, power_sources: 'manual',
     tiles: ['cop_live', 'power', 'energy:total', 'heat:total', 'starts:total', 'hours:total'] },
+});
+
+// The outdoor-unit drawing from the heat generator (Home Comfort 0.9.1): cloud and local data plus the heat generator sensor, synthetic
+// product names in the spelling of the integration's model table where it has an entry.
+[
+  ['WLW186i-12 E with WLW-7 MB AR', 'buderus', 'Buderus', [['heat_source', 'Logatherm WLW186i-12 E', 'wlw186i', 'monobloc'], ['outdoor_unit', 'WLW-7 MB AR', 'wlw_mb_ar', 'monobloc', 7]]],
+  ['WLW196i AR', 'buderus_tall', 'Buderus', [['heat_source', 'Logatherm WLW196i-8 AR']]],
+  ['WLW196i IR', 'buderus_tall_indoor', 'Buderus', [['heat_source', 'Logatherm WLW196i-8 IR']]],
+  ['WLW196i AR S+', 'buderus_tall_silent', 'Buderus', [['heat_source', 'Logatherm WLW196i-8 AR S+']]],
+  ['WLW166i 8 kW', 'buderus_compact', 'Buderus', [['heat_source', 'Logatherm WLW166i-8']]],
+  ['WLW166i 13 kW', 'buderus_compact-large', 'Buderus', [['heat_source', 'Logatherm WLW166i-13']]],
+  ['CS6800i AW with AW 7 OR-S', 'bosch', 'Bosch', [['heat_source', 'CS6800i AW 12 E', 'cs6800i_aw'], ['outdoor_unit', 'AW 7 OR-S', 'aw_or', null, 7]]],
+  ['CS5800i AW with AW 12 OR-T', 'bosch-large', 'Bosch', [['heat_source', 'CS5800i AW 12 M', 'cs5800i_aw'], ['outdoor_unit', 'AW 12 OR-T', 'aw_or', null, 12]]],
+  ['CS8800i AW', 'bosch_cs8800i', 'Bosch', [['outdoor_unit', 'CS8800i AW 13 O-T', 'cs8800i_aw']]],
+  ['CS3800i AW 7 O-S', 'bosch_compact', 'Bosch', [['outdoor_unit', 'CS3800i AW 7 O-S', 'cs3800i_aw']]],
+  ['CS3800i AW 10 O-T', 'bosch_compact-large', 'Bosch', [['outdoor_unit', 'CS3800i AW 10 O-T', 'cs3800i_aw']]],
+  ['Compress 5000 AW', 'bosch_square', 'Bosch', [['heat_source', 'Compress 5000 AW']]],
+  ['CS7001i AW', 'bosch_tall', 'Bosch', [['heat_source', 'Compress CS7001i AW']]],
+  ['CS7400i AW', 'bosch_tall_silent', 'Bosch', [['heat_source', 'Compress CS7400i AW']]],
+].forEach(([model, drawing, manufacturer, modules]) => {
+  const generator = pointtGenerator(modules);
+  setups.push({
+    name: `Home Comfort heat generator: ${model}`, sub: `cloud, local access and heat generator sensor, drawing ${drawing}; synthetic data`,
+    states: (s) => pointtSetup(s, 'demo-pointt', '', 'both', generator).states, registry: pointtSetup('heat', 'demo-pointt', '', 'both', generator).registry,
+    devices: { 'device-demo-pointt': { manufacturer } }, drawing,
+    config: { preset: 'bosch_buderus_heating', title: 'Home Comfort', power_sources: 'manual', tiles: ['energy:total', 'heat:total', 'starts:total'] },
+  });
 });
 
 const scenarios = [['heat', 'Heating'], ['dhw', 'Hot water'], ['defrost', 'Defrost'], ['idle', 'Standby + error']];
