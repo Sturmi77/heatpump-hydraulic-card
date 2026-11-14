@@ -1,0 +1,1 @@
+- With a boiler, the flow temperature of the heat pump is no longer partly hidden behind the heat pump block on a phone: the label is drawn above the block, so a longer value stays readable (forum, 13 November).

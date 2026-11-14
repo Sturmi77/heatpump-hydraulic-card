@@ -4334,7 +4334,7 @@ class HeatpumpFlowCard extends HTMLElement {
             <circle class="pump" cx="${P.boiler ? 316 : 340}" cy="250" r="16"/>
             <g class="impeller" id="impeller-primary" style="transform-origin:${P.boiler ? 316 : 340}px 250px"><path d="M${P.boiler ? 316 : 340} 238 L${P.boiler ? 322 : 346} 250 L${P.boiler ? 310 : 334} 250Z M${P.boiler ? 316 : 340} 262 L${P.boiler ? 310 : 334} 250 L${P.boiler ? 322 : 346} 250Z" class="imp"/></g>
           </g>` : ''}
-          <g class="tap" ${de('flow')}><text class="pipe-label${nf && !P.boiler ? ' nf-big' : ''}${P.boiler ? ' no-pre' : ''}" id="t-vl" x="${P.boiler ? 344 : (this._primaryPump() ? 340 : 338)}" y="${(this._primaryPump() ? 226 : 236) + (P.boiler ? 2 : 0)}" text-anchor="${P.boiler ? 'end' : 'middle'}"></text></g>
+          ${P.boiler ? '' : `<g class="tap" ${de('flow')}><text class="pipe-label${nf ? ' nf-big' : ''}" id="t-vl" x="${this._primaryPump() ? 340 : 338}" y="${this._primaryPump() ? 226 : 236}" text-anchor="middle"></text></g>`}
           <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${P.boiler ? 336 : (this._primaryPump() ? 340 : 346)}" y="${P.boiler ? 324 : this._primaryPump() ? 284 : 275}" text-anchor="middle"></text></g>
           <g class="tap" ${de('return')}><text class="pipe-label" id="t-rl" x="335" y="406" text-anchor="middle"></text></g>
 
@@ -4362,6 +4362,9 @@ class HeatpumpFlowCard extends HTMLElement {
             <text class="boiler-value" id="t-boiler-power" x="372" y="274" text-anchor="middle"></text>
             <text class="small boiler-flow" id="t-boiler-flow" x="372" y="304" text-anchor="middle"></text>
           </g>` : ''}
+          ${/* With a boiler the flow label ends in front of the boiler box and grows to the left over the heat pump block; drawn
+            after the block, so its halo keeps it readable instead of the block covering it (forum, 13 November). */ ''}
+          ${P.boiler ? `<g class="tap" ${de('flow')}><text class="pipe-label no-pre" id="t-vl" x="344" y="${(this._primaryPump() ? 226 : 236) + 2}" text-anchor="end"></text></g>` : ''}
 
           ${P.station ? this._stationSvg() : ''}
           ${P.solar ? this._solarPipes() : ''}
@@ -7155,7 +7158,7 @@ HeatpumpFlowCard.styles = `
   .pipe-label { font-size: calc(15px * var(--kp, 1)); font-weight: 600; }
   /* With a boiler only 58 units are left between the heat pump and the boiler box: the flow label drops its VL prefix and ends
      in front of the box, so a longer value grows to the left (forum, 8 November). On a narrow card it reaches over the edge of the
-     heat pump block, where a halo keeps it readable. */
+     heat pump block; it is drawn after the block, where a halo keeps it readable (forum, 13 November). */
   .no-pre { paint-order: stroke; stroke: var(--card-background-color, #fff); stroke-width: 4px; stroke-linejoin: round; }
   .pipe-label.dew-warning { fill: var(--error-color, #db4437); font-weight: 750; }
   .vol-label { font-size: 13px; fill: var(--hfc-muted); }
