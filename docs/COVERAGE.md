@@ -20,7 +20,7 @@ The percentage says how complete a preset is, not how well it was tested: see th
 
 | Preset | Core fields | Open core fields | Core fields not offered | Further roles | Stat tiles | Error chip | Quick controls | Preset texts in |
 |---|---|---|---|---|---|---|---|---|
-| [`bosch_buderus_heating`](#bosch_buderus_heating) | 76 % | `volume`, `hc_return`, `hc_pump` | `power`, `heat` | 10 of 49 | 21 of 29 | yes | yes | – |
+| [`bosch_buderus_heating`](#bosch_buderus_heating) | 100 % | – | `hc_return` | 22 of 49 | 21 of 29 | yes | yes | – |
 | [`lambda`](#lambda) | 100 % | – | `hc_pump` | 26 of 49 | 21 of 29 | yes | – | de, en |
 | [`vicare`](#vicare) | 75 % | `power`, `dhw_target`, `hc_flow` | `heat`, `hc_return`, `room` | 20 of 49 | 16 of 29 | – | – | de, en |
 | [`open3e`](#open3e) | 92 % | `volume` | `hc_return` | 20 of 49 | 15 of 29 | – | – | – |
@@ -53,19 +53,18 @@ Core fields in **bold**.
 
 ### bosch_buderus_heating
 
-Bosch/Buderus Home Comfort (PointT cloud). Core fields 76 %, stat tiles: `cop_heating`, `cop_dhw`, `cop_cooling`, `cop_total`, `spf`, `energy`, `env_energy`, `energy_heating`, `energy_dhw`, `energy_cooling`, `energy_aux`, `heat`, `heat_heating`, `heat_dhw`, `heat_cooling`, `starts`, `cycles_heating`, `cycles_dhw`, `cycles_cooling`, `hours`, `hours_per_start`.
+Bosch/Buderus Home Comfort. Core fields 100 %, stat tiles: `cop_heating`, `cop_dhw`, `cop_cooling`, `cop_total`, `spf`, `energy`, `env_energy`, `energy_heating`, `energy_dhw`, `energy_cooling`, `energy_aux`, `heat`, `heat_heating`, `heat_dhw`, `heat_cooling`, `starts`, `cycles_heating`, `cycles_dhw`, `cycles_cooling`, `hours`, `hours_per_start`.
 
 | Area | Mapped | Shown without its own entity | Not mapped, with reason | Open |
 |---|---|---|---|---|
-| Heat pump | **`mode`**, `defrost`, **`flow`**, **`return`**, **`outdoor`** | **`compressor`**, **`valve`** | **`power`**, **`heat`** | `status`, `fan_speed`, **`volume`**, `source_volume`, `source_in`, `source_out`, `brine_pressure`, `heater`, `pv_boost` |
+| Heat pump | **`mode`**, `status`, **`compressor`**, `fan_speed`, `defrost`, **`power`**, **`heat`**, **`flow`**, **`return`**, **`volume`**, `source_in`, **`outdoor`**, **`valve`**, `heater` | – | – | `source_volume`, `source_out`, `brine_pressure`, `pv_boost` |
 | Tanks | **`dhw_top`**, **`dhw_target`** | – | – | `dhw_middle`, `dhw_bottom`, `dhw_mode`, `circulation`, `dhw_heater`, `buffer_top`, `buffer_middle`, `buffer_bottom`, `buffer_mode`, `buffer_heater`, `solar_collector`, `solar_pump` |
-| Heating circuit | **`hc_flow`**, `hc_pressure`, **`room`**, `room_target`, `program` | – | – | **`hc_return`**, `hc_setpoint`, `hc_mode`, **`hc_pump`**, `hc_volume`, `hc_curve_offset`, `hc_mixer` |
-| Details | `hours`, `starts_total`, `energy_total`, `env_energy`, `heat_total`, `compressor_speed` | – | – | `aux_hours`, `evap_temp`, `cond_temp`, `suction_temp`, `hot_gas`, `liquid_temp`, `low_pressure`, `high_pressure`, `eev`, `superheat`, `subcooling`, `cutout_high_pressure`, `cutout_low_pressure`, `cutout_temperature` |
+| Heating circuit | **`hc_flow`**, `hc_setpoint`, **`hc_pump`**, `hc_volume`, `hc_pressure`, **`room`**, `room_target`, `program` | – | **`hc_return`** | `hc_mode`, `hc_curve_offset`, `hc_mixer` |
+| Details | `hours`, `starts_total`, `energy_total`, `env_energy`, `heat_total`, `compressor_speed`, `evap_temp`, `cond_temp`, `suction_temp`, `hot_gas`, `liquid_temp`, `eev` | – | – | `aux_hours`, `low_pressure`, `high_pressure`, `superheat`, `subcooling`, `cutout_high_pressure`, `cutout_low_pressure`, `cutout_temperature` |
 
 Not mapped:
 
-- `power`: Left out on purpose: the Home Comfort API offers kWh counters, which are no instantaneous power.
-- `heat`: Left out on purpose: without an instantaneous power and flow rate there is no live heat output.
+- `hc_return`: The integration reports no return temperature per heating circuit; the heat pump return (TC0) is the card's return.
 
 ### lambda
 
