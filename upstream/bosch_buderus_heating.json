@@ -1,12 +1,11 @@
 {
   "preset": "bosch_buderus_heating",
   "reviewed": {
-    "date": "2026-11-02",
-    "version": "v0.8.3"
+    "date": "2026-11-13",
+    "version": "v0.9.0"
   },
   "unmapped": {
-    "power": "Left out on purpose: the Home Comfort API offers kWh counters, which are no instantaneous power.",
-    "heat": "Left out on purpose: without an instantaneous power and flow rate there is no live heat output."
+    "hc_return": "The integration reports no return temperature per heating circuit; the heat pump return (TC0) is the card's return."
   },
   "sources": [
     {
@@ -26,6 +25,10 @@
         "custom_components/bosch_buderus_heating/read_contracts.py",
         "custom_components/bosch_buderus_heating/energy_contracts.py",
         "custom_components/bosch_buderus_heating/unit_contracts.py",
+        "custom_components/bosch_buderus_heating/local_only.py",
+        "custom_components/bosch_buderus_heating/local_only_sensor.py",
+        "custom_components/bosch_buderus_heating/local_plant_view.py",
+        "custom_components/bosch_buderus_heating/observations.py",
         "custom_components/bosch_buderus_heating/strings.json",
         "custom_components/bosch_buderus_heating/translations/en.json",
         "custom_components/bosch_buderus_heating/translations/de.json"

@@ -1514,6 +1514,7 @@
     check(!C._resolve(cfg, hassOf(toStates(fixture.states), foreign)).ready, 'PointT rejects foreign integration identities');
     const gas = structuredClone(fixture);
     delete gas.registry[byKey('heatSources:compressor:status')];
+    delete gas.registry[byKey('heatSources:hs1:heatPumpType')];
     check(!C._resolve(cfg, hassOf(toStates(gas.states), gas.registry)).ready, 'PointT temperatures alone do not identify a heat pump');
     const cascade = structuredClone(fixture);
     cascade.states['sensor.second_heatpump'] = { state: 'air_water', attributes: {} };
@@ -1559,6 +1560,169 @@
     editor._changed({ ...editor._form.data, controls: [] });
     check(Array.isArray(editor._config.controls) && !editor._config.controls.length, 'PointT editor can hide all automatic controls');
     editor.remove();
+  }
+
+  // Home Comfort 0.9.0 with the local access: readings of resource paths in the local-only and the cloud form, detection
+  // without the cloud, TC1 as the heat pump's flow and the supply temperature behind the buffer at the circuit.
+  {
+    const cfg = { preset: 'bosch_buderus_heating', power_sources: 'manual' };
+    const setupOf = (name) => setups.find((s) => s.name === name);
+    const both = setupOf('Bosch/Buderus Home Comfort (cloud and local)'); const alone = setupOf('Bosch/Buderus Home Comfort (local only)');
+    const fixtureOf = (setup, scenario = 'heat') => ({ states: setup.states(scenario), registry: setup.registry });
+    const idOf = (f, key, domain = 'sensor') => Object.keys(f.registry).find((id) => id.startsWith(`${domain}.`)
+      && f.registry[id].unique_id.slice(f.registry[id].unique_id.indexOf(':') + 1) === key);
+    const resolve = (f, extra = {}) => C._resolve({ ...cfg, ...extra }, hassOf(toStates(f.states), f.registry));
+    const L = (path) => `local_only:${path}`;
+    const f = fixtureOf(both); const r = resolve(f);
+    check(both && alone && r.ready, 'Home Comfort with the local access resolves');
+    check(r.entities.mode === idOf(f, 'heatSources:compressor:status'), 'Home Comfort keeps the cloud compressor status as the mode');
+    check(r.entities.status === idOf(f, L('heatSources:hs1:refrigerant:status')), 'Home Comfort refrigerant circuit status is the status');
+    check(r.entities.flow === idOf(f, L('heatSources:additionalHeater:flowTemp')), 'Home Comfort TC1 is the heat pump flow');
+    check(r.entities.hc_flow === idOf(f, 'gateway:supply_temperature'), 'Home Comfort supply temperature behind the buffer is the circuit flow');
+    check(r.entities.return === idOf(f, 'gateway:return_temperature'), 'Home Comfort return stays TC0');
+    check(r.entities.volume === idOf(f, L('heatSources:hs1:pumpVolumeFlow')), 'Home Comfort primary flow rate PC0 is the volume');
+    check(r.entities.hc_pump === idOf(f, L('heatingCircuits:hc1:pumpStatus')), 'Home Comfort circuit pump PC1');
+    check(r.entities.hc_setpoint === idOf(f, L('heatSources:currentSupplySetpoint')), 'Home Comfort current supply setpoint at circuit 1');
+    check(JSON.stringify(r.sums.power) === JSON.stringify([idOf(f, L('heatSources:compressor:powerElecActual')), idOf(f, L('heatSources:eHeater:powerElecActual'))]),
+      'Home Comfort power is compressor plus auxiliary heater');
+    check(r.entities.heater === idOf(f, L('heatSources:eHeater:powerElecActual')), 'Home Comfort auxiliary heater from its electric power');
+    check(r.entities.fan_speed === idOf(f, L('heatSources:hs1:oduFanSpeed')) && r.entities.source_in === idOf(f, L('heatSources:sensors:evaporatorTemp_tl2')),
+      'Home Comfort fan speed PL3 and air intake TL2');
+    const noSignals = structuredClone(f);
+    Object.keys(noSignals.registry).filter((id) => noSignals.registry[id].unique_id.includes(':local_only:signals:')).forEach((id) => { delete noSignals.registry[id]; });
+    const pathsOnly = resolve(noSignals);
+    check(pathsOnly.entities.compressor === idOf(f, L('heatSources:hs1:refrigerant:compressorActualSpeed')), 'Home Comfort without the signal the compressor runs with its speed');
+    check(pathsOnly.entities.flow === r.entities.flow && pathsOnly.entities.volume === r.entities.volume && pathsOnly.sums.power?.length === 2
+      && !pathsOnly.entities.valve && !pathsOnly.entities.heat && !pathsOnly.entities.hc_volume, 'Home Comfort resource paths do not depend on the signals');
+    check(r.entities.compressor_speed === idOf(f, 'gateway:modulation'), 'Home Comfort compressor speed stays the modulation');
+    check(r.entities.hot_gas === idOf(f, L('heatSources:hs1:refrigerant:hotGasTemp'))
+      && r.entities.suction_temp === idOf(f, L('heatSources:hs1:refrigerant:suctionGasTemp'))
+      && r.entities.liquid_temp === idOf(f, L('heatSources:hs1:refrigerant:liquidPipeHeatingTemp'))
+      && r.entities.evap_temp === idOf(f, L('heatSources:hs1:refrigerant:lowPressureTemp'))
+      && r.entities.cond_temp === idOf(f, L('heatSources:hs1:refrigerant:highPressureTemp')), 'Home Comfort refrigerant circuit temperatures TR6, TR5, TR3, JR0, JR1');
+    check(r.details.includes(idOf(f, L('heatSources:hs1:refrigerant:heatCarrierPumpSpeed'))), 'Home Comfort PC0 speed is an additional value');
+    const twins = Object.keys(f.registry).filter((id) => /:source_(?:local|cloud)$/.test(f.registry[id].unique_id));
+    check(twins.length === 2 && !Object.values(r.entities).some((id) => twins.includes(id)), 'Home Comfort comparison copies of paired readings are never mapped');
+    check(r.controls.length === 3 && r.presetErrors.length === 1, 'Home Comfort with the local access keeps controls and the fault chip of the cloud');
+    const second = resolve(f, { index: { hc: 2 } });
+    check(!second.entities.hc_flow && !second.entities.hc_setpoint, 'Home Comfort supply temperature and setpoint are not assigned to circuit 2');
+    const multi = resolve(f, { hc_count: 2 });
+    check(!multi.entities.hc2_flow && !multi.entities.hc2_setpoint && !multi.entities.hc2_pump, 'Home Comfort second circuit takes no values of the first');
+    const own = structuredClone(f);
+    own.states['sensor.own_circuit_flow'] = ['31', '°C'];
+    own.registry['sensor.own_circuit_flow'] = { platform: 'bosch_buderus_heating', unique_id: 'demo-pointt:heatingCircuits:hc1:actualSupplyTemperature' };
+    check(resolve(own).entities.hc_flow === 'sensor.own_circuit_flow', 'Home Comfort a circuit flow sensor of its own wins over the common supply');
+    const late = structuredClone(f); late.states[idOf(f, L('heatSources:additionalHeater:flowTemp'))] = 'unknown';
+    const lateResult = resolve(late);
+    check(lateResult.entities.flow === r.entities.flow && lateResult.entities.hc_flow === r.entities.hc_flow,
+      'Home Comfort an unknown TC1 does not move the supply temperature to the heat pump flow');
+    const noCompressorPower = structuredClone(f); delete noCompressorPower.registry[idOf(f, L('heatSources:compressor:powerElecActual'))];
+    const partial = resolve(noCompressorPower);
+    check(!partial.entities.power && !partial.sums.power && partial.entities.heater, 'Home Comfort heater power alone is no power of the heat pump');
+    const disabled = structuredClone(f); disabled.registry[idOf(f, L('heatSources:additionalHeater:flowTemp'))].disabled_by = 'user';
+    check(resolve(disabled).entities.flow === idOf(f, 'gateway:supply_temperature') && !resolve(disabled).entities.hc_flow,
+      'Home Comfort without TC1 the supply temperature stays the heat pump flow');
+    // A path the cloud offers keeps the cloud's key (the integration hands the local-only entity over): same mapping.
+    const handed = structuredClone(f);
+    Object.values(handed.registry).forEach((e) => { e.unique_id = e.unique_id.replace(/:local_only:(?!signals:)/, ':'); });
+    const handedResult = resolve(handed);
+    check(JSON.stringify(handedResult.entities) === JSON.stringify(r.entities) && JSON.stringify(handedResult.sums) === JSON.stringify(r.sums),
+      'Home Comfort cloud form of the same paths maps the same entities');
+
+    // The local access alone: no compressor status, no controls and no fault chip.
+    const a = fixtureOf(alone); const ra = resolve(a);
+    const compactAlone = Object.fromEntries(Object.entries(a.registry).map(([id, { unique_id, ...e }]) => [id, e]));
+    check(C.getStubConfig(hassOf(toStates(a.states), compactAlone)).preset === 'bosch_buderus_heating', 'Home Comfort local access alone is offered from the compact registry');
+    check(ra.ready && ra.entities.mode === idOf(a, L('heatSources:hs1:refrigerant:status')), 'Home Comfort local access alone uses the refrigerant circuit status as the mode');
+    check(ra.entities.flow === idOf(a, L('heatSources:additionalHeater:flowTemp')) && ra.entities.hc_flow === idOf(a, 'gateway:supply_temperature')
+      && ra.entities.volume === idOf(a, L('heatSources:hs1:pumpVolumeFlow')) && ra.sums.power?.length === 2, 'Home Comfort local access alone maps the local readings');
+    check(ra.entities.room === idOf(a, L('heatingCircuits:hc1:roomtemperature')) && ra.entities.room_target === idOf(a, 'heatingCircuits:hc1:currentRoomSetpoint'),
+      'Home Comfort local access alone: local-only room temperature, paired room target');
+    check(ra.entities.outdoor === idOf(a, 'gateway:outdoor_temperature') && ra.tiles.energy?.total === idOf(a, 'gateway:total_electricity'),
+      'Home Comfort local access alone keeps the paired readings and counters');
+    check(!ra.controls.length && !ra.presetErrors.length, 'Home Comfort local access alone offers no controls and no fault chip');
+    const statusOnly = structuredClone(a); delete statusOnly.registry[idOf(a, 'heatSources:hs1:heatPumpType')];
+    check(resolve(statusOnly).ready, 'Home Comfort the refrigerant circuit status alone anchors a heat pump');
+    const typeOnly = structuredClone(a); delete typeOnly.registry[idOf(a, L('heatSources:hs1:refrigerant:status'))];
+    check(resolve(typeOnly).ready && !resolve(typeOnly).entities.mode, 'Home Comfort the heat pump type alone anchors a heat pump');
+    const neither = structuredClone(typeOnly); delete neither.registry[idOf(a, 'heatSources:hs1:heatPumpType')];
+    check(!resolve(neither).ready, 'Home Comfort local temperatures alone do not identify a heat pump');
+    const cascade = structuredClone(a);
+    cascade.registry['sensor.second_heat_pump'] = { platform: 'bosch_buderus_heating', unique_id: 'demo-pointt:local_only:heatSources:hs2:heatPumpType' };
+    cascade.states['sensor.second_heat_pump'] = 'air_water';
+    check(!resolve(cascade).ready, 'Home Comfort local cascade requires manual mappings');
+    // A cloud gateway next to a gateway with the local access alone: the cloud one as before, the other one when selected.
+    const cloudGateway = pointtSetup('heat', 'cloud-gateway', 'cloud_');
+    const localGateway = pointtSetup('heat', 'local-gateway', 'local_', 'local');
+    const pair = { states: { ...cloudGateway.states, ...localGateway.states }, registry: { ...cloudGateway.registry, ...localGateway.registry } };
+    const unselected = resolve(pair);
+    check(unselected.ready && Object.values(unselected.entities).every((id) => id.includes('cloud_')), 'Home Comfort a compressor status still selects its gateway');
+    const chosen = resolve(pair, { device: 'device-local-gateway' });
+    check(chosen.ready && Object.values(chosen.entities).every((id) => id.includes('local_')), 'Home Comfort a selected gateway with the local access alone resolves');
+
+    // Operating states drawn from the local readings.
+    const flowOf = (setup, scenario, change = () => {}, extra = {}) => {
+      const fx = fixtureOf(setup, scenario); const st = toStates(fx.states); change(st, fx);
+      const card = mount({ ...cfg, buffer: true, primary_pump: true, ...extra }, hassOf(st, fx.registry));
+      const model = card._flowModel(); const failed = card._failed; card.remove();
+      return { ...model, failed };
+    };
+    for (const setup of [both, alone]) {
+      const tag = setup === both ? 'cloud and local' : 'local only';
+      const heat = flowOf(setup, 'heat'); const dhw = flowOf(setup, 'dhw'); const defrost = flowOf(setup, 'defrost'); const idle = flowOf(setup, 'idle');
+      check(!heat.failed && heat.running && heat.hp === 'heating' && heat.toHeat && !heat.toDhw, `Home Comfort ${tag}: heating`);
+      check(dhw.running && dhw.hp === 'dhw' && dhw.toDhw, `Home Comfort ${tag}: hot water`);
+      check(defrost.defrost && defrost.hp === 'defrost', `Home Comfort ${tag}: defrost`);
+      check(!idle.running && idle.hp === 'idle' && !idle.loop, `Home Comfort ${tag}: standby`);
+    }
+    const passive = flowOf(alone, 'heat', (st, fx) => { st[idOf(fx, L('heatSources:hs1:refrigerant:status'))].state = 'passive_defrost'; });
+    check(passive.defrost && passive.hp === 'defrost', 'Home Comfort passive defrost is a defrost');
+    const startup = flowOf(alone, 'idle', (st, fx) => { st[idOf(fx, L('heatSources:hs1:refrigerant:status'))].state = 'startup'; });
+    check(startup.hp === 'idle' && !startup.running, 'Home Comfort a starting refrigerant circuit is not yet heating');
+    const lagging = flowOf(both, 'heat', (st, fx) => { st[idOf(fx, 'heatSources:compressor:status')].state = 'off'; });
+    check(lagging.running && lagging.hp === 'heating', 'Home Comfort a running compressor wins over a cloud status that still reports off');
+    // PC0 below its measuring range reports unknown: the primary pump then follows the loop, no zero flow is drawn.
+    const below = flowOf(both, 'heat', (st, fx) => {
+      const id = idOf(fx, L('heatSources:hs1:pumpVolumeFlow'));
+      st[id] = { ...st[id], state: 'unknown', attributes: { ...st[id].attributes, measuring_range: 'below' } };
+    });
+    check(!below.failed && Number.isNaN(below.vol) && below.primaryPump === true && below.toHeat, 'Home Comfort PC0 below its measuring range keeps the primary pump running');
+    const standing = flowOf(both, 'idle');
+    check(standing.vol === 0 && standing.primaryPump === false, 'Home Comfort PC0 at 0 l/h stops the primary pump');
+
+    // Controller signals: compressor, VW1, heat output, PC1, setpoint, VR1, and PC0 relay and VR4 in the details.
+    const sig = (name) => idOf(f, L(`signals:${name}`));
+    check(r.entities.compressor === sig('SRC.CUHP.HMI.CompressorActive'), 'Home Comfort compressor signal');
+    check(r.entities.valve === sig('SRC.CUHP.HP1.DHWValve'), 'Home Comfort hot water valve VW1');
+    check(r.entities.heat === sig('SRC.CUHP.HP1.CompressorPower'), 'Home Comfort heat output of the compressor');
+    check(r.entities.hc_volume === sig('SRC.HC1.FlowCtrl.PumpVolumeFlow') && !second.entities.hc_volume && !multi.entities.hc2_volume,
+      'Home Comfort circuit flow rate PC1 at circuit 1 only');
+    check(r.entities.eev === sig('SRC.CUHP.HP1.ExpansionValveActual'), 'Home Comfort expansion valve VR1');
+    check(r.details.includes(sig('SRC.CUHP.HP1.CHPumpRelay')) && r.details.includes(sig('SRC.CUHP.HP1.FourwayValve')), 'Home Comfort PC0 relay and VR4 are additional values');
+    check(r.entities.hc_setpoint === idOf(f, L('heatSources:currentSupplySetpoint')) && pathsOnly.entities.hc_setpoint === r.entities.hc_setpoint,
+      'Home Comfort the supply setpoint path wins over its signal');
+    const setpointSignal = structuredClone(f); delete setpointSignal.registry[idOf(f, L('heatSources:currentSupplySetpoint'))];
+    check(resolve(setpointSignal).entities.hc_setpoint === sig('SC.HC1.FlowTempSetp'), 'Home Comfort supply setpoint signal of circuit 1 as the second source');
+    check(r.entities.flow !== sig('SRC.IntFlowTemp') && r.entities.volume !== sig('SRC.SystemPumpVolumeFlow'), 'Home Comfort disabled second sources are not used');
+    const enabledSecond = structuredClone(f);
+    delete enabledSecond.registry[idOf(f, L('heatSources:additionalHeater:flowTemp'))]; delete enabledSecond.registry[idOf(f, L('heatSources:hs1:pumpVolumeFlow'))];
+    delete enabledSecond.registry[sig('SRC.IntFlowTemp')].disabled_by; delete enabledSecond.registry[sig('SRC.SystemPumpVolumeFlow')].disabled_by;
+    const second2 = resolve(enabledSecond);
+    check(second2.entities.flow === sig('SRC.IntFlowTemp') && second2.entities.hc_flow === idOf(f, 'gateway:supply_temperature')
+      && second2.entities.volume === sig('SRC.SystemPumpVolumeFlow'), 'Home Comfort enabled second sources stand in for missing paths');
+    // A signal the gateway stops listing turns unavailable: the power still says the heat pump runs.
+    const dropped = flowOf(both, 'heat', (st, fx) => {
+      ['SRC.CUHP.HMI.CompressorActive', 'SRC.CUHP.HP1.DHWValve', 'SRC.CUHP.HP1.CompressorPower'].forEach((name) => { st[idOf(fx, L(`signals:${name}`))].state = 'unavailable'; });
+    });
+    check(!dropped.failed && dropped.running && dropped.hp === 'heating', 'Home Comfort unavailable signals do not stop a heat pump that draws power');
+    const dhwValve = flowOf(alone, 'dhw');
+    check(dhwValve.valveDhw && dhwValve.toDhw, 'Home Comfort VW1 on means hot water');
+    const cop = mount({ ...cfg, buffer: true, primary_pump: true }, hassOf(toStates(f.states), f.registry));
+    check(cop.shadowRoot.getElementById('t-hp-cop').textContent !== '', 'Home Comfort live COP from heat output and power');
+    cop.remove();
+    const shown = mount({ ...cfg, buffer: true, primary_pump: true, tiles: ['power', 'volume'] }, hassOf(toStates(f.states), f.registry));
+    check(ok(shown) && /910/.test(shown.shadowRoot.textContent.replace(/\D+/g, ' ')), 'Home Comfort the compressor power is shown');
+    shown.remove();
   }
 
   // PointT registry loading is local, shared, bounded and isolated by HA connection.
