@@ -1,8 +1,8 @@
 {
   "preset": "bosch_buderus_heating",
   "reviewed": {
-    "date": "2026-11-13",
-    "version": "v0.9.0"
+    "date": "2026-11-14",
+    "version": "v0.9.1"
   },
   "unmapped": {
     "hc_return": "The integration reports no return temperature per heating circuit; the heat pump return (TC0) is the card's return."
@@ -28,6 +28,9 @@
         "custom_components/bosch_buderus_heating/local_only.py",
         "custom_components/bosch_buderus_heating/local_only_sensor.py",
         "custom_components/bosch_buderus_heating/local_plant_view.py",
+        "custom_components/bosch_buderus_heating/heat_generator_models.json",
+        "custom_components/bosch_buderus_heating/heat_generator_sensor.py",
+        "custom_components/bosch_buderus_heating/heat_generator.py",
         "custom_components/bosch_buderus_heating/observations.py",
         "custom_components/bosch_buderus_heating/strings.json",
         "custom_components/bosch_buderus_heating/translations/en.json",

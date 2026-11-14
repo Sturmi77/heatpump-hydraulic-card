@@ -46,7 +46,7 @@ const parseReport =(text, sets = []) => {
   const storage = Object.fromEntries((head.Storage || '').split(' · ').map((part, n) => (n === 0 ? ['storage', part] : part.split(': '))));
   if (storage.storage === 'combined') config.storage = 'combined';
   if (['fresh_water', 'tank_in_tank'].includes(storage['hot water'])) config.dhw_type = storage['hot water'];
-  if (storage['parallel buffer'] === 'yes, configured') config.buffer = true;
+  if (['yes, configured', 'yes, from the heat generator'].includes(storage['parallel buffer'])) config.buffer = true;
   if (storage['series buffer']?.startsWith('yes')) config.series_buffer = true;
   if (storage['series buffer'] === 'yes, no bypass valve') config.series_bypass = false;
   if (storage['primary pump']) config.primary_pump = storage['primary pump'].startsWith('yes');
