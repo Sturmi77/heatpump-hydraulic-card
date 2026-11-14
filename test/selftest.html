@@ -5858,6 +5858,11 @@
       const vl = box('t-vl'); const hp = box('hp-box'); const bx = box('.boiler-box'); const t = lc.shadowRoot.getElementById('t-vl');
       check(vl.x + vl.width <= bx.x + 0.5 && vl.x > hp.x + hp.width - 20 && !t.querySelector('.pre') && t.textContent === '36.0 °C',
         `with a boiler the flow label ends in front of the boiler box, without its prefix${extra.primary_pump ? ', also with a primary pump' : ''} (${Math.round(vl.x)}–${Math.round(vl.x + vl.width)}, box from ${bx.x}, "${t.textContent}")`);
+      // Forum, 13 November: on a phone the larger text reaches over the heat pump block, which covered it. The label comes after
+      // the block, so it is painted on top with its halo.
+      const hpBox = lc.shadowRoot.getElementById('hp-box');
+      check(!!(hpBox.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING) && lc.shadowRoot.querySelectorAll('#t-vl').length === 1,
+        `with a boiler the flow label is drawn above the heat pump block${extra.primary_pump ? ', also with a primary pump' : ''}`);
       lc.remove();
     }
 
