@@ -1,6 +1,6 @@
 # THZ preset (Stiebel Eltron LWZ, Tecalor THZ; serial interface)
 
-Source: the [THZ integration](https://github.com/bigbadoooff/thz) (HACS, domain `thz`, GPL v3, based on the FHEM module 00_THZ.pm by Immi), release 0.7.2-beta.1. It reads the heat pump directly over its serial service interface (USB or ser2net), without an ISG. The preset is derived from the integration source: the register maps per firmware (`register_maps/`), `entity_translations.py`, `value_maps.py` and `strings.json`. It was first built from the source only; the additions marked "real installation" below come from a THZ on firmware 5.x read through the integration (entity registry and live states).
+Source: the [THZ integration](https://github.com/bigbadoooff/thz) (HACS, domain `thz`, GPL v3, based on the FHEM module 00_THZ.pm by Immi), release 0.7.2-beta.1. It reads the heat pump directly over its serial service interface (USB or ser2net), without an ISG. The preset is derived from the integration source: the register maps per firmware (`register_maps/`), `entity_translations.py`, `value_maps.py` and `strings.json`. It was first built from the source only; the additions marked "real installation" below come from a THZ on firmware 7.59 read through the integration (entity registry and live states).
 
 Units: the integral units LWZ 303/403/404/504 and THZ 303/304/403/404/504 (also SOL), and the LWZ 5/8 CS family. Heat pumps with an ISG and the `stiebel_eltron_isg` integration use the [`stiebel_isg`](stiebel-isg.md) preset instead.
 
