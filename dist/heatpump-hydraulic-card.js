@@ -1329,8 +1329,13 @@ const HFC_PRESETS = {
   // DHW heating flag; cooling is not shown.
   thz: {
     name: 'Stiebel Eltron LWZ / Tecalor THZ (serial, THZ integration)',
-    // The integral units have no outdoor unit like the WPL-A; the split units (LWZ 5/8 CS) vary.
+    // Integral units for indoor installation, the LWZ 5/8 CS as well (owner of an LWZ 5 CS Premium): no outdoor unit like the WPL-A.
     unit_style: 'generic',
+    // One pump in the unit, in front of the diverter valve, serves the heating circuit and hot water (owner of an LWZ 5 CS Premium):
+    // the circuit pump flag is that pump, drawn as the primary pump; the circuit has none of its own. It turns with the flow rate.
+    shared_pump: true,
+    // The one pump is shared, so the editor does not ask about it. A buffer depends on the hydraulics: the editor still asks.
+    defaults: () => ({ primary_pump: true }),
     dynamic: true,
     auto_circuits: false,
     detect: (ctx) => (['outside_temp', 'flow_temp', 'dhw_temp'].some((tk) => ctx.key('thz', 'sensor', tk)) ? '' : undefined),

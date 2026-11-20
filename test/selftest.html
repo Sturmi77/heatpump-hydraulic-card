@@ -3522,6 +3522,28 @@
     };
     const locked = await lock('on'); const free = await lock('off');
     check(locked === 'on:blocked' && free === 'off:', `THZ: evu_release on shows the utility lock, off shows nothing (${locked} / ${free})`);
+    // One pump in front of the diverter valve serves the circuit and hot water (owner of an LWZ 5 CS Premium): drawn as the primary
+    // pump, turning with the flow rate; the circuit has no pump of its own. No buffer and no pump question in the editor.
+    const pump = async (scen) => {
+      const card = mount(config, hass(scen)); await wait(20);
+      const sr = card.shadowRoot; const m = card._flowModel();
+      const out = { primary: !!sr.getElementById('impeller-primary'), primaryOn: !!sr.getElementById('impeller-primary')?.classList.contains('on'),
+        circuit: !!sr.getElementById('impeller'), hc: !!m.pipes['hc-vl'], dhw: m.toDhw };
+      card.remove(); return out;
+    };
+    const ph = await pump('heat'); const pd = await pump('dhw'); const pi = await pump('idle');
+    check(ph.primary && ph.primaryOn && !ph.circuit && ph.hc && pd.primaryOn && pd.dhw && !pd.hc && !pi.primaryOn,
+      `THZ: the one pump is the primary pump for heating and hot water, the circuit has none (${JSON.stringify([ph, pd, pi])})`);
+    // A buffer depends on the hydraulics, so the editor asks about it; after "no buffer" the shared pump needs no question.
+    const qs = (cfg) => C._layoutQuestions(cfg, hass('heat'), C._resolve(cfg, hass('heat'))).map((q) => `${q.id}${q.answered ? '=' : ''}`).join();
+    check(qs(config) === 'buffer' && qs({ ...config, buffer: false }) === 'buffer=',
+      `THZ: the buffer is asked, the shared pump is not (${qs(config)} / ${qs({ ...config, buffer: false })})`);
+    const withBuffer = await (async () => {
+      const card = mount({ ...config, buffer: true }, hass('heat')); await wait(20);
+      const out = { primary: !!card.shadowRoot.getElementById('impeller-primary'), circuit: !!card.shadowRoot.getElementById('impeller') };
+      card.remove(); return out;
+    })();
+    check(withBuffer.primary && withBuffer.circuit, `THZ with a buffer: the unit's pump in front of the valve, the circuit keeps its pump (${JSON.stringify(withBuffer)})`);
   }
 
   // 13e. PV surplus mode (pv_boost): chip, heating periods of the timeline, share tile, Lambda preset

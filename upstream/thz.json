@@ -8,7 +8,7 @@
   "unmapped": {
     "buffer_top": "The integral units have no buffer temperature in their read map.",
     "circulation": "The read map has no circulation pump output. dhw_pump is the unit's one pump while the diverter valve sends the flow into the DHW tank (confirmed on a real installation), not a circulation pump.",
-    "hc_volume": "Two sensors share the translation key flow_rate: block pxx0A033B (heat pump flow, used for volume) and block pxxFB offset 55 (heating circuit flow). The display registry carries no unique_id, so they cannot be told apart until the integration gives them separate keys.",
+    "hc_volume": "No flow sensor of the heating circuit alone: block pxxFB offset 110 (flow_rate) is the flow through the unit, also for hot water; block pxx0A033B (also flow_rate) reads implausible values on 7.59 (bigbadoooff/thz#286).",
     "hours": "The integration splits the compressor runtime into heating, hot water and cooling; no total exists. The parts are in the details.",
     "energy_total": "Electricity is counted per use only (electr_hc_*, electr_dhw_*); no total over all uses exists. The parts are in the tiles.",
     "dhw_top": "The integral units have one hot water sensor, low in the tank (owner of a real installation); dhw_temp is mapped as dhw_bottom.",
