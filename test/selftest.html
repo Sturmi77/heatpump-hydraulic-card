@@ -1567,6 +1567,14 @@
     const z0 = C._resolve({ preset: 'airahome' }, hassOf({ ...states }, registry)).entities;
     check(!z0.hc_flow && z0.hc_setpoint === 'sensor.ah_3e2_zone_1_calculated_supply_temperature',
       `Aira: a zone supply of 0.0 °C is not mapped, the calculated setpoint stays (${z0.hc_flow} / ${z0.hc_setpoint})`);
+    // Codex review: the circuit label still shows the calculated target without the flow.
+    const zc = mount({ preset: 'airahome' }, hassOf({ ...states }, registry)); await wait(20);
+    const zText = zc.shadowRoot.getElementById('t-hc')?.textContent || '';
+    check(zText.includes('28.1') && !zText.includes('0.0'), `Aira: without the zone flow the circuit label shows the target alone (${zText})`);
+    zc.remove();
+    // Codex review: the same missing reading in °F is 32 °F.
+    states['sensor.ah_3e2_zone_1_supply_temperature'] = { entity_id: 'sensor.ah_3e2_zone_1_supply_temperature', state: '32', attributes: { unit_of_measurement: '°F' } };
+    check(!C._resolve({ preset: 'airahome' }, hassOf({ ...states }, registry)).entities.hc_flow, 'Aira: a zone supply of 32 °F is not mapped either');
     states['sensor.ah_3e2_zone_1_supply_temperature'] = { entity_id: 'sensor.ah_3e2_zone_1_supply_temperature', state: '0.4', attributes: { unit_of_measurement: '°C' } };
     check(C._resolve({ preset: 'airahome' }, hassOf({ ...states }, registry)).entities.hc_flow === 'sensor.ah_3e2_zone_1_supply_temperature',
       'Aira: a zone supply that reports a value other than 0.0 °C is mapped');

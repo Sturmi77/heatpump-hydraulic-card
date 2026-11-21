@@ -1040,7 +1040,9 @@ const HFC_PRESETS = {
       const n = i.hc;
       // A zone without its own supply sensor reads 0.0 °C all the time (#417): only a number other than 0 is a circuit flow.
       const zoneFlow = s(`zone_${n}_supply_temp`);
-      const zoneValue = parseFloat(ctx.state(zoneFlow));
+      // In °C: a zone sensor switched to °F reports the same missing reading as 32 °F (Codex review).
+      const zoneRaw = parseFloat(ctx.state(zoneFlow));
+      const zoneValue = /f/i.test(String(ctx.unit(zoneFlow) || '')) ? Math.round(((zoneRaw - 32) * 5) / 9 * 10) / 10 : zoneRaw;
       return {
         mode: s('active_state'),
         compressor: s('ou_compressor_speed'),
@@ -7624,7 +7626,8 @@ class HeatpumpFlowCard extends HTMLElement {
           }
           this._txt(`t-hc${s}`, dewKnown ? `${i.flow_short} ${this._t(dewFlow)} · ${i.dew_point} ${this._t(dew)}`
             : showFlow ? `${this._t(tHc)}${Number.isFinite(set) ? ` · ${i.target} ${this._fmt(set)}` : ''}`
-              : !this._hcFlowLabel && Number.isFinite(set) ? `${i.target} ${this._fmt(set)}` : '');
+              // Without a flow value (hc_flow_label: false, or no sensor such as an Aira zone reading 0.0 °C, #417) the target stands alone.
+              : Number.isFinite(set) ? `${i.target} ${this._fmt(set)}` : '');
         }
         [`t-hc${s}`, `t-hc-now${s}`].forEach((id) => {
           const label = this._$(id); if (!label) return;
