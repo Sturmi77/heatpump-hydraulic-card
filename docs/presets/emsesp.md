@@ -20,7 +20,7 @@ What you get:
 - heat carrier flow and return (TC1/TC0, falling back to the boiler flow and return)
 - flow rate PC0 (`pc0flow` / `boiler_flow_pc0`)
 - air inlet (TL2), or brine inlet and outlet for ground source heat pumps (`source_type: brine`)
-- auxiliary heater status as the backup heater
+- auxiliary heater status as the backup heater: the sensor reports what the heater does (heating, hot water, defrost …, in the EMS-ESP language), and every state but off lights it, also when it covers a defrost (#224)
 - outdoor temperature
 - DHW temperature, target and circulation
 - circuit 1 flow: the mixer module flow, or with TC1 the boiler's current flow temperature (T0, flow to the heating side)
