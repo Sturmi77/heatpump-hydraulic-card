@@ -1,1 +1,1 @@
-- Preset `airahome`: a zone supply temperature that reads 0.0 °C all the time (a zone without its own supply sensor) is no longer drawn as the circuit flow; the value appears within a minute once the sensor reports (#417).
+- Preset `airahome`: a zone supply temperature that reads 0.0 °C all the time (a zone without its own supply sensor) is no longer drawn as the circuit flow; the value appears within a minute once the sensor reports (#417). A circuit with a target but no flow value now shows the target alone at the circuit.
