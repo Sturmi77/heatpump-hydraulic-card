@@ -1,0 +1,1 @@
+- Lithuanian translation of the card, by Egidijus-hub (#461). The editor still shows English in Lithuanian. When the status under the heat pump wraps into two lines, the COP keeps its distance from the power line.

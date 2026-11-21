@@ -6783,8 +6783,9 @@
     let threw = false; try { new C().setConfig({ narrow_focus: 'yes' }); } catch (e) { threw = /narrow_focus/.test(e.message); }
     check(threw, 'narrow_focus: a value other than true or false is rejected');
     const keysOf = (n) => (n.schema ? n.schema.flatMap(keysOf) : [n.name]);
-    check(C._formSchema({}).schema.flatMap(keysOf).includes('narrow_focus') && Object.keys(HFC_LANGUAGES).every((l) => HFC_EDITOR[l]?.narrow_focus),
-      'narrow_focus: switch in the editor, labelled in every built-in language');
+    // A language may start with the card texts only (TRANSLATING.md); every language with editor texts labels the switch.
+    check(C._formSchema({}).schema.flatMap(keysOf).includes('narrow_focus') && Object.keys(HFC_LANGUAGES).filter((l) => HFC_EDITOR[l]).every((l) => HFC_EDITOR[l].narrow_focus),
+      'narrow_focus: switch in the editor, labelled in every built-in language with editor texts');
 
     // option off: nothing of the focus view is drawn
     let off = await at(lambda, 400);
