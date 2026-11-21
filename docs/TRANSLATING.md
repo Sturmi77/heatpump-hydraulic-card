@@ -1,6 +1,6 @@
 # Translating the card
 
-The card ships with English and German. More languages are welcome, and a translation does not have to be complete: every text that is missing falls back to English, so a first pull request can cover the most visible texts and others can complete it later.
+The card ships with English, German, Polish, Slovak, Czech and Dutch. More languages are welcome, and a translation does not have to be complete: every text that is missing falls back to English, so a first pull request can cover the most visible texts and others can complete it later.
 
 There are two different things people call "translating":
 
@@ -14,8 +14,8 @@ All of it lives in [`dist/heatpump-hydraulic-card.js`](../dist/heatpump-hydrauli
 | Constant | Content | Size today |
 |---|---|---|
 | `HFC_LANGUAGES` | The name of the language, written in that language (`pl: 'Polski'`). It appears in the language list of the editor. | one line |
-| `HFC_I18N` | Texts on the card: titles, modes, tile names, tooltips and the detail drawer. | 149 texts |
-| `HFC_EDITOR` | Labels and help texts of the visual editor. | 167 texts |
+| `HFC_I18N` | Texts on the card: titles, modes, tile names, tooltips and the detail drawer. | 197 texts |
+| `HFC_EDITOR` | Labels and help texts of the visual editor. | 283 texts |
 
 The English block (`en`) is the reference. Entity names that come from your integration, the state texts of presets and the values themselves are not part of this and are shown as they are.
 
@@ -25,10 +25,10 @@ The English block (`en`) is the reference. Entity names that come from your inte
 2. Add the language to `HFC_LANGUAGES`, with a lowercase code (`pl`, `nl`, `pt-br`):
 
    ```js
-   const HFC_LANGUAGES = { en: 'English', de: 'Deutsch', pl: 'Polski' };
+   const HFC_LANGUAGES = { en: 'English', de: 'Deutsch', …, nl: 'Nederlands', pt: 'Português' };
    ```
 
-3. Copy the `en` block of `HFC_I18N`, paste it below the `de` block, rename it to your code and translate the texts. Do the same with `HFC_EDITOR`. Texts you do not translate: delete the line, do not leave English text in it. The check below lists what is still missing.
+3. Copy the `en` block of `HFC_I18N`, paste it after the last language block, rename it to your code and translate the texts. Do the same with `HFC_EDITOR`. Texts you do not translate: delete the line, do not leave English text in it. The check below lists what is still missing.
 4. Keep the placeholders exactly as they are in English: `{sources}` in `energy_missing` and `{h}` in `timeline_title` and `timeline_aria`. Words may move around them.
 5. Run the check:
 

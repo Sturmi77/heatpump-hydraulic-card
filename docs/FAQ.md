@@ -54,6 +54,10 @@ controls:
 
 Switches, buttons, scripts, selects, numbers, climate and water heater entities work. The ids above are examples; use the entities of your installation.
 
+## PV covers the heat pump, but the card shows grid power too
+
+`pv`, `battery` and `grid` are the heat pump's own share from each source, not the house's meters. With whole-house sensors the card shows the house values: PV production and the grid import of the whole house flow into the heat pump. Remove `pv`, `battery` and `grid` from the card configuration: the card then takes the sources from the Energy dashboard (it needs power sensors there, not only kWh counters) and splits the heat pump's `power` by the house's current supply mix, marked with ≈. The split is proportional: while the house as a whole imports from the grid, part of the heat pump's power shows as grid too, even if the PV production alone would cover the heat pump ([Where the numbers come from](../README.md#where-the-numbers-come-from)).
+
 ## The card always shows "ready", although the heat pump runs
 
 `mode` maps a select with the chosen operating mode ("Heat only", "Auto"), not what the heat pump does now. Clear `mode` where the preset needs none, or map a sensor of the current operation; the editor flags a select there ([Troubleshooting](../README.md#troubleshooting)).
