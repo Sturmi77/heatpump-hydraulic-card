@@ -1887,7 +1887,7 @@ const HFC_PRESETS = {
 // Built-in languages: one entry here, one block in HFC_I18N (card texts) and one in HFC_EDITOR (editor labels), see
 // docs/TRANSLATING.md. The value is the name of the language in that language. A language may be translated in part:
 // every missing text falls back to English. `npm run i18n:check` verifies the blocks.
-const HFC_LANGUAGES = { en: 'English', de: 'Deutsch', pl: 'Polski', sk: 'Slovenčina', cs: 'Čeština', nl: 'Nederlands' };
+const HFC_LANGUAGES = { en: 'English', de: 'Deutsch', pl: 'Polski', sk: 'Slovenčina', cs: 'Čeština', nl: 'Nederlands', lt: 'Lietuvių' };
 
 const HFC_I18N = {
   en: {
@@ -2155,6 +2155,49 @@ const HFC_I18N = {
       frost: 'Vorstbeveiliging', circulate: 'Circuleren', off: 'Uit', legionella: 'Legionella', trailing: 'Naloop',
     },
     boiler: 'Ketel', boiler_off: 'Ketel uit', mixer: 'Mengklep', mixer_opening: 'opent', mixer_closing: 'sluit',
+  },
+  lt: {
+    not_found: 'Šio šablono subjektų nerasta. Patikrinkite integraciją ir priešdėlį arba atidarykite kortelės redaktorių.',
+    start: 'Nerasta palaikoma šilumos siurblio integracija. Atidarykite kortelės redaktorių ir pasirinkite šabloną arba susiekite subjektus.', start_link: 'Palaikomos integracijos',
+    title: 'Šilumos siurblys', heat_pump: 'Šilumos siurblys', boiler: 'Boileris', boiler_off: 'Boileris išj.', dhw: 'Karštas vanduo', buffer: 'Akumuliacinė talpa', series_tank: 'Nuosekli talpa', combined_tank: 'Kombinuota talpa', heating_zone: 'Šildymas', fresh_water_station: 'Šviežio vandens stotis', heating_circuit: 'Šildymo kontūras',
+    house: 'Kambariai', room: 'Kambarys', room_target: 'Nustatyta temp.', humidity: 'Drėgmė', dew_point: 'Rasos taškas', dew_margin: 'Rasos taško atsarga', dew_warning: 'kondensato rizika', flow_short: 'Padavimas', comfort_below: 'žemiau nustatytos', comfort_on: 'pasiekta', comfort_above: 'aukščiau nustatytos', running: 'veikia', compressor_off: 'Kompresorius išj.', source_in: 'Oro įsiurbimas', outdoor: 'Lauke',
+    energy_missing: 'Energijos skydelis: nėra galios jutiklio {sources}; vien energijos skaitikliai negali rodyti tiesioginio srauto.',
+    brine_in: 'Sūrymas įėj.', brine_out: 'Sūrymas išėj.', well_in: 'Gręžinys įėj.', well_out: 'Gręžinys išėj.',
+    details: 'Detaliau', sec_operation: 'Veikimas', sec_hydraulic: 'Hidraulinis slėgis', sec_refrigerant: 'Šaltnešio kontūras', sec_cutouts: 'Apsauginiai išjungimai (įvykių sk.)', sec_more: 'Daugiau',
+    diagnostic_copy: 'Kopijuoti diagnostikos ataskaitą', diagnostic_copied: 'Diagnostikos ataskaita nukopijuota', diagnostic_failed: 'Nepavyko nukopijuoti ataskaitos',
+    fullscreen_open: 'Visas ekranas', fullscreen_close: 'Uždaryti visą ekraną',
+    det: {
+      hours: 'Kompresoriaus valandos', starts_total: 'Kompresoriaus paleidimai', aux_hours: 'Teno valandos', energy_total: 'Elektra iš viso',
+      cutout_high_pressure: 'Aukšto slėgio išjungimai', cutout_low_pressure: 'Žemo slėgio išjungimai', cutout_temperature: 'Temperatūros išjungimai',
+      env_energy: 'Aplinkos energija iš viso', heat_total: 'Šiluma iš viso', cop_total: 'Bendras COP', compressor_speed: 'Kompresorius', evap_temp: 'Garavimas', cond_temp: 'Kondensacija',
+      suction_temp: 'Įsiurbimo dujos', hot_gas: 'Karštos dujos', liquid_temp: 'Skysčio linija', low_pressure: 'Žemas slėgis', high_pressure: 'Aukštas slėgis',
+      eev: 'Išsiplėtimo vožtuvas', superheat: 'Perkaitimas', subcooling: 'Peršaldymas',
+    },
+    source_flow: 'Šaltinis', target: 'Nust.', curve_offset: 'kreivė', curve_shift: 'poslinkis', mixer: 'Maišytuvas', mixer_opening: 'atsidaro', mixer_closing: 'užsidaro', return_short: 'Grįžt.', error: 'Klaida', circulation: 'Cirk.', circulation_from: 'nuo', circulation_until: 'iki', valve_dhw: 'Karštas vanduo', solar: 'Saulės kolektorius',
+    brine_pressure: 'Sūrymo slėgis', hc_pressure: 'Šildymo slėgis', pressure_normal: 'normalus', pressure_warning: 'įspėjimas', pressure_critical: 'kritinis',
+    timeline_title: 'Paskutinės {h} val.', timeline_gap: 'Nėra duomenų', timeline_aria: 'Veikimo režimas per paskutines {h} val. Rodyklės pasirenka laikotarpį.',
+    run_series: 'ciklas {n} nuo {t}', run_pause: 'pauzė prieš {d}', run_partial: 'prasidėjo anksčiau', run_ongoing: 'vis dar veikia', run_phase: 'veikimo laikotarpis, nėra kompresoriaus duomenų', run_close: 'Uždaryti', run_electricity: 'Elektra', run_heat: 'Šiluma', sec_units: 'Įrenginiai', unit: 'Įrenginys', units_running: '{n} iš {m} įrenginių', unit_off: 'išj.', unit_stale: 'šiluma neatnaujinta', run_flow: 'Padavimas', run_reached: 'pasiekta', run_missed: '{d} K žemiau', run_heater: 'Elektrinis tenas', run_on: 'įj.', run_off: 'išj.',
+    programs: { eco: 'Ekonominis', night: 'Naktis', party: 'Vakarėlis', holiday: 'Atostogos' },
+    sg_ready: { normal: 'SG normalus', blocked: 'Tinklo blokavimas', boost: 'SG padidinimas', forced: 'SG priverstinis' },
+    valve_heating: 'Šildymas', valve_cooling: 'Vėsinimas', bypass: 'Apvadas', pv: 'Saulė', pv_boost: 'Saulės perteklius', battery: 'Baterija', grid: 'Tinklas',
+    stat_cop_heating: 'Šildymo COP šiandien', stat_cop_dhw: 'Karšto vandens COP šiandien', stat_energy: 'Energija šiandien',
+    stat_starts: 'Paleidimai šiandien', stat_spread: 'Skirtumas', stat_volume: 'Srautas', stat_heat: 'Šilumos galia', pv_share: 'Saulė',
+    tiles: {
+      cop_live: 'Momentinis COP', cop_heating: 'Šildymo COP', cop_dhw: 'Karšto vandens COP', cop_cooling: 'Vėsinimo EER', cop_total: 'Bendras COP', spf: 'SPF (metinis)',
+      energy: 'Elektra', env_energy: 'Aplinkos energija', energy_heating: 'Elektra šildymui', energy_dhw: 'Elektra karštam vandeniui', energy_cooling: 'Elektra vėsinimui',
+      energy_defrost: 'Elektra atitirpinimui', energy_standby: 'Budėjimas', energy_aux: 'Elektra tenui',
+      heat: 'Šiluma', heat_heating: 'Šiluma šildymui', heat_dhw: 'Šiluma karštam vandeniui', heat_cooling: 'Vėsinimo energija', heat_defrost: 'Šiluma atitirpinimui',
+      starts: 'Kompresoriaus paleidimai', cycles_heating: 'Šildymo ciklai', cycles_dhw: 'Karšto vandens ciklai', cycles_cooling: 'Vėsinimo ciklai', defrosts: 'Atitirpinimai',
+      hours: 'Kompresoriaus valandos', hours_per_start: 'Trukmė per paleidimą', load_classes: 'Apkrovos klasės 1-5', aux_hours: 'Teno valandos', aux_starts: 'Teno paleidimai',
+      spread: 'Skirtumas', volume: 'Srautas', heat_estimated: 'Šilumos galia', power: 'Galia', heat_live: 'Šilumos galia', compressor_speed: 'Kompresorius',
+      source_spread: 'Šaltinio skirtumas', outdoor: 'Lauke', dhw_top: 'Karšto vandens talpa', room: 'Kambarys', brine_pressure: 'Sūrymo slėgis', hc_pressure: 'Šildymo slėgis', hc_spread: 'Kontūro skirtumas', pv_share: 'Saulės dalis šiandien',
+      pv_boost_share: 'Saulės pertekliaus dalis šildymui', pv_production: 'Saulės gamyba', solar_thermal: 'Saulės kolektorius', cost: 'Kaina', dhw_loss: 'Talpos šilumos nuostoliai',
+    },
+    periods: { now: 'dabar', today: 'šiandien', yesterday: 'vakar', week: 'savaitė', month: 'mėnuo', year: 'metai', total: 'iš viso' },
+    modes: {
+      idle: 'Budėjimas', heating: 'Šildymas', dhw: 'Karštas vanduo', cooling: 'Vėsinimas', defrost: 'Atitirpinimas', blocked: 'Užblokuota',
+      frost: 'Apsauga nuo užšalimo', circulate: 'Cirkuliacija', off: 'Išjungta', legionella: 'Legionelė', trailing: 'Pabaigos prapūtimas',
+    },
   },
 };
 
@@ -4605,7 +4648,8 @@ class HeatpumpFlowCard extends HTMLElement {
     if (long && !wrapped) { el.setAttribute('textLength', 216); el.setAttribute('lengthAdjust', 'spacingAndGlyphs'); } else { el.removeAttribute('textLength'); el.removeAttribute('lengthAdjust'); }
     el.setAttribute('y', wrapped ? 362 : 366);
     this._$('t-hp-power')?.setAttribute('y', wrapped ? 397 : 390);
-    this._$('t-hp-cop')?.setAttribute('y', wrapped ? 416 : 412);
+    // Two status lines push power and COP down; the COP keeps 2 units below the power line (Lithuanian "Karštas vanduo · …", #461).
+    this._$('t-hp-cop')?.setAttribute('y', wrapped ? 420 : 412);
   }
 
   // Target of circuit n with the heating curve shift, e.g. "Target 36 °C (curve 34 °C + 2 K shift)": the target already contains the

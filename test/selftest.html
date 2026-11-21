@@ -4232,12 +4232,19 @@
     // status line
     const status = async (extra, cfg) => {
       const k = await mk('dhw', extra, cfg); const el = k.shadowRoot.getElementById('t-hp-status');
-      const out = { spans: el.querySelectorAll('tspan').length, text: el.textContent, y: el.getAttribute('y'), py: k.shadowRoot.getElementById('t-hp-power').getAttribute('y') }; k.remove(); return out;
+      const p = k.shadowRoot.getElementById('t-hp-power'); const c = k.shadowRoot.getElementById('t-hp-cop');
+      const out = { spans: el.querySelectorAll('tspan').length, text: el.textContent, y: el.getAttribute('y'), py: p.getAttribute('y'), cy: c.getAttribute('y'),
+        gap: c.textContent ? c.getBBox().y - (p.getBBox().y + p.getBBox().height) : null }; k.remove(); return out;
     };
+    // #463: with two status lines the COP keeps the spacing of the one-line layout below the power line (22 units, at least 2 units clear).
+    const copClear = (s) => +s.cy - +s.py >= 22 && (s.gap === null || s.gap >= 2);
     let st = await status({});
     check(st.spans === 0 && st.y === '366' && st.py === '390', `short status stays on one line (${JSON.stringify(st)})`);
     st = await status({ 'sensor.eu08l_hp1_state': 'START COMPRESSOR' }, { language: 'de' });
     check(st.spans === 2 && st.y === '362' && st.py === '397' && st.text.startsWith('Warmwasser') && /Verdichter startet/.test(st.text), `long German status wraps at the separator (${JSON.stringify(st)})`);
+    check(copClear(st), `a wrapped status keeps the COP clear of the power line (${JSON.stringify(st)})`);
+    st = await status({ 'sensor.eu08l_hp1_state': 'REGULATION' }, { language: 'lt' });
+    check(st.text.startsWith('Karštas vanduo') && (st.spans === 0 ? st.cy === '412' : copClear(st)), `Lithuanian hot-water status: power and COP stay apart (${JSON.stringify(st)})`);
     st = await status({ 'sensor.eu08l_hp1_state': 'START COMPRESSOR' }, { language: 'en' });
     check(st.spans === 2 && /starting compressor/.test(st.text), `long English status wraps (${JSON.stringify(st)})`);
     st = await status({ 'sensor.eu08l_hp1_state': 'REGULATION' }, { language: 'de' });
@@ -6972,8 +6979,9 @@
     let threw = false; try { new C().setConfig({ narrow_focus: 'yes' }); } catch (e) { threw = /narrow_focus/.test(e.message); }
     check(threw, 'narrow_focus: a value other than true or false is rejected');
     const keysOf = (n) => (n.schema ? n.schema.flatMap(keysOf) : [n.name]);
-    check(C._formSchema({}).schema.flatMap(keysOf).includes('narrow_focus') && Object.keys(HFC_LANGUAGES).every((l) => HFC_EDITOR[l]?.narrow_focus),
-      'narrow_focus: switch in the editor, labelled in every built-in language');
+    // A language may start with the card texts only (TRANSLATING.md); every language with editor texts labels the switch.
+    check(C._formSchema({}).schema.flatMap(keysOf).includes('narrow_focus') && Object.keys(HFC_LANGUAGES).filter((l) => HFC_EDITOR[l]).every((l) => HFC_EDITOR[l].narrow_focus),
+      'narrow_focus: switch in the editor, labelled in every built-in language with editor texts');
 
     // option off: nothing of the focus view is drawn
     let off = await at(lambda, 400);
