@@ -2051,7 +2051,7 @@ const HFC_I18N = {
       cop_live: 'Momentinis COP', cop_heating: 'Šildymo COP', cop_dhw: 'Karšto vandens COP', cop_cooling: 'Vėsinimo EER', cop_total: 'Bendras COP', spf: 'SPF (metinis)',
       energy: 'Elektra', env_energy: 'Aplinkos energija', energy_heating: 'Elektra šildymui', energy_dhw: 'Elektra karštam vandeniui', energy_cooling: 'Elektra vėsinimui',
       energy_defrost: 'Elektra atitirpinimui', energy_standby: 'Budėjimas', energy_aux: 'Elektra tenui',
-      heat: 'Šiluma', heat_heating: 'Šiluma šildymui', heat_dhw: 'Šiluma karštam vandeniui', heat_cooling: 'Vėsinimo galia', heat_defrost: 'Šiluma atitirpinimui',
+      heat: 'Šiluma', heat_heating: 'Šiluma šildymui', heat_dhw: 'Šiluma karštam vandeniui', heat_cooling: 'Vėsinimo energija', heat_defrost: 'Šiluma atitirpinimui',
       starts: 'Kompresoriaus paleidimai', cycles_heating: 'Šildymo ciklai', cycles_dhw: 'Karšto vandens ciklai', cycles_cooling: 'Vėsinimo ciklai', defrosts: 'Atitirpinimai',
       hours: 'Kompresoriaus valandos', hours_per_start: 'Trukmė per paleidimą', load_classes: 'Apkrovos klasės 1-5', aux_hours: 'Teno valandos', aux_starts: 'Teno paleidimai',
       spread: 'Skirtumas', volume: 'Srautas', heat_estimated: 'Šilumos galia', power: 'Galia', heat_live: 'Šilumos galia', compressor_speed: 'Kompresorius',
