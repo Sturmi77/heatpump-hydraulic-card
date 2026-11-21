@@ -1,0 +1,83 @@
+# THZ preset (Stiebel Eltron LWZ, Tecalor THZ; serial interface)
+
+Source: the [THZ integration](https://github.com/bigbadoooff/thz) (HACS, domain `thz`, GPL v3, based on the FHEM module 00_THZ.pm by Immi), release 0.7.2-beta.1. It reads the heat pump directly over its serial service interface (USB or ser2net), without an ISG. The preset is derived from the integration source: the register maps per firmware (`register_maps/`), `entity_translations.py`, `value_maps.py` and `strings.json`. It was first built from the source only; the additions marked "real installation" below come from a THZ on firmware 7.59 read through the integration (entity registry and live states).
+
+Units: the integral units LWZ 303/403/404/504 and THZ 303/304/403/404/504 (also SOL), and the LWZ 5/8 CS family. Heat pumps with an ISG and the `stiebel_eltron_isg` integration use the [`stiebel_isg`](stiebel-isg.md) preset instead.
+
+Every entity of the integration carries a translation key, so the preset finds it through the entity registry (platform `thz`). Entity ids, the integration's entity-id style option (FHEM names or translated names) and the Home Assistant language do not matter.
+
+## Setup
+
+```yaml
+type: custom:heatpump-flow-card
+preset: thz
+```
+
+What you get depends on the firmware the integration detects:
+
+| Firmware | Extra fields |
+|---|---|
+| 2.06, 2.14 | temperatures, flags, booster, room values |
+| 4.19, 4.39 | + electrical and thermal power, electricity and heat counters per use, the integration's COP |
+| 5.09, 5.39, 7.59 | + flow rate, dew points, compressor relative power, room temperature of circuit 2, cooling heat counter |
+
+Some entities are disabled by default in the integration and are then not found:
+- circuit 2: switch on the option "Heating circuit 2" of the integration;
+- the booster flag (`booster_hc`): only needed where the heat stage control does not report; enable the entity by hand.
+
+With the integration's option "Split into sub-devices" (on for new entries) the entities belong to several devices (heating, hot water, compressor …). Do not set `device` then: it would restrict the preset to one of them.
+
+## How the card gets its state
+
+The integration has no operating-state sensor that the card can read as a mode: the select `op_mode` is the program the user chose, and `heat_request` is a raw number whose values are only partly documented. The preset therefore maps no `mode` entity, and the card derives the state from three flags: the compressor (`compressor`), the defrost flag (`defrost`) and the DHW heating flag of the operating status (`heating_dhw`). A running compressor means heating, with the DHW flag hot water, with the defrost flag defrost. **Cooling is not shown.**
+
+## Mapped
+
+- `compressor`, `defrost`, `valve`: binary sensors `compressor`, `defrost`, `heating_dhw` (block pxx0A0176). The binary sensor `diverter_valve` is not the hot water valve: on a real installation it switched for about ten minutes with every defrost (it is the reversing valve), while `dhw_pump` ran with `heating_dhw`.
+- `sg_ready`: the utility lock flag `evu_release` (block pxx0A0176) with `sg_ready_map` `on` → blocked, `off` → normal. Despite its name it is on while the utility cuts the supply of the heat pump (owner of a real installation); the card shows the utility lock chip and the locked periods in the timeline.
+- `flow` / `return`: `flow_temp` / `return_temp` (the heat pump). `volume`: `flow_rate` (l/min, 5.x only). See "Open questions" for the second `flow_rate` sensor.
+- `hc_return` (circuit 1): `return_temp` as well. The THZ reports the return of the heat pump only, and circuit 1 is fed by the heat pump directly (real installation, underfloor circuit).
+- `fan_speed`: `main_ventilator_speed` (Hz) (real installation).
+- `dhw_mode`: `dhw_op_mode` (block pxxF3, e.g. `setback`), shown as text. Its states are the hot water program, never "heating hot water now", so the flow logic still follows `heating_dhw` (real installation).
+- `cop_heating_today` / `cop_dhw_today`: the integration's `daily_cop_hc` / `daily_cop_dhw` (real installation).
+- `power` / `heat`: `actual_power_pel` / `actual_power_qc` (W, from 4.19 on). With both the card shows the live COP.
+- `outdoor`: `outside_temp`.
+- `dhw_bottom` / `dhw_target`: `dhw_temp` / `dhw_set_temp`. The integral units have one hot water sensor, low in the tank (owner of a real installation), so the card draws it at the bottom and leaves the upper zone neutral. The tank tile and the hot water run values (tank at start and end, target reached) use the highest tank sensor there is, here this one.
+- Drawing: `unit_style: generic`; the LWZ 5/8 CS are integral units for indoor installation as well, without an outdoor unit (owner of an LWZ 5 CS Premium). `shared_pump: true`: the unit has one pump in front of the diverter valve for the heating circuit and hot water (same owner), so the circuit pump flag is drawn as the primary pump and the circuit has no pump of its own. The pump turns with the flow rate (`volume`); on a real installation the pxxFB flow read 0 when neither `heating_circuit_pump` nor `dhw_pump` was on. `defaults` gives `primary_pump: true`, so the editor does not ask about the pump. A buffer depends on the hydraulics (the read map has no buffer sensor): the editor asks, and with `buffer: true` the circuit keeps the circuit pump flag as its own pump.
+- Heating circuit 1: `hc_flow` from `heat_temp`, `hc_setpoint` from `heat_set_temp` (block pxxF4), `hc_pump` from `heating_circuit_pump`, else `pump_hc`. `hc_pressure`: `pressure_hc` where it reports. `hc_curve_offset`: the number `low_end_hc1` (low end of the heating curve, K), which shifts the curve; the card then shows the target as curve plus shift above the pump and the circuit flow below it. Circuit 2 takes `low_end_hc2`.
+- `room` / `room_target`: `inside_temp_rc` (remote control FEK / FE7), else `inside_temp`, and `room_set_temp`. `room_humidity`: `rel_humidity`. `dew_point`: `dew_point_hc1`, else `dew_point`.
+- Heating circuit 2 (mixed circuit): `flow_temp_hc2`, `hc2_setpoint_temp`, the mixer position `hc2_mixer_valve` and the motor outputs `mixer_open` / `mixer_closed`; the room temperature `inside_temp_rc_hc2`, humidity `rel_humidity_hc2`, dew point `dew_point_hc2`. Circuit 2 counts when `flow_temp_hc2` reports a number; set `hc_count: 2`.
+- `heater` (the electric inline heater, which serves heating and hot water): the heat stage control `heat_stage_control_modul` (block pxxF2, enabled by default). It follows `hc_stage` or `dhw_stage` by the heat request, coded 0 off, 1 solar, 2 heat pump, 3 to 5 booster stage 1 to 3 (comments of the integration's register map, after FHEM). The preset's `heater_map` (3 → 1, 4 → 2, 5 → 3, every other number off) turns this into heater stages, also in the run details. Else the booster flag `booster_hc` (block pxx0A0176); despite its name it is on for the hot water booster as well. `hc_stage` and `dhw_stage` are in the details. Real installation: the stage fields read 2 on every compressor run with `booster_hc` off; on a hot water boost `dhw_stage` went to 3 and then 4, the heat stage control to 3 and `booster_hc` on. `actual_power_pel` does not include the booster: it read 0 while the booster heated alone. `hc_booster_stage` (block pxxF4) is not used: it read 2 like the others, and its coding is not documented.
+- Solar thermal: `solar_collector` from `solar_collector_temp` and `solar_pump`, only when the solar block (pxx16) reports a value. The collector field of the status block exists on every unit and is not used.
+- Refrigerant circuit: `hotgas_temp`, `evaporator_temp`, `condenser_temp`, `pressure_hd`, `pressure_nd`, `heating_rel_power` (%, block pxx0A069A, 5.39 and later) as compressor speed. Real installation: it reads 20 to 45 % during runs; while the compressor stands it keeps the controller's last demand or goes below 0 (the card counts that as 0). `compr_rel_power` (block pxx0A069B) is not used: it jumped between unrelated values such as 17, 220 and 240, also with the compressor off.
+- `program`: the select `op_mode`; `setback` shows the night chip.
+- `errors`: the sensor `fault_status` (`ok` / `fault`); `error_ok: ['ok']`.
+- Quick controls: the select `op_mode`, the water heater `dhw` and the climate entity `heating_circuit`.
+- Details: the compressor and booster runtimes, the booster energy, the recovered heat, the integration's current COP, season mode, the operating mode of the circuit, the stage of heating and hot water (`hc_stage`, `dhw_stage`), the latest fault; each where it reports.
+- Tiles: electricity and heat per use (`electr_hc_*`, `electr_dhw_*`, `heat_hc_*`, `heat_dhw_*`): the day counters (Wh, corrected by the integration at the device's midnight reset) give "today", the totals (kWh) the other periods from long-term statistics. `heat_cooling` from `cool_hc_total`. `cop_total` from the integration's `daily_cop_total` and `lifetime_cop_total`.
+
+## Deliberately not mapped
+
+- `mode` and cooling: see above. The binary sensor `cooling` and the climate's `hvac_action` know about cooling, but one mode entity cannot combine them with the flags used for heating.
+- `buffer_*`: the read map has no buffer temperature.
+- `circulation`: the read map has no circulation pump output. `dhw_pump` is the unit's one pump while the diverter valve sends the flow into the DHW tank (real installation), not a circulation pump.
+- `hc_volume`: see "Open questions".
+- `hours`, `aux_hours`: the integration splits the runtimes into heating, hot water and cooling; they are in the details. Mapping one part would show it as the total. These sensors (`compressor_runtime_*`, `booster_runtime_*`) report hours; on installations set up with older releases their entity ids can still say "starts" (e.g. `verdichterstarts_heizung`), which does not matter to the preset.
+- `hc_mode`: `hc_op_mode` (`normal`, `setback`, `standby`, `restart`) is the program of the circuit, not whether it heats. As `hc_mode` it would replace "running" from the circuit pump at the circuit; it stays in the details.
+- `cutout_*`: the card expects event counters. The THZ has only the state flags `high_pressure_sensor`, `low_pressure_sensor` and `stb`.
+- `energy_total` / `energy_today` and heat totals over all uses: the integration has them per use only; they are in the tiles.
+- The ventilation of the integral units (fan stages, air flows, filters): no matching card key.
+
+## Open questions
+
+- Two sensors carry the translation key `flow_rate` ([bigbadoooff/thz#286](https://github.com/bigbadoooff/thz/issues/286)). Block pxxFB offset 110 (`flowRate`, unique id ending in `_55_flowrate`) is the water flow through the unit: on a real installation (7.59) about 14 l/min with the heating circuit pump, about 26 l/min while the DHW pump runs and 0 when both stand. Block pxx0A033B (`sFlowRate`, `_4_sflowrate`) jumped between about 1.7 and 22 l/min whatever the pumps did, like `compr_rel_power`. The display registry has no `unique_id`, so the preset cannot tell them apart and `volume` takes the first one found; until the integration gives them separate keys, set `volume` to the pxxFB sensor in the card. Neither is the flow of the heating circuit alone, so `hc_volume` stays unmapped.
+
+- `hc_stage` read 1 (solar in the coding) for periods on a unit without solar thermal, and `dhw_stage` went to 4 although FHEM calls 3 "boostMax". Both stay off in `heater_map` or map to a booster stage as coded; a real booster run on heating would confirm 3 to 5.
+- `evu_release` stayed off during the days observed; a real utility lock has not been seen in the card yet.
+- Is `heat_temp` the flow of circuit 1 on every unit, or the heat pump flow on units without a mixer?
+- Do the units without solar thermal answer the solar block (pxx16) with plausible numbers?
+
+## Evidence
+
+- Integration source as listed in [`upstream/thz.json`](../../upstream/thz.json); the per-firmware entity list comes from the register maps merged by `RegisterMapManager` (`FIRMWARE_MAPS`) and from the snapshot test `tests_ha/test_firmware_matrix.py` of the integration.
+- Field meanings of the blocks follow FHEM's `00_THZ.pm` (`sGlobal`, `sHC1`, `sDHW`, `F2ctrl`).

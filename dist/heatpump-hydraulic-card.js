@@ -34,6 +34,9 @@ const HFC_SCRIPT_URL = (() => {
 //   *_mode_map                 → raw state → normalized mode
 //   sg_ready_map               → raw state → normal | blocked | boost | forced
 //   valve_map                  → raw state of the `valve` entity → dhw | heating (default: on, Tank, DHW … mean hot water)
+//   heater_map                 → numeric state of the `heater` entity → heater stage 1 to 3; any other number is off. For
+//                                stage fields that also count other heat sources (THZ: 2 = heat pump, 3 to 5 = booster).
+//                                On-states of a binary fallback still mean stage 1.
 //   defaults(entities, hass)   → { unit_style, unit_size, buffer, primary_pump } the installation reports; the card configuration wins
 // ctx.key(platform, domain, translation_key) finds entities via the entity registry (language-independent),
 // ctx.match(regex, platform) finds the first entity id matching a pattern, ctx.state(entity_id) reads a current state.
@@ -1347,6 +1350,138 @@ const HFC_PRESETS = {
       .map((tk) => ctx.key('stiebel_eltron_isg', 'sensor', tk)).filter((id) => id && Number.isFinite(parseFloat(ctx.state(id)))),
     // Operating mode select (WPM: emergency, ready, program, comfort, eco, water_heating; LWZ adds automatic and manual). Only eco has a chip.
     program_map: { emergency: 'none', ready: 'none', program: 'none', comfort: 'none', eco: 'eco', water_heating: 'none', automatic: 'none', manual: 'none' },
+  },
+
+  // Stiebel Eltron LWZ / Tecalor THZ integral units (LWZ 303/403/404/504, THZ 303/304/403/404/504, LWZ 5/8 CS …) on the serial
+  // interface (USB or ser2net) through the "THZ" integration (bigbadoooff/thz, HACS, domain thz). Built from the integration source:
+  // every entity carries a translation key, so entity ids, the entity-id style option and the HA language do not matter. The read map
+  // depends on the firmware (2.06/2.14, 4.19/4.39, 5.09/5.39/7.59): energy counters, electrical and thermal power exist from 4.19 on,
+  // flow rate, dew points, compressor power and the HC2 room temperature from 5.09 on. Entities of hidden groups (HC2, boosters) are
+  // disabled by default and simply not found. No operating mode entity: the card derives the mode from compressor, defrost and the
+  // DHW heating flag; cooling is not shown.
+  thz: {
+    name: 'Stiebel Eltron LWZ / Tecalor THZ (serial, THZ integration)',
+    // Integral units for indoor installation, the LWZ 5/8 CS as well (owner of an LWZ 5 CS Premium): no outdoor unit like the WPL-A.
+    unit_style: 'generic',
+    // One pump in the unit, in front of the diverter valve, serves the heating circuit and hot water (owner of an LWZ 5 CS Premium):
+    // the circuit pump flag is that pump, drawn as the primary pump; the circuit has none of its own. It turns with the flow rate.
+    shared_pump: true,
+    // The one pump is shared, so the editor does not ask about it. A buffer depends on the hydraulics: the editor still asks.
+    defaults: () => ({ primary_pump: true }),
+    dynamic: true,
+    auto_circuits: false,
+    detect: (ctx) => (['outside_temp', 'flow_temp', 'dhw_temp'].some((tk) => ctx.key('thz', 'sensor', tk)) ? '' : undefined),
+    // While the serial line is down every sensor is unavailable and the optional parts cannot be told apart: wait for a value.
+    ready: (ctx) => ['outside_temp', 'flow_temp', 'dhw_temp']
+      .some((tk) => Number.isFinite(parseFloat(ctx.state(ctx.key('thz', 'sensor', tk))))),
+    entities: (p, i, ctx) => {
+      const k = (domain, ...tks) => tks.map((tk) => ctx.key('thz', domain, tk)).filter(Boolean);
+      const s = (...tks) => k('sensor', ...tks);
+      const b = (...tks) => k('binary_sensor', ...tks);
+      const reading = (ids) => ids.filter((id) => Number.isFinite(parseFloat(ctx.state(id))));
+      const n = i.hc;
+      // Solar parts only where the solar block (pxx16) answers: the collector field of the status block exists on every unit.
+      const solar = reading(s('solar_collector_temp'));
+      if (n === 2) {
+        // Circuit 2 (mixed circuit): its entities are hidden until the integration's "Heating circuit 2" option is on.
+        const flow2 = reading(s('flow_temp_hc2'));
+        return flow2.length ? {
+          hc_flow: flow2,
+          hc_setpoint: s('hc2_setpoint_temp'),
+          hc_curve_offset: k('number', 'low_end_hc2'),
+          hc_mixer: reading(s('hc2_mixer_valve')),
+          hc_mixer_opening: b('mixer_open'),
+          hc_mixer_closing: b('mixer_closed'),
+          hc_room: reading(s('inside_temp_rc_hc2')),
+          hc_room_humidity: reading(s('rel_humidity_hc2')),
+          hc_dew_point: reading(s('dew_point_hc2')),
+        } : {};
+      }
+      if (n !== 1) return {};
+      return {
+        compressor: b('compressor'),
+        defrost: b('defrost'),
+        // DHW heating flag of the operating status (pxx0A0176): on while the unit heats hot water.
+        valve: b('heating_dhw'),
+        // Electrical and thermal power (W) from firmware 4.19 on; the 2.x maps have no such field.
+        power: reading(s('actual_power_pel')),
+        heat: reading(s('actual_power_qc')),
+        flow: s('flow_temp'),
+        return: s('return_temp'),
+        volume: reading(s('flow_rate')),
+        outdoor: s('outside_temp'),
+        // Main ventilator speed (Hz) of the integral unit.
+        fan_speed: reading(s('main_ventilator_speed')),
+        // Utility lock of the status block (sGlobal evuRelease): on while the utility cuts the heat pump's supply (sg_ready_map).
+        sg_ready: b('evu_release'),
+        // Booster (electric inline heater, for heating and hot water): the heat stage control of block pxxF2 (enabled by
+        // default), which follows hcStage or dhwStage by the heat request: 0 off, 1 solar, 2 heat pump, 3 to 5 booster stage 1
+        // to 3 (heater_map). Else the booster flag of the status block (disabled by default), which is on for both uses.
+        heater: [...s('heat_stage_control_modul'), ...b('booster_hc')],
+        // The one hot water sensor of the integral units sits low in the tank: the card draws it at the bottom and leaves the upper
+        // zone neutral; the tank tile and the hot water run values take it as the highest sensor there is.
+        dhw_bottom: s('dhw_temp'),
+        dhw_target: s('dhw_set_temp'),
+        // Operating mode of the hot water side (block pxxF3), shown as text; its states never mean "heating hot water now".
+        dhw_mode: s('dhw_op_mode'),
+        solar_collector: solar,
+        ...(solar.length ? { solar_pump: b('solar_pump') } : {}),
+        hc_flow: s('heat_temp'),
+        // The THZ reports the return of the heat pump only; circuit 1 is fed by the heat pump directly (no buffer in the read map).
+        hc_return: s('return_temp'),
+        hc_setpoint: s('heat_set_temp'),
+        // Low end of the heating curve (K, setting of block p14): it shifts the curve of circuit 1.
+        hc_curve_offset: k('number', 'low_end_hc1'),
+        hc_pump: b('heating_circuit_pump', 'pump_hc'),
+        hc_pressure: reading(s('pressure_hc')),
+        // Room values of the remote control (FEK, FE7) first, else the inside sensor of the status block.
+        room: reading(s('inside_temp_rc', 'inside_temp')),
+        room_target: reading(s('room_set_temp')),
+        room_humidity: reading(s('rel_humidity')),
+        dew_point: reading(s('dew_point_hc1', 'dew_point')),
+        program: k('select', 'op_mode'),
+        // Relative heating power of the inverter (block pxx0A069A, from 5.39 on). compr_rel_power (pxx0A069B) jumps between
+        // unrelated values such as 17, 220 and 240 on a real installation, also while the compressor stands.
+        compressor_speed: reading(s('heating_rel_power')),
+        hot_gas: reading(s('hotgas_temp')),
+        evap_temp: reading(s('evaporator_temp')),
+        cond_temp: reading(s('condenser_temp')),
+        high_pressure: reading(s('pressure_hd')),
+        low_pressure: reading(s('pressure_nd')),
+        // The integration's daily COP per use (from 4.19 on).
+        cop_heating_today: reading(s('daily_cop_hc')),
+        cop_dhw_today: reading(s('daily_cop_dhw')),
+      };
+    },
+    // Counters per use from firmware 4.19 on. The day counters (Wh) are finer than the totals and give "today";
+    // the other periods come from the long-term statistics of the totals.
+    tiles: (p, i, ctx) => {
+      const s = (tk) => ctx.key('thz', 'sensor', tk);
+      const t = (day, total) => ({ ...(s(day) ? { today: s(day) } : {}), total: s(total) });
+      return {
+        energy_heating: t('electr_hc_day', 'electr_hc_total'),
+        energy_dhw: t('electr_dhw_day', 'electr_dhw_total'),
+        heat_heating: t('heat_hc_day', 'heat_hc_total'),
+        heat_dhw: t('heat_dhw_day', 'heat_dhw_total'),
+        heat_cooling: { total: s('cool_hc_total') },
+        // The integration's own COP of heating and hot water together (no combined counters exist).
+        cop_total: { today: s('daily_cop_total'), total: s('lifetime_cop_total') },
+      };
+    },
+    errors: (p, i, ctx) => [ctx.key('thz', 'sensor', 'fault_status')].filter(Boolean),
+    error_ok: ['ok'],
+    controls: (p, i, ctx) => [ctx.key('thz', 'select', 'op_mode'), ctx.key('thz', 'water_heater', 'dhw'), ctx.key('thz', 'climate', 'heating_circuit')]
+      .filter(Boolean),
+    details: (p, i, ctx) => ['compressor_runtime_heating', 'compressor_runtime_dhw', 'compressor_runtime_cooling', 'booster_runtime_heating',
+      'booster_runtime_dhw', 'heating_hours', 'dhw_hours', 'boost_hc_total', 'boost_dhw_total', 'heat_recovered_total', 'current_cop',
+      'season_mode', 'hc_op_mode', 'hc_stage', 'dhw_stage', 'fault_latest']
+      .map((tk) => ctx.key('thz', 'sensor', tk)).filter((id) => id && !['unknown', 'unavailable'].includes(ctx.state(id))),
+    // Operating mode select (2opmode): only setback has a chip.
+    program_map: { standby: 'none', automatic: 'none', daymode: 'none', setback: 'night', dhwmode: 'none', manual: 'none', emergency: 'none' },
+    // Heat stage control (pxxF2): 2 is the heat pump, 3 to 5 the booster stages.
+    heater_map: { 3: 1, 4: 2, 5: 3 },
+    // evu_release is on while the utility lock is active, despite its name.
+    sg_ready_map: { on: 'blocked', off: 'normal' },
   },
 
   // Vaillant aroTHERM / aroTHERM plus (HMU) on the eBUS via ebusd and its Home Assistant MQTT discovery.
@@ -2938,7 +3073,7 @@ const hfcValveSide = (v) => HFC_VALVE_SIDES[String(v ?? '').trim().toLowerCase()
 const HFC_DRAWING_KEYS = ['title', 'hc_type', 'hc2_type', 'hc3_type', 'hc4_type', 'hc5_type', 'hc6_type', 'hc_name', 'hc2_name', 'hc3_name', 'hc4_name',
   'hc5_name', 'hc6_name', 'unit_style', 'unit_size', 'source_spread', 'narrow_values', 'buffer_values', 'timeline'];
 // Value maps of a preset or the configuration, listed in the diagnostic report.
-const HFC_MAP_KEYS = ['valve_map', 'mode_map', 'dhw_mode_map', 'buffer_mode_map', 'hc_mode_map', 'program_map', 'sg_ready_map'];
+const HFC_MAP_KEYS = ['valve_map', 'mode_map', 'dhw_mode_map', 'buffer_mode_map', 'hc_mode_map', 'program_map', 'sg_ready_map', 'heater_map'];
 // How the tap water is heated: a coil in the tank, a fresh-water station on the storage, or a tank in the combined storage.
 const HFC_DHW_TYPES = ['coil', 'fresh_water', 'tank_in_tank'];
 // Drawing of the outdoor unit: `auto` takes the style of the preset; `unit_size` picks the Vaillant aroTHERM plus class.
@@ -3568,6 +3703,7 @@ class HeatpumpFlowCard extends HTMLElement {
       sg: { ...HFC_SG_READY_MAP, ...(preset?.sg_ready_map || {}), ...(config.sg_ready_map || {}) },
       // The keys are lower case, so a state matches whatever case the key was written in; the values are dhw or heating.
       valve: Object.fromEntries(Object.entries({ ...(preset?.valve_map || {}), ...(config.valve_map || {}) }).map(([k, v]) => [String(k).toLowerCase(), hfcValveSide(v)])),
+      heater: preset?.heater_map || null,
     };
     this._runningStates = config.running_states || preset?.running_states || [];
     this._statusLabels = preset?.status_labels || {};
@@ -4428,7 +4564,15 @@ class HeatpumpFlowCard extends HTMLElement {
     }
     const v = parseFloat(s);
     if (!Number.isFinite(v) || v <= 0) return 0;
+    if (key === 'heater') { const lv = this._heaterMapped(s); if (lv !== undefined) return lv; }
     return ['w', 'kw', '%'].includes(this._unit(key)) ? 1 : Math.min(Math.round(v), 3);
+  }
+  // A preset's heater_map turns a numeric state of the heater into a stage 0 to 3; numbers not in it (off, other heat sources)
+  // are 0. undefined without a map or for a state that is not a number (an on-state of a binary fallback).
+  _heaterMapped(state) {
+    const v = parseFloat(state);
+    if (!this._maps?.heater || !Number.isFinite(v)) return undefined;
+    return Math.min(Math.max(+this._maps.heater[String(Math.round(v))] || 0, 0), 3);
   }
   _hk(n, key) { return n === 1 ? `hc_${key}` : `hc${n}_${key}`; }
   _norm(map, raw) { if (raw === undefined) return ''; return map[raw] || map[String(raw).toUpperCase()] || map[String(raw).toLowerCase()] || String(raw).toLowerCase(); }
@@ -5447,6 +5591,10 @@ class HeatpumpFlowCard extends HTMLElement {
   // The circuit of a circuit-spread tile (hc_spread = 1, hc2_spread = 2 …), else 0.
   static _hcSpreadCircuit(key) { const m = /^hc(\d)?_spread$/.exec(key); return m ? +(m[1] || 1) : 0; }
 
+  // The highest tank sensor there is (top, else middle, else bottom): the tank tile and the hot-water run values use it, so a
+  // tank with only a lower sensor (THZ) still shows its temperature there.
+  _dhwTankKey() { return ['dhw_top', 'dhw_middle', 'dhw_bottom'].find((k) => this._has(k)); }
+
   // Live tiles: current values from the schematic entities.
   _liveAvail(key) {
     const h = (k) => this._has(k);
@@ -5457,7 +5605,7 @@ class HeatpumpFlowCard extends HTMLElement {
       spread: h('flow') && h('return'), volume: h('volume'),
       heat_estimated: !h('heat') && h('volume') && h('flow') && h('return'),
       power: h('power'), heat_live: h('heat'), compressor_speed: h('compressor_speed'),
-      source_spread: h('source_in') && h('source_out'), outdoor: h('outdoor'), dhw_top: h('dhw_top'), room: h('room'),
+      source_spread: h('source_in') && h('source_out'), outdoor: h('outdoor'), dhw_top: !!this._dhwTankKey(), room: h('room'),
       brine_pressure: h('brine_pressure'), hc_pressure: h('hc_pressure'),
       pv_share: h('pv_share_today'),
     }[key];
@@ -5484,6 +5632,7 @@ class HeatpumpFlowCard extends HTMLElement {
       case 'brine_pressure': return [this._pressureText('brine_pressure'), this._e.brine_pressure];
       case 'hc_pressure': return [this._pressureText('hc_pressure'), this._e.hc_pressure];
       case 'pv_share': return [f(this._n('pv_share_today'), 0, '%'), this._e.pv_share_today];
+      case 'dhw_top': { const k = this._dhwTankKey() || 'dhw_top'; return [this._t(this._n(k)), this._e[k]]; }
       default: return [this._t(this._n(key)), this._e[key]];
     }
   }
@@ -6897,7 +7046,8 @@ class HeatpumpFlowCard extends HTMLElement {
   _runValues(run) {
     const i = this._i;
     const dhw = run.kind === 'dhw';
-    const keys = (dhw ? ['dhw_top', 'dhw_target', 'heater', ...HFC_TANK_HEATERS.filter((k) => k.startsWith('dhw_')), 'defrost']
+    const tankKey = this._dhwTankKey() || 'dhw_top';
+    const keys = (dhw ? [tankKey, 'dhw_target', 'heater', ...HFC_TANK_HEATERS.filter((k) => k.startsWith('dhw_')), 'defrost']
       : ['flow', 'return', 'hc_flow', 'hc_return', 'hc_setpoint', 'compressor_speed', 'volume', 'outdoor', 'defrost']).filter((k) => this._has(k));
     // Energy of the run (#327): power and heat with every member of their sums, the units of a cascade (#173), and flow rate,
     // flow and return for a heat estimate.
@@ -6962,11 +7112,13 @@ class HeatpumpFlowCard extends HTMLElement {
     // unknown, not off.
     const onTime = (key) => {
       const ss = states(key); const spans = []; let starts = 0;
+      // A preset's heater_map decides for numbers of the heater (THZ: stage 2 is the heat pump, not the booster).
+      const isOn = (s) => { const lv = key === 'heater' ? this._heaterMapped(s) : undefined; return lv === undefined ? on(s) : lv > 0; };
       ss.forEach((e, n) => {
-        if (!on(e.s)) return;
+        if (!isOn(e.s)) return;
         const a = Math.max(e.t, run.from); const b = Math.min(ss[n + 1]?.t ?? run.to, run.to);
         if (b > a) spans.push([a, b]);
-        if (e.t >= run.from && !(n > 0 && on(ss[n - 1].s))) starts++;
+        if (e.t >= run.from && !(n > 0 && isOn(ss[n - 1].s))) starts++;
       });
       return { spans, starts, known: ss.length > 0 };
     };
@@ -6981,7 +7133,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const thaw = this._has('defrost') ? onTime('defrost') : null;
     const defrosts = thaw?.known ? thaw.starts : run.phases.filter((p) => p.kind === 'defrost').length;
     if (dhw) {
-      const tank = nums('dhw_top');
+      const tank = nums(tankKey);
       const a = at(tank, run.from); const b = at(tank, run.to);
       if (Number.isFinite(a) && Number.isFinite(b)) rows.push([i.tiles.dhw_top, `${this._esc(this._t(a))} → ${this._esc(this._t(b))} <span class="m">(${b >= a ? '+' : '−'}${this._esc(K(Math.abs(b - a)))})</span>`]);
       const target = at(nums('dhw_target'), run.to);
