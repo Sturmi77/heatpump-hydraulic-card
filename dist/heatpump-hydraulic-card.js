@@ -25,6 +25,8 @@ const HFC_SCRIPT_URL = (() => {
 //   entities(prefix, idx, ctx) → { key: entity_id | [candidates…] }  (first existing candidate wins)
 //   errors(prefix, idx, ctx)   → error sensors (numeric ≠ 0 or binary "on" shows the error chip)
 //   error_ok                   → text states that mean "no error"; any other known text shows the chip
+//   heater_off                 → text states of the `heater` entity that mean off; any other text means on (an enum of what the heater
+//                                does, such as the EMS-ESP aux heater status: heating, hot water, defrost …, #224)
 //   tiles(prefix, idx, ctx)    → { tile: { period: entity_id | [candidates…] } } for the stat tile catalog (HFC_TILES);
 //                                a "total" counter with long-term statistics also gives today, yesterday, week, month and year
 //   dynamic                    → true when entities() or details() map parts by their readings (ctx.state): the card resolves again every
@@ -822,6 +824,10 @@ const HFC_PRESETS = {
       aus: 'idle', heizen: 'heating', kühlen: 'cooling', warmwasser: 'dhw', 'pool beheizen': 'heating', abtauen: 'defrost',
       'alarm kompressor': 'off',
     },
+    // aux heater status (auxheaterstatus) is an enum of what the auxiliary heater does, in the EMS-ESP language: off, heating, hot
+    // water, defrost, compressor alarm … Every state but off is the heater on (#224). The words for off in every EMS-ESP language
+    // (locale_translations.h); a binary aux heater keeps on/off.
+    heater_off: ['off', 'aus', 'uit', 'av', 'wyłączono', 'kapalı', 'vyp', 'ki'],
   },
 
   // Panasonic Aquarea via HeishaMon and the "heishamon-homeassistant" integration (domain aquarea).
@@ -1034,11 +1040,18 @@ const HFC_PRESETS = {
     primary_pump: true,
     // Each zone has its own thermostat: room, target and humidity go to the numbered keys of zone 2 (Codex review).
     circuit_rooms: true,
+    // A zone supply sensor that starts to report is mapped within a minute (zoneFlow below).
+    dynamic: true,
     detect: (ctx) => (ctx.key('airahome', 'sensor', 'active_state') && ctx.key('airahome', 'sensor', 'ou_supply_temp') ? '' : undefined),
     entities: (p, i, ctx) => {
       const s = (tk) => ctx.key('airahome', 'sensor', tk);
       const b = (tk) => ctx.key('airahome', 'binary_sensor', tk);
       const n = i.hc;
+      // A zone without its own supply sensor reads 0.0 °C all the time (#417): only a number other than 0 is a circuit flow.
+      const zoneFlow = s(`zone_${n}_supply_temp`);
+      // In °C: a zone sensor switched to °F reports the same missing reading as 32 °F (Codex review).
+      const zoneRaw = parseFloat(ctx.state(zoneFlow));
+      const zoneValue = /f/i.test(String(ctx.unit(zoneFlow) || '')) ? Math.round(((zoneRaw - 32) * 5) / 9 * 10) / 10 : zoneRaw;
       return {
         mode: s('active_state'),
         compressor: s('ou_compressor_speed'),
@@ -1059,7 +1072,7 @@ const HFC_PRESETS = {
         // The water heater's target follows the schedule of the Aira app; the sensor only holds the default temperature (#417).
         dhw_target: [ctx.key('airahome', 'water_heater', 'water_heater'), s('target_hot_water_temp')].filter(Boolean),
         buffer_top: s('indoor_supply_temp'),
-        hc_flow: s(`zone_${n}_supply_temp`),
+        hc_flow: Number.isFinite(zoneValue) && zoneValue !== 0 ? zoneFlow : undefined,
         hc_setpoint: s(`zone_${n}_calculated_supply_temp`),
         hc_mode: s(`zone_${n}_active_state`),
         hc_pump: b(`zone_${n}_circulator`),
@@ -3653,6 +3666,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._statusLabels = preset?.status_labels || {};
     this._statLabels = preset?.stat_labels || {};
     this._errorOk = (config.error_ok || preset?.error_ok || []).map((state) => state.trim().toLowerCase()).filter(Boolean);
+    this._heaterOff = (preset?.heater_off || []).map((state) => String(state).trim().toLowerCase()).filter(Boolean);
     this._badges = config.badges || [];
     this._layout = HFC_LAYOUTS.includes(config.layout) ? config.layout : 'default';
     this._animations = HFC_ANIMATIONS.includes(config.animations) ? config.animations : 'auto';
@@ -4501,6 +4515,10 @@ class HeatpumpFlowCard extends HTMLElement {
     // A stage as text: "STEP 1", "Stage 2", "Stufe 2" (Samsung backup heater 0x406C, #403).
     const step = s.match(/^(?:step|stage|stufe)\s*(\d)$/);
     if (step) return Math.min(+step[1], 3);
+    // A heater that reports what it does (heater_off): every text but off and the unknown states is on (#224).
+    if (key === 'heater' && this._heaterOff.length && !Number.isFinite(parseFloat(s)) && !['unknown', 'unavailable', 'none', ''].includes(s)) {
+      return this._heaterOff.includes(s) ? 0 : 1;
+    }
     const v = parseFloat(s);
     if (!Number.isFinite(v) || v <= 0) return 0;
     if (key === 'heater') { const lv = this._heaterMapped(s); if (lv !== undefined) return lv; }
@@ -7044,7 +7062,8 @@ class HeatpumpFlowCard extends HTMLElement {
       })) }));
     };
     const diff = (a, b) => mean(combine([nums(a), nums(b)], ([x, y]) => x - y));
-    const on = (s) => !['off', 'unavailable', 'unknown', 'none', '', 'false', 'aus'].includes(String(s).toLowerCase()) && !(parseFloat(s) <= 0);
+    // A preset's words for off (heater_off, EMS-ESP in its languages, #224) count as off too.
+    const on = (s) => !['off', 'unavailable', 'unknown', 'none', '', 'false', 'aus', ...(this._heaterOff || [])].includes(String(s).toLowerCase()) && !(parseFloat(s) <= 0);
     // Periods a key was on within the run, and how often it switched on. A key without recorder history in the window is
     // unknown, not off.
     const onTime = (key) => {
@@ -7771,7 +7790,8 @@ class HeatpumpFlowCard extends HTMLElement {
           }
           this._txt(`t-hc${s}`, dewKnown ? `${i.flow_short} ${this._t(dewFlow)} · ${i.dew_point} ${this._t(dew)}`
             : showFlow ? `${this._t(tHc)}${Number.isFinite(set) ? ` · ${i.target} ${this._fmt(set)}` : ''}`
-              : !this._hcFlowLabel && Number.isFinite(set) ? `${i.target} ${this._fmt(set)}` : '');
+              // Without a flow value (hc_flow_label: false, or no sensor such as an Aira zone reading 0.0 °C, #417) the target stands alone.
+              : Number.isFinite(set) ? `${i.target} ${this._fmt(set)}` : '');
         }
         [`t-hc${s}`, `t-hc-now${s}`].forEach((id) => {
           const label = this._$(id); if (!label) return;

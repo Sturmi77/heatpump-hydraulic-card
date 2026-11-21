@@ -20,7 +20,7 @@ What you get:
 - electrical power and heat output (both in kW), giving a live COP; the heat is the integration's own value from the primary flow and the outdoor unit's spread
 - the buffer: the integration's wiki names the indoor unit supply temperature as the buffer tank temperature, so it is `buffer_top`
 - the inline heater, the hot-water tank and its target from the water heater entity, which follows the schedule of the Aira app (the target sensor holds only the default temperature and is the fallback, #417)
-- per zone: supply temperature as the circuit flow, the calculated supply temperature as the target, the zone state, the circulator, room temperature, humidity and the target of the zone thermostat
+- per zone: supply temperature as the circuit flow (a zone without its own supply sensor reads 0.0 °C all the time; that reading is left out, and the value appears within a minute once the sensor reports, #417), the calculated supply temperature as the target, the zone state, the circulator, room temperature, humidity and the target of the zone thermostat
 - away mode as the holiday chip, alarms as the error chip
 - totals of electricity and heat (tiles and details), evaporating and condensing temperature, discharge and suction gas, both pressures, expansion valve steps
 
