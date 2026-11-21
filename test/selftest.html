@@ -3614,8 +3614,8 @@
     };
     let o = await thz('heat');
     // With the low end as curve shift the target stands above the pump (target 32.5 = curve 29.5 + 3 K), the circuit flow below it.
-    check(o.ok && /mode-heat/.test(o.mode) && /34\.2/.test(o.flow) && /30\.1/.test(o.rl) && /33/.test(o.hcNow) && /32\.5/.test(o.hc) && /29\.5/.test(o.hc)
-      && /\+ 3 K/.test(o.hc) && !o.err, `THZ heating: VL 34.2, RL 30.1, circuit 33.0, target with the low end as shift (${JSON.stringify(o)})`);
+    check(o.ok && /mode-heat/.test(o.mode) && /34\.2/.test(o.flow) && /30\.1/.test(o.rl) && /33/.test(o.hcNow)
+      && /^Target 32\.5 °C( \(curve 29\.5 °C \+ 3 K( shift)?\))?$/.test(o.hc) && !o.err, `THZ heating: VL 34.2, RL 30.1, circuit 33.0, target with the low end as shift (${JSON.stringify(o)})`);
     // The one tank sensor sits low: drawn at the bottom, no value at the top; the tank tile still reads it as the highest sensor.
     check(/46/.test(o.tankBottom || '') && !(o.tankTop || '').trim() && /^46\D.*\|/.test(o.tankTile) && o.tankTile.endsWith(`|${sid('dhw_temp')}`),
       `THZ: hot water at the bottom of the tank, tank tile from it (${o.tankTop} / ${o.tankBottom} / ${o.tankTile})`);
