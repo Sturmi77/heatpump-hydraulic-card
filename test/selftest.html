@@ -1562,6 +1562,15 @@
     check(z2.hc2_flow === 'sensor.ah_3e2_zone_2_supply_temperature' && z2.hc2_room === 'sensor.ah_3e2_zone_2_temperature'
       && z2.hc2_room_target === 'climate.ah_3e2_zone_2' && z2.hc2_room_humidity === 'sensor.ah_3e2_zone_2_humidity' && z2.room === 'sensor.ah_3e2_zone_1_temperature',
     `Aira: zone 2 has its own room, target and humidity (${z2.hc2_room} / ${z2.hc2_room_target} / ${z2.hc2_room_humidity})`);
+    // #417: a zone without its own supply sensor reads 0.0 °C all the time; that reading is no circuit flow. A real value later maps it.
+    states['sensor.ah_3e2_zone_1_supply_temperature'] = { entity_id: 'sensor.ah_3e2_zone_1_supply_temperature', state: '0.0', attributes: { unit_of_measurement: '°C' } };
+    const z0 = C._resolve({ preset: 'airahome' }, hassOf({ ...states }, registry)).entities;
+    check(!z0.hc_flow && z0.hc_setpoint === 'sensor.ah_3e2_zone_1_calculated_supply_temperature',
+      `Aira: a zone supply of 0.0 °C is not mapped, the calculated setpoint stays (${z0.hc_flow} / ${z0.hc_setpoint})`);
+    states['sensor.ah_3e2_zone_1_supply_temperature'] = { entity_id: 'sensor.ah_3e2_zone_1_supply_temperature', state: '0.4', attributes: { unit_of_measurement: '°C' } };
+    check(C._resolve({ preset: 'airahome' }, hassOf({ ...states }, registry)).entities.hc_flow === 'sensor.ah_3e2_zone_1_supply_temperature',
+      'Aira: a zone supply that reports a value other than 0.0 °C is mapped');
+    check(HFC_PRESETS.airahome.dynamic === true, 'Aira: the preset resolves again, so a zone supply that starts to report appears');
     check(!detects('airahome', { 'sensor.x_active_state': 'heating' }, { 'sensor.x_active_state': { platform: 'other', translation_key: 'active_state' } }), 'Aira: an active state of another platform is not Aira');
   }
   {

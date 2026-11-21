@@ -1031,11 +1031,16 @@ const HFC_PRESETS = {
     primary_pump: true,
     // Each zone has its own thermostat: room, target and humidity go to the numbered keys of zone 2 (Codex review).
     circuit_rooms: true,
+    // A zone supply sensor that starts to report is mapped within a minute (zoneFlow below).
+    dynamic: true,
     detect: (ctx) => (ctx.key('airahome', 'sensor', 'active_state') && ctx.key('airahome', 'sensor', 'ou_supply_temp') ? '' : undefined),
     entities: (p, i, ctx) => {
       const s = (tk) => ctx.key('airahome', 'sensor', tk);
       const b = (tk) => ctx.key('airahome', 'binary_sensor', tk);
       const n = i.hc;
+      // A zone without its own supply sensor reads 0.0 °C all the time (#417): only a number other than 0 is a circuit flow.
+      const zoneFlow = s(`zone_${n}_supply_temp`);
+      const zoneValue = parseFloat(ctx.state(zoneFlow));
       return {
         mode: s('active_state'),
         compressor: s('ou_compressor_speed'),
@@ -1056,7 +1061,7 @@ const HFC_PRESETS = {
         // The water heater's target follows the schedule of the Aira app; the sensor only holds the default temperature (#417).
         dhw_target: [ctx.key('airahome', 'water_heater', 'water_heater'), s('target_hot_water_temp')].filter(Boolean),
         buffer_top: s('indoor_supply_temp'),
-        hc_flow: s(`zone_${n}_supply_temp`),
+        hc_flow: Number.isFinite(zoneValue) && zoneValue !== 0 ? zoneFlow : undefined,
         hc_setpoint: s(`zone_${n}_calculated_supply_temp`),
         hc_mode: s(`zone_${n}_active_state`),
         hc_pump: b(`zone_${n}_circulator`),
