@@ -1,0 +1,1 @@
+- Preset `emsesp`: the auxiliary heater status sensor reports what the heater does (heating, hot water, defrost …) in the EMS-ESP language; every state but off now lights the heater, in the drawing and in the run details, so a heater that covers a defrost ("Abtauen") shows (#224). Presets can name such words for off with the new field `heater_off`.

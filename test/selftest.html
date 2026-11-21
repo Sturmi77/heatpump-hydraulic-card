@@ -1245,6 +1245,24 @@
       `EMS-ESP: an aux heater binary sensor with an empty state yields to the sensor (#389) (${empty.heater} / ${reported.heater} / ${alone.heater})`);
   }
   {
+    // #224: the aux heater status sensor reports what the heater does, in the EMS-ESP language ("Abtauen" while it covers a defrost).
+    // Every state but off is the heater on; the words for off of every EMS-ESP language are off. A preset without heater_off keeps
+    // counting only on-states.
+    const base = { 'sensor.boiler_hpactivity': 'defrost', 'sensor.boiler_hptc1': ['31', '°C'], 'sensor.boiler_hptc0': ['27', '°C'] };
+    const level = async (state, preset = 'emsesp', id = 'sensor.boiler_auxheaterstatus') => {
+      const states = toStates({ ...base, [id]: state });
+      const registry = Object.fromEntries(Object.keys(states).map((x) => [x, { platform: 'mqtt' }]));
+      const card = mount(preset === 'emsesp' ? { preset } : { entities: { heater: id, flow: 'sensor.boiler_hptc1' } }, hassOf(states, registry)); await wait(20);
+      const out = card._level('heater'); card.remove(); return out;
+    };
+    const seen = {};
+    for (const s of ['Abtauen', 'heating', 'hot water', 'Alarm Kompressor', 'aus', 'off', 'uit', 'wyłączono', 'unknown', 'on']) seen[s] = await level(s);
+    check(seen.Abtauen === 1 && seen.heating === 1 && seen['hot water'] === 1 && seen['Alarm Kompressor'] === 1
+      && seen.aus === 0 && seen.off === 0 && seen.uit === 0 && seen['wyłączono'] === 0 && seen.unknown === 0 && seen.on === 1,
+      `EMS-ESP: every aux heater status but off is the heater on, in any EMS-ESP language (${JSON.stringify(seen)})`);
+    check(await level('Abtauen', 'none') === 0, 'without heater_off a text state that is no on-state stays off');
+  }
+  {
     // #349: Nefit EnviLine with EMS-ESP 3.8.6, long names. "total energy supplied" equals the heater rod's energy and is smaller
     // than the heating share alone, so it is no heat total; the split counters feed the tiles under their long names.
     const kwh = (v) => [String(v), 'kWh'];
