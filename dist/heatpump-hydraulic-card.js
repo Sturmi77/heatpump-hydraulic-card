@@ -158,10 +158,21 @@ function hfcPointTDefaults(e, hass) {
   return {
     unit_style: unit,
     unit_size: size,
+    // The kind of heat source (Home Comfort 0.9.2: attribute heat_source_type of the heat generator sensor, from evidence readings).
+    source_type: hfcPointTSource(e, hass),
     // The TP70 indoor units hold a 70 l parallel buffer cylinder; the WLW176i and WLW186i indoor units have the primary pump PC0.
     buffer: indoorNames.some((n) => /\bTP70\b/.test(n)) || undefined,
     primary_pump: ['wlw176i', 'wlw186i'].some((k) => indoorFamilies.has(k)) || undefined,
   };
+}
+// Air, brine or water as the heat generator sensor reports it (attribute heat_source_type), also while it has no product name. Where it
+// reports nothing, the brine loop's own readings tell a ground source: an air unit has none of them. Otherwise undefined (air).
+function hfcPointTSource(e, hass) {
+  const attrs = hass?.states?.[e?.model]?.attributes;
+  const kind = attrs && typeof attrs === 'object' ? attrs.heat_source_type : undefined;
+  if (['air', 'brine', 'water'].includes(kind)) return kind;
+  const live = (id) => typeof id === 'string' && !!hass?.states?.[id] && !['unknown', 'unavailable', ''].includes(hass.states[id].state);
+  return live(e?.source_out) ? 'brine' : undefined;
 }
 const HFC_PRESETS = {
   bosch_buderus_heating: {
@@ -169,13 +180,16 @@ const HFC_PRESETS = {
     unit_style: 'bosch',
     // The drawing, the buffer cylinder and the primary pump from the reported heat generator (hfcPointTDefaults).
     defaults: (e, hass) => hfcPointTDefaults(e, hass),
+    // The heat source of a new card, from the same sensor (air stays the default and is not written).
+    source_type: (e, hass) => hfcPointTSource(e, hass),
     entity_registry: true,
     // The compact registry suffices to offer this preset in a new card. Resource mappings
     // wait for the full local registry, loaded only when this preset is selected.
     detect: (ctx) => hfcPointT(ctx) || ['compressor_status', 'heat_pump_type', 'refrigerant_status']
       .some((tk) => ctx.key('bosch_buderus_heating', 'sensor', tk)) ? '' : undefined,
     ready: (ctx) => !!hfcPointT(ctx),
-    auto_circuits: false,
+    // A new card shows the further heating circuits the gateway reports (hc_count); a card configuration with hc_count wins.
+    auto_circuits: true,
     // The cloud's compressor status follows the local compressor reading with a delay of up to one cloud update.
     compressor_over_idle: true,
     // The additional values depend on their readings: one that starts to report is added within a minute.
@@ -206,7 +220,10 @@ const HFC_PRESETS = {
         return: s('gateway:return_temperature', 'heatSources:returnTemperature'),
         volume: r('heatSources:hs1:pumpVolumeFlow') || s('local_only:signals:SRC.SystemPumpVolumeFlow'),
         outdoor: s('gateway:outdoor_temperature', 'system:sensors:temperatures:outdoor_t1'),
-        source_in: r('heatSources:sensors:evaporatorTemp_tl2'),
+        // Brine-to-water: the brine inlet (collector outflow) and outlet (collector inflow); an air unit has neither and shows
+        // the air intake TL2 (and its fan) instead. The integration has no entity for the brine flow rate or the collector pressure.
+        source_in: r('heatSources:hs1:brineCircuit:collectorOutflowTemp') || r('heatSources:sensors:evaporatorTemp_tl2'),
+        source_out: r('heatSources:hs1:brineCircuit:collectorInflowTemp'),
         fan_speed: r('heatSources:hs1:oduFanSpeed'),
         dhw_top: s(...(i.dhw === 1 ? ['gateway:hot_water_temperature'] : [])) || r(`${dhw}:actualTemp`),
         dhw_target: r(`${dhw}:currentSetpoint`),
@@ -289,6 +306,8 @@ const HFC_PRESETS = {
       ].map((key) => pointt.find('sensor', key)).concat(
         // The primary pump PC0 and the 4-way valve VR4; the card has no input for them.
         pointt.path('sensor', 'heatSources:hs1:refrigerant:heatCarrierPumpSpeed'),
+        // The brine pump of a brine-to-water heat pump; the card has no input for it either.
+        pointt.path('sensor', 'heatSources:hs1:brineCircuit:pumpSpeed'),
         pointt.find('sensor', 'local_only:signals:SRC.CUHP.HP1.CHPumpRelay'),
         pointt.find('sensor', 'local_only:signals:SRC.CUHP.HP1.FourwayValve'),
       // A value that reports nothing (unknown or unavailable, for example the pool starts of an installation without a pool) is
@@ -3120,6 +3139,14 @@ class HeatpumpFlowCard extends HTMLElement {
 
   static getConfigForm() { return HeatpumpFlowCard._formSchema(); }
 
+  // The heat source the card draws: the configuration, else the kind the preset reads from the installation, else air (as _sourceType).
+  static _sourceTypeOf(config, hass, entities) {
+    if (config?.source_type) return config.source_type;
+    const fn = HFC_PRESETS[config?.preset]?.defaults;
+    if (typeof fn !== 'function' || !hass) return 'air';
+    try { return (fn(entities || {}, hass) || {}).source_type || 'air'; } catch (err) { return 'air'; }
+  }
+
   // Form schema. With a config, circuit fields and groups are limited to hc_count.
   // opts.valve: a valve entity is mapped, so the editor offers its states for hot water and heating (valve_map, #126).
   // opts.assistant: no supported preset was detected, so the editor offers the confirmed-proposal assistant (#149).
@@ -3197,7 +3224,7 @@ class HeatpumpFlowCard extends HTMLElement {
         // them. Source fields of an air heat pump are left out unless the configuration sets them (so they can be cleared).
         ...groups.map(([sec, keys]) => {
           const ownSet = (k) => { const v = config?.entities?.[k]; return v !== undefined && v !== null && v !== 'none' && v !== ''; };
-          const air = (config?.source_type || 'air') === 'air';
+          const air = (opts.sourceType || config?.source_type || 'air') === 'air';
           const shown = keys.filter((k) => !(air && HFC_SOURCE_KEYS.includes(k) && !ownSet(k)));
           const core = shown.filter((k) => HFC_CORE_FIELDS.includes(k.replace(/^hc[2-6]_/, 'hc_').replace(/^hc_room/, 'room')));
           const more = shown.filter((k) => !core.includes(k));
@@ -3501,7 +3528,6 @@ class HeatpumpFlowCard extends HTMLElement {
     this._hcType = config.hc_type || preset?.hc_type || 'underfloor';
     this._hcCount = hfcHcCount(config);
     this._hcTypes = [this._hcType, ...[2, 3, 4, 5, 6].map((n) => config[`hc${n}_type`] || 'underfloor')];
-    this._sourceType = config.source_type || 'air';
     // A preset may raise the default for units with a high standby draw (Samsung EHS Sentinel, #403); the configuration wins.
     this._threshold = Number.isFinite(+config.power_threshold) && config.power_threshold !== '' && config.power_threshold !== undefined ? +config.power_threshold : (preset?.power_threshold ?? 100);
     this._needsBuild = true;
@@ -3671,7 +3697,7 @@ class HeatpumpFlowCard extends HTMLElement {
       if (typeof id === 'string' && id && id === r.entities[b]) out.push({ key: b, id, code: 'same', other: a });
     });
     // Source fields of an air heat pump: the card draws no brine or well loop, an own entity there is a mix-up (#180).
-    if ((config.source_type || 'air') === 'air') {
+    if (HeatpumpFlowCard._sourceTypeOf(config, hass, r.entities) === 'air') {
       ['source_volume', 'source_out', 'brine_pressure'].forEach((key) => {
         const own = config.entities?.[key];
         if (own && own !== 'none') out.push({ key, id: Array.isArray(own) ? own.join(', ') : own, code: 'air' });
@@ -3892,7 +3918,7 @@ class HeatpumpFlowCard extends HTMLElement {
       `Preset: ${clean(config.preset) || 'none'}`,
       `Preset detected: ${r.preset ? (r.ready ? 'yes' : 'no') : 'not used'}`,
       `Prefix: ${r.prefix || '(none)'}`,
-      `Source type: ${config.source_type || 'air'}`,
+      `Source type: ${config.source_type || (found.source_type ? `${found.source_type}, read from the installation` : 'air')}`,
       `Heating circuits: ${hfcHcCount(config)}`,
       // The hydraulic options decide what the schematic draws, so a report of a storage or flow problem needs them.
       `Storage: ${config.storage || 'separate'} · hot water: ${config.dhw_type || 'coil'} · parallel buffer: ${config.storage === 'combined' ? 'combined storage' : config.buffer ? 'yes, configured' : foundBuffer ? 'yes, from the heat generator' : ['buffer_top', 'buffer_mode'].some((k) => r.entities[k]) ? 'yes, from entities' : 'no'} · series buffer: ${config.series_buffer ? (config.series_bypass === false ? 'yes, no bypass valve' : 'yes') : 'no'} · primary pump: ${sharedPump && config.primary_pump !== false ? 'yes, the circuit pump of the preset (one circuit, no buffer)' : (config.primary_pump ?? (!!r.preset?.primary_pump || found.primary_pump === true)) ? 'yes' : 'no'}`,
@@ -5776,6 +5802,8 @@ class HeatpumpFlowCard extends HTMLElement {
     }
   }
 
+  // The heat source: the configuration, else the kind a preset reads from the installation (Home Comfort), else air.
+  get _sourceType() { return this._config?.source_type || this._presetDefaults().source_type || 'air'; }
   _circuitPump(n) { return !(n === 1 && this._hcCount === 1 && this._primaryPump() && !this._parts.buffer && (!this._e.hc_pump || this._sharedPump())); }
 
   // Drawing of the outdoor unit inside the heat pump block (air source only; brine and water keep the loop symbol).
@@ -8526,7 +8554,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
         Object.entries(this._hass.states).filter(([id, st]) => HeatpumpFlowCard._fit(name, id, st).verdict === 'ok').map(([id]) => id).sort()]));
     }
     const { schema, computeLabel, L } = HeatpumpFlowCard._formSchema(this._config, tiles,
-      { valve: !!valveId, matches: this._matches, fits: this._fits, all: !!this._allEntities, shown, assistant });
+      { valve: !!valveId, matches: this._matches, fits: this._fits, all: !!this._allEntities, shown, assistant,
+        sourceType: HeatpumpFlowCard._sourceTypeOf(this._config, this._hass, r.entities) });
     const found = Object.keys(this._fromPreset).length;
     // Core entities the card needs; warn about what is missing (not while a preset is not detected, its field says so).
     const has = (k) => { const id = r.entities[k]; return !!(id && this._hass.states[id]); };
