@@ -4275,6 +4275,17 @@
     check(st.spans === 0 && st.y === '366', 'a status that fits is not wrapped');
   }
 
+  // 16b. Lithuanian texts confirmed by the translator in #461: "Katilas" is the second heat generator ("Boileris" would be a
+  // hot-water cylinder), the pump run-on, and the heater starts in the details, which completes the card texts.
+  {
+    const lt = hfcBuiltin(HFC_I18N, 'lt');
+    check(lt.boiler === 'Katilas' && lt.boiler_off === 'Katilas išj.', `Lithuanian boiler is Katilas (${lt.boiler} / ${lt.boiler_off})`);
+    check(lt.modes.trailing === 'Siurblio išbėgimas', `Lithuanian pump run-on (${lt.modes.trailing})`);
+    check(HFC_I18N.lt.det.aux_starts === 'Teno paleidimai', `Lithuanian heater starts in the details, not the English fallback (${HFC_I18N.lt.det.aux_starts})`);
+    const missing = Object.keys(HFC_I18N.en.det).filter((k) => !(k in HFC_I18N.lt.det));
+    check(missing.length === 0, `every detail text has a Lithuanian text (${missing.join(', ')})`);
+  }
+
   // 17. unique element names: the card is reachable as heatpump-hydraulic-card, also when another card owns the generic names
   {
     const s = setups[0];

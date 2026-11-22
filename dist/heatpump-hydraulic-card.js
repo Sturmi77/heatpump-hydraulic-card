@@ -2163,7 +2163,7 @@ const HFC_I18N = {
   lt: {
     not_found: 'Šio šablono subjektų nerasta. Patikrinkite integraciją ir priešdėlį arba atidarykite kortelės redaktorių.',
     start: 'Nerasta palaikoma šilumos siurblio integracija. Atidarykite kortelės redaktorių ir pasirinkite šabloną arba susiekite subjektus.', start_link: 'Palaikomos integracijos',
-    title: 'Šilumos siurblys', heat_pump: 'Šilumos siurblys', boiler: 'Boileris', boiler_off: 'Boileris išj.', dhw: 'Karštas vanduo', buffer: 'Akumuliacinė talpa', series_tank: 'Nuosekli talpa', combined_tank: 'Kombinuota talpa', heating_zone: 'Šildymas', fresh_water_station: 'Šviežio vandens stotis', heating_circuit: 'Šildymo kontūras',
+    title: 'Šilumos siurblys', heat_pump: 'Šilumos siurblys', boiler: 'Katilas', boiler_off: 'Katilas išj.', dhw: 'Karštas vanduo', buffer: 'Akumuliacinė talpa', series_tank: 'Nuosekli talpa', combined_tank: 'Kombinuota talpa', heating_zone: 'Šildymas', fresh_water_station: 'Šviežio vandens stotis', heating_circuit: 'Šildymo kontūras',
     house: 'Kambariai', room: 'Kambarys', room_target: 'Nustatyta temp.', humidity: 'Drėgmė', dew_point: 'Rasos taškas', dew_margin: 'Rasos taško atsarga', dew_warning: 'kondensato rizika', flow_short: 'Padavimas', comfort_below: 'žemiau nustatytos', comfort_on: 'pasiekta', comfort_above: 'aukščiau nustatytos', running: 'veikia', compressor_off: 'Kompresorius išj.', source_in: 'Oro įsiurbimas', outdoor: 'Lauke',
     energy_missing: 'Energijos skydelis: nėra galios jutiklio {sources}; vien energijos skaitikliai negali rodyti tiesioginio srauto.',
     brine_in: 'Sūrymas įėj.', brine_out: 'Sūrymas išėj.', well_in: 'Gręžinys įėj.', well_out: 'Gręžinys išėj.',
@@ -2171,7 +2171,7 @@ const HFC_I18N = {
     diagnostic_copy: 'Kopijuoti diagnostikos ataskaitą', diagnostic_copied: 'Diagnostikos ataskaita nukopijuota', diagnostic_failed: 'Nepavyko nukopijuoti ataskaitos',
     fullscreen_open: 'Visas ekranas', fullscreen_close: 'Uždaryti visą ekraną',
     det: {
-      hours: 'Kompresoriaus valandos', starts_total: 'Kompresoriaus paleidimai', aux_hours: 'Teno valandos', energy_total: 'Elektra iš viso',
+      hours: 'Kompresoriaus valandos', starts_total: 'Kompresoriaus paleidimai', aux_hours: 'Teno valandos', aux_starts: 'Teno paleidimai', energy_total: 'Elektra iš viso',
       cutout_high_pressure: 'Aukšto slėgio išjungimai', cutout_low_pressure: 'Žemo slėgio išjungimai', cutout_temperature: 'Temperatūros išjungimai',
       env_energy: 'Aplinkos energija iš viso', heat_total: 'Šiluma iš viso', cop_total: 'Bendras COP', compressor_speed: 'Kompresorius', evap_temp: 'Garavimas', cond_temp: 'Kondensacija',
       suction_temp: 'Įsiurbimo dujos', hot_gas: 'Karštos dujos', liquid_temp: 'Skysčio linija', low_pressure: 'Žemas slėgis', high_pressure: 'Aukštas slėgis',
@@ -2200,7 +2200,7 @@ const HFC_I18N = {
     periods: { now: 'dabar', today: 'šiandien', yesterday: 'vakar', week: 'savaitė', month: 'mėnuo', year: 'metai', total: 'iš viso' },
     modes: {
       idle: 'Budėjimas', heating: 'Šildymas', dhw: 'Karštas vanduo', cooling: 'Vėsinimas', defrost: 'Atitirpinimas', blocked: 'Užblokuota',
-      frost: 'Apsauga nuo užšalimo', circulate: 'Cirkuliacija', off: 'Išjungta', legionella: 'Legionelė', trailing: 'Pabaigos prapūtimas',
+      frost: 'Apsauga nuo užšalimo', circulate: 'Cirkuliacija', off: 'Išjungta', legionella: 'Legionelė', trailing: 'Siurblio išbėgimas',
     },
   },
 };
