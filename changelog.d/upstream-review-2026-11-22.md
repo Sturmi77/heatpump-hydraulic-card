@@ -1,3 +1,0 @@
-- Preset `luxtronik`: air inverters show the compressor speed in rpm (sensor `compressor_speed` of luxtronik2 2026.11.18) where there is no `pump_frequency`, and the fan from its speed in rpm (`fan_speed`, disabled by default in 2026.11.18), so the fan stops when the controller reports 0 (#472).
-- Preset `wolf`: with wolf_smartset 0.8.1 the new binary sensor "Fault" is the error entity, so a current fault shows the error chip; older releases stay without error mapping (#475).
-- Upstream review of 2026-11-22: Home Comfort 0.9.2, EMS-ESP dev, ESPAltherma, HeishaMon 2.15.0 (watched files moved into the definitions package), Luxtronik 2026.11.18, NIBE, Stiebel ISG and Wolf checked (#468 to #475).
