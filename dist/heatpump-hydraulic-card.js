@@ -1003,8 +1003,9 @@ const HFC_PRESETS = {
         hours: { total: s('compressor_operating_hours') }, aux_hours: { total: s('e_heating_operating_hours') },
       };
     },
-    // wolf_smartset has no fault code: none in its translation keys, none in the Wolf heat pump description. Configure `errors` by hand there.
-    errors: (p) => (p === '' ? [] : [`sensor.${p}_sub_fault_code`]),
+    // wolf_smartset 0.8.1: the binary sensor `fault` (device class problem) is on while the portal lists a current fault; it is read every
+    // ten minutes. Older releases have no fault entity, so nothing is mapped there.
+    errors: (p, i, ctx) => (p === '' ? [ctx.key('wolf_smartset', 'binary_sensor', 'fault')].filter(Boolean) : [`sensor.${p}_sub_fault_code`]),
     // "Betriebsart Heizgerät" list items (wolf-comm parameter example for heat pumps). wolflink reports some as slugs, wolf_smartset
     // reports Wolf's texts (Heizbetrieb); the lookup is case-insensitive, so one entry serves both.
     mode_map: {
@@ -1229,9 +1230,12 @@ const HFC_PRESETS = {
         starts_total: s('compressor1_impulses'),
         aux_hours: s('additional_heat_generator_operation_hours'),
         heat_total: s('heat_amount_counter'),
-        // Compressor speed of inverters (calc 231, translation key pump_frequency): in Hz from the release after 2026.11.01;
-        // fixed-speed units do not get the entity.
-        compressor_speed: s('pump_frequency'),
+        // Compressor speed of inverters: pump_frequency (calc 231) in Hz on brine inverters, compressor_speed in rpm on the known air
+        // inverters (2026.11.18); fixed-speed units get neither.
+        compressor_speed: [s('pump_frequency'), s('compressor_speed')],
+        // The fan of an air unit in rpm (C0184, 2026.11.18); 0 while it stands. The LD9V reports a control voltage instead
+        // (fan_control_signal, 0.5 V at rest), which is left out: it never reads 0.
+        fan_speed: s('fan_speed'),
         hot_gas: s('hot_gas_temperature'),
         suction_temp: s('suction_compressor_temperature'),
         superheat: s('overheating_temperature'),

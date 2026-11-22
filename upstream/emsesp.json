@@ -1,9 +1,9 @@
 {
   "preset": "emsesp",
   "reviewed": {
-    "date": "2026-11-17",
+    "date": "2026-11-22",
     "version": "v3.9.1",
-    "note": "v3.9.1 and dev to ba41398 checked: RC300V11 condition fixed (mode and modetype of other thermostats no longer read with the RC300 table; the preset shows modetype unmapped), pool mode for RC300 with MM100, DHW charge duration, IPM mixer write address, last telegram timestamp in MQTT (#3432). No key the preset uses changed."
+    "note": "dev to 29d6bc7 checked (#469): EEBUS power limit entities (boiler, new), Simplified Chinese texts, wwDiffTemp as a relative temperature, a write fix for #3456, RC30_N thermostat fix, a settings backup in emsdevice.cpp. No entity the preset maps changed."
   },
   "unmapped": {
     "hc_return": "EMS-ESP reports per circuit the flow temperature of the mixer module (MM100) and the thermostat values, no return."

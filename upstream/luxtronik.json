@@ -1,9 +1,9 @@
 {
   "preset": "luxtronik",
   "reviewed": {
-    "date": "2026-11-17",
-    "version": "2026.11.01",
-    "note": "main to d714a8f checked (unreleased after 2026.11.01): pump_frequency is the compressor speed, normalised to Hz, enabled by default and created only on inverters (now mapped as compressor_speed); rolling SCOP and 30-day COP sensors per device (candidates for the COP tiles once released); entity_active refactor without behaviour change; offset parameters writable again."
+    "date": "2026-11-22",
+    "version": "2026.11.18",
+    "note": "2026.11.01 to 2026.11.18 and main to 01b93fe checked (#472): status line tables decoded as the firmware does, the derived operating mode (status) unchanged for every raw code; air inverters get compressor_speed in rpm (now mapped next to pump_frequency) and fan_speed in rpm (now mapped); fan_control_signal (LD9V, 0.1 V, never 0) left out; error code texts and the inverter silent mode switch do not concern the preset."
   },
   "sources": [
     {
