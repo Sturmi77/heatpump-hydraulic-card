@@ -20,7 +20,7 @@ The percentage says how complete a preset is, not how well it was tested: see th
 
 | Preset | Core fields | Open core fields | Core fields not offered | Further roles | Stat tiles | Error chip | Quick controls | Preset texts in |
 |---|---|---|---|---|---|---|---|---|
-| [`bosch_buderus_heating`](#bosch_buderus_heating) | 100 % | – | `hc_return` | 24 of 49 | 21 of 29 | yes | yes | – |
+| [`bosch_buderus_heating`](#bosch_buderus_heating) | 100 % | – | `hc_return` | 25 of 49 | 21 of 29 | yes | yes | – |
 | [`lambda`](#lambda) | 100 % | – | `hc_pump` | 26 of 49 | 21 of 29 | yes | – | de, en |
 | [`vicare`](#vicare) | 76 % | `power`, `dhw_target`, `hc_flow` | `hc_return`, `room` | 20 of 49 | 18 of 29 | – | – | de, en |
 | [`open3e`](#open3e) | 92 % | `volume` | `hc_return` | 20 of 49 | 15 of 29 | – | – | – |
@@ -32,6 +32,7 @@ The percentage says how complete a preset is, not how well it was tested: see th
 | [`kronoterm`](#kronoterm) | 100 % | – | `volume`, `hc_return` | 11 of 49 | 9 of 29 | yes | – | – |
 | [`luxtronik`](#luxtronik) | 93 % | `hc_return` | – | 20 of 49 | 15 of 29 | – | – | – |
 | [`stiebel_isg`](#stiebel_isg) | 100 % | – | `heat`, `hc_return` | 17 of 49 | 9 of 29 | yes | yes | – |
+| [`thz`](#thz) | 100 % | – | `dhw_top` | 18 of 49 | 8 of 29 | yes | yes | – |
 | [`ebusd`](#ebusd) | 100 % | – | `hc_return` | 20 of 49 | 8 of 29 | yes | – | – |
 | [`samsung`](#samsung) | 100 % | – | `hc_return`, `hc_pump` | 11 of 49 | 4 of 29 | yes | – | – |
 | [`ehs_sentinel`](#ehs_sentinel) | 100 % | – | `hc_flow`, `hc_return`, `hc_pump` | 17 of 49 | 12 of 29 | yes | – | – |
@@ -49,6 +50,7 @@ English is the reference. A text without a translation shows in English.
 | Slovenčina (`sk`) | 100 % | 96 % (11 missing) |
 | Čeština (`cs`) | 100 % | 96 % (11 missing) |
 | Nederlands (`nl`) | 100 % | 96 % (11 missing) |
+| Lietuvių (`lt`) | 99 % (1 missing) | 0 % (283 missing) |
 
 ## Details per preset
 
@@ -60,7 +62,7 @@ Bosch/Buderus Home Comfort. Core fields 100 %, stat tiles: `cop_heating`, `cop_d
 
 | Area | Mapped | Shown without its own entity | Not mapped, with reason | Open |
 |---|---|---|---|---|
-| Heat pump | **`mode`**, `status`, **`compressor`**, `fan_speed`, `defrost`, **`power`**, **`heat`**, **`flow`**, **`return`**, **`volume`**, `source_in`, **`outdoor`**, **`valve`**, `heater` | – | – | `source_volume`, `source_out`, `brine_pressure`, `pv_boost` |
+| Heat pump | **`mode`**, `status`, **`compressor`**, `fan_speed`, `defrost`, **`power`**, **`heat`**, **`flow`**, **`return`**, **`volume`**, `source_in`, `source_out`, **`outdoor`**, **`valve`**, `heater` | – | – | `source_volume`, `brine_pressure`, `pv_boost` |
 | Tanks | **`dhw_top`**, **`dhw_target`**, `circulation`, `dhw_heater` | – | – | `dhw_middle`, `dhw_bottom`, `dhw_mode`, `buffer_top`, `buffer_middle`, `buffer_bottom`, `buffer_mode`, `buffer_heater`, `solar_collector`, `solar_pump` |
 | Heating circuit | **`hc_flow`**, `hc_setpoint`, **`hc_pump`**, `hc_volume`, `hc_pressure`, **`room`**, `room_target`, `program` | – | **`hc_return`** | `hc_mode`, `hc_curve_offset`, `hc_mixer` |
 | Details | `hours`, `starts_total`, `energy_total`, `env_energy`, `heat_total`, `compressor_speed`, `evap_temp`, `cond_temp`, `suction_temp`, `hot_gas`, `liquid_temp`, `eev` | – | – | `aux_hours`, `low_pressure`, `high_pressure`, `superheat`, `subcooling`, `cutout_high_pressure`, `cutout_low_pressure`, `cutout_temperature` |
@@ -238,6 +240,28 @@ Not mapped:
 
 - `heat`: The ISG reports produced heat only as daily and total counters, no live heat output; the card estimates it from flow rate and spread.
 - `hc_return`: The ISG reports per circuit the actual and target temperature, no return.
+
+### thz
+
+Stiebel Eltron LWZ / Tecalor THZ (serial, THZ integration). Core fields 100 %, stat tiles: `cop_heating`, `cop_dhw`, `cop_total`, `energy_heating`, `energy_dhw`, `heat_heating`, `heat_dhw`, `heat_cooling`.
+
+| Area | Mapped | Shown without its own entity | Not mapped, with reason | Open |
+|---|---|---|---|---|
+| Heat pump | **`compressor`**, `fan_speed`, `defrost`, **`power`**, **`heat`**, **`flow`**, **`return`**, **`volume`**, **`outdoor`**, **`valve`**, `heater` | **`mode`** | – | `status`, `source_volume`, `source_in`, `source_out`, `brine_pressure`, `pv_boost` |
+| Tanks | `dhw_bottom`, **`dhw_target`**, `dhw_mode`, `solar_collector`, `solar_pump` | – | **`dhw_top`**, `circulation`, `buffer_top` | `dhw_middle`, `dhw_heater`, `buffer_middle`, `buffer_bottom`, `buffer_mode`, `buffer_heater` |
+| Heating circuit | **`hc_flow`**, **`hc_return`**, `hc_setpoint`, **`hc_pump`**, `hc_curve_offset`, `hc_pressure`, **`room`**, `room_target`, `program` | – | `hc_mode`, `hc_volume` | `hc_mixer` |
+| Details | `compressor_speed`, `evap_temp`, `cond_temp`, `hot_gas`, `low_pressure`, `high_pressure` | – | `hours`, `energy_total`, `cutout_high_pressure` | `starts_total`, `aux_hours`, `env_energy`, `heat_total`, `suction_temp`, `liquid_temp`, `eev`, `superheat`, `subcooling`, `cutout_low_pressure`, `cutout_temperature` |
+
+Not mapped:
+
+- `buffer_top`: The integral units have no buffer temperature in their read map.
+- `circulation`: The read map has no circulation pump output. dhw_pump is the unit's one pump while the diverter valve sends the flow into the DHW tank (confirmed on a real installation), not a circulation pump.
+- `hc_volume`: No flow sensor of the heating circuit alone: block pxxFB offset 110 (flow_rate) is the flow through the unit, also for hot water; block pxx0A033B (also flow_rate) reads implausible values on 7.59 (bigbadoooff/thz#286).
+- `hours`: The integration splits the compressor runtime into heating, hot water and cooling; no total exists. The parts are in the details.
+- `energy_total`: Electricity is counted per use only (electr_hc_*, electr_dhw_*); no total over all uses exists. The parts are in the tiles.
+- `dhw_top`: The integral units have one hot water sensor, low in the tank (owner of a real installation); dhw_temp is mapped as dhw_bottom.
+- `hc_mode`: hc_op_mode is the program of the circuit (normal, setback, standby, restart), not whether it heats; as hc_mode it would replace the pump-based 'running' text. It stays in the details.
+- `cutout_high_pressure`: The card expects event counters; the THZ has only the state flags high_pressure_sensor, low_pressure_sensor and stb.
 
 ### ebusd
 

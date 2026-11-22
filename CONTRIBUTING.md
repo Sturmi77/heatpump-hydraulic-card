@@ -74,12 +74,32 @@ The flow logic lives in one method, `_flowModel()`: it decides the operating sta
 
 Several pull requests are usually open at once. Files that every change edits make them collide, so a pull request keeps to these rules:
 
-- **Do not edit `README.md` or `CHANGELOG.md`.** The maintainer updates the list of supported heat pumps, the feature list, the German summary and the preset list of the bug report template (`.github/ISSUE_TEMPLATE/bug_report.yml`) when merging.
+- **Do not edit `README.md` or `CHANGELOG.md`.** The maintainer updates the list of supported heat pumps, the feature list, the German summary and the preset list of the bug report template (`.github/ISSUE_TEMPLATE/bug_report.yml`) when merging. A new or changed option, entity key or tile is documented in [docs/CONFIGURATION.md](docs/CONFIGURATION.md) in the same pull request.
 - **Changelog:** add one file `changelog.d/<pull request number or topic>.md` with the entry as a bullet list (see `changelog.d/README.md`). At release time `npm run changelog:compile` moves the fragments into `CHANGELOG.md`.
 - **Preset documentation** goes into `docs/presets/<preset>.md`: what is mapped, what is deliberately not, the evidence (integration source, real installation) and the known limits. Describe the same in the pull request text.
 - **Do not list presets in the header comment of `dist/heatpump-hydraulic-card.js`;** it is generic on purpose.
 - Add tests as one block with their own section heading in `test/selftest.html`, and refer to demo setups by name, not by position in the list.
 - If a pull request still conflicts after another one was merged, merge `main` into the branch and keep both sides of each conflict; the maintainer can do this for you when "Allow edits by maintainers" is on.
+
+## Adding a preset
+Presets live in `HFC_PRESETS` in `dist/heatpump-hydraulic-card.js`. A preset consists of:
+- `detect(ctx)`, which returns a prefix, or `undefined` when the integration is missing
+- `entities(prefix, index, ctx)`, which returns the entity map; values may be candidate lists, and the first existing entity wins
+- optional `errors` and `error_ok` for text error sensors
+- the mode maps
+- `running_states`, `status_labels` and `stat_labels`
+- optional `tiles(prefix, index, ctx)`, which returns `{ tile: { period: entity } }` for the stat tile catalog; a `total` counter with long-term statistics also covers today, yesterday, week, month and year
+
+Optional parts of a preset:
+- `controls(prefix, index, ctx)` and `details(prefix, index, ctx)`: quick controls and extra rows of the details drawer
+- `program_map`, `valve_map` and `sg_ready_map`: raw state → heating program, diverter-valve side or normalized SG-Ready instruction
+- `unit_style`, `primary_pump: true` (the heat pump's primary pump is drawn on the flow pipe), `shared_pump: true` (in a single circuit without a buffer the preset's circuit pump is that primary pump), `auto_circuits: false` (the editor must not count further circuits) and `source_type(entities, hass)` (proposes `brine` or `water`)
+- `ready(ctx)`: when the integration is present but the mapping needs more (for example data that has not arrived yet); the card then retries every 30 seconds
+- `dynamic: true`: the preset maps optional parts by their readings (`ctx.state`); the card resolves it again every minute and rebuilds when a mapping has appeared, so parts that report late are not lost. Nothing is removed when a sensor drops out for a moment.
+
+`ctx.key(platform, domain, translation_key)` looks entities up in the entity registry, independent of language and entity ids. `ctx.match(regex, platform)` matches entity ids by pattern.
+
+Pull requests for other brands are very welcome: documentation of a new preset goes into `docs/presets/`, the changelog entry into `changelog.d/`, and the README stays untouched.
 
 ## Translations
 
