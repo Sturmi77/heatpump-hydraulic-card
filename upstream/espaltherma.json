@@ -1,9 +1,9 @@
 {
   "preset": "espaltherma",
   "reviewed": {
-    "date": "2026-11-17",
+    "date": "2026-11-22",
     "version": null,
-    "note": "beta to 897a0e6 checked: firmware HA sensors stored as compact descriptors (same discovery bytes), build and configuration URL in discovery, held values and topic sizes (unique id of the restore button only with long base topics). The preset uses none of these; nothing changed for it."
+    "note": "beta to 313288b checked (#470): only the address of the board page in the Home Assistant discovery; entities unchanged."
   },
   "unmapped": {
     "hc_flow": "ESPAltherma reports the leaving water of the heat pump, no flow per circuit.",

@@ -1,9 +1,9 @@
 {
   "preset": "nibe",
   "reviewed": {
-    "date": "2026-11-17",
+    "date": "2026-11-22",
     "version": "2.26.0",
-    "note": "Built from HA core nibe_heatpump (entity ids from the coil names, entity.py) with nibe 2.26.0 and the model files f370_f372_f470, f730, f750, f1145_f1245 and f1155_f1255 (every mapped core coil exists in all five), checked against the F470 installation of #253."
+    "note": "core 0f1a350 checked (#473): LOG.SET download added to the manifest only; nibe 2.26.0 already reviewed."
   },
   "unmapped": {
     "power": "The F series reports no electrical power of the compressor; only the electric addition has a power coil (mapped as heater).",

@@ -2435,7 +2435,22 @@
     const twoL = C._resolve({ ...wl.config, hc_count: 2 }, hassOf(toStates(wl.states('heat')), wl.registry)).entities;
     check(two.hc_flow && !two.hc2_flow && !two.hc2_pump && !two.hc2_mode && twoL.hc_flow && !twoL.hc2_flow && !twoL.hc2_pump && !twoL.hc2_mode,
       `hc_count 2 leaves circuit 2 empty (${two.hc2_flow} / ${twoL.hc2_flow})`);
-    check(JSON.stringify(r.errors) === '[]', `wolf_smartset has no fault code, errors stay empty (${JSON.stringify(r.errors)})`);
+    check(JSON.stringify(r.errors) === '[]', `wolf_smartset before 0.8.1 has no fault entity, errors stay empty (${JSON.stringify(r.errors)})`);
+    // 0.8.1 (upstream review #475): the binary sensor `fault` (device class problem), on while the portal lists a current fault
+    const faultId = 'binary_sensor.wolf_cha_storung';
+    const withFault = (state) => C._resolve({ preset: 'wolf' }, hassOf(toStates({ ...ws.states('heat'), [faultId]: state }),
+      { ...ws.registry, [faultId]: { platform: 'wolf_smartset', translation_key: 'fault' } }));
+    check(JSON.stringify(withFault('off').errors) === JSON.stringify([faultId]), `wolf_smartset 0.8.1: the fault binary sensor is the error entity (${JSON.stringify(withFault('off').errors)})`);
+    {
+      const reg = { ...ws.registry, [faultId]: { platform: 'wolf_smartset', translation_key: 'fault' } };
+      const faultStates = toStates({ ...ws.states('heat'), [faultId]: 'off' });
+      const card = mount({ preset: 'wolf' }, hassOf(faultStates, reg)); await wait(20);
+      const active = () => card.shadowRoot.getElementById('chip-err').classList.contains('on');
+      const off = !active();
+      faultStates[faultId].state = 'on'; card.hass = { ...card._hass };
+      check(off && active(), 'wolf_smartset 0.8.1: the error chip follows the fault binary sensor');
+      card.remove();
+    }
     check(r.tiles.heat?.yesterday === 'sensor.heizgerat_erzeugte_warmemenge_vortag' && r.tiles.heat?.month === 'sensor.heizgerat_erzeugte_warmemenge_aktueller_monat'
       && r.tiles.heat_heating?.total === 'sensor.heizgerat_energiemenge_hz' && r.tiles.heat_dhw?.total === 'sensor.heizgerat_energiemenge_ww' && r.tiles.hours?.total === e.hours,
       `wolf_smartset heat counter tiles by translation key (${JSON.stringify(r.tiles)})`);
@@ -3394,6 +3409,15 @@
     const freq = C._resolve(s.config, hassOf(toStates({ ...s.states('heat'), [luxFreq]: ['48.5', 'Hz'] }),
       { ...reg, [luxFreq]: { entity_id: luxFreq, platform: 'luxtronik2', translation_key: 'pump_frequency' } })).entities;
     check(freq.compressor_speed === luxFreq && e.compressor_speed === undefined, `Luxtronik compressor speed from pump_frequency where it exists (${freq.compressor_speed} / ${e.compressor_speed})`);
+    // Air inverters (2026.11.18, upstream review #472): compressor speed in rpm (translation key compressor_speed) and the fan in rpm;
+    // the LD9V's fan control voltage (fan_control_signal) never reads 0 and stays unmapped.
+    const luxRpm = `sensor.${px}_compressor_speed`; const luxFan = `sensor.${px}_fan_speed`; const luxVolt = `sensor.${px}_fan_control_signal`;
+    const air = C._resolve(s.config, hassOf(toStates({ ...s.states('heat'), [luxRpm]: ['3120', 'rpm'], [luxFan]: ['310', 'rpm'], [luxVolt]: ['5.9', 'V'] }),
+      { ...reg, [luxRpm]: { entity_id: luxRpm, platform: 'luxtronik2', translation_key: 'compressor_speed' },
+        [luxFan]: { entity_id: luxFan, platform: 'luxtronik2', translation_key: 'fan_speed' },
+        [luxVolt]: { entity_id: luxVolt, platform: 'luxtronik2', translation_key: 'fan_control_signal' } })).entities;
+    check(air.compressor_speed === luxRpm && air.fan_speed === luxFan && e.fan_speed === undefined,
+      `Luxtronik air inverter: compressor speed in rpm and the fan, not its control voltage (${air.compressor_speed} / ${air.fan_speed} / ${e.fan_speed})`);
     const two = C._resolve({ ...s.config, hc_count: 2 }, hass('heat')).entities;
     check(two.hc2_flow === undefined && two.hc2_setpoint === undefined, 'Luxtronik: mixing circuit 2 without a target counts as not installed');
     const two2 = C._resolve({ ...s.config, hc_count: 2 }, hass('heat', { [`sensor.${px}_flow_in_circuit2_target_temperature`]: ['36.0', '°C'], [`sensor.${px}_flow_in_circuit2_temperature`]: ['35.2', '°C'] })).entities;
