@@ -4,7 +4,7 @@ The card ships with English, German, Polish, Slovak, Czech and Dutch. More langu
 
 There are two different things people call "translating":
 
-- **Your own wording, only for your installation.** Use `texts` in the card configuration, see [Custom texts and languages](../README.md#custom-texts-and-languages) and [TEXTS.md](TEXTS.md). Nothing to install, nothing to send in. This covers the card, but not the visual editor.
+- **Your own wording, only for your installation.** Use `texts` in the card configuration, see [Custom texts and languages](CONFIGURATION.md#custom-texts-and-languages) and [TEXTS.md](TEXTS.md). Nothing to install, nothing to send in. This covers the card, but not the visual editor.
 - **A language that is built in for everybody.** This page. The language is then selected automatically from the Home Assistant profile language, and the visual editor speaks it, too.
 
 ## What is translated

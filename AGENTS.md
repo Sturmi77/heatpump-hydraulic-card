@@ -24,7 +24,7 @@ Run `npm run check` before opening a pull request. CI requires `HACS validation`
 
 ## Rules for every pull request
 
-- Do not edit `README.md`, `CHANGELOG.md`, `docs/COVERAGE.md` or the preset list in `.github/ISSUE_TEMPLATE/bug_report.yml`. A user-visible change adds one fragment `changelog.d/<number or topic>.md`.
+- Do not edit `README.md`, `CHANGELOG.md`, `docs/COVERAGE.md` or the preset list in `.github/ISSUE_TEMPLATE/bug_report.yml`. A user-visible change adds one fragment `changelog.d/<number or topic>.md`; a new or changed option, entity key or tile is documented in `docs/CONFIGURATION.md`.
 - Never guess entity ids or state texts. Preset mappings come from the integration's source or from diagnostic data of a real installation; document the evidence in `docs/presets/<preset>.md` and in the pull request. A field that cannot be mapped goes into `unmapped` of `upstream/<preset>.json` with a reason.
 - A bug fix comes with a regression test. Tests are deterministic and independent of Home Assistant, the internet and real installations; add them as one block with its own heading in `test/selftest.html` and refer to demo setups by name.
 - Flow and operating-state decisions belong in `_flowModel()`; `_update()` only draws.

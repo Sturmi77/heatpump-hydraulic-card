@@ -16,7 +16,7 @@ No. The card draws every installation from the same fixed slots, so each part ha
 - a **layout bug**, such as a text that is covered or cut off: please report it with a screenshot and the diagnostic report;
 - a **new hydraulic variant** that the card cannot draw yet: open an issue with a sketch; variants are built by how common they are.
 
-Colours (`--hfc-*`), layouts, names and which values are shown are configurable ([Layout, actions and colours](../README.md#layout-actions-and-colours)). The rule is in [CONTRIBUTING](../CONTRIBUTING.md#scope-of-the-drawing).
+Colours (`--hfc-*`), layouts, names and which values are shown are configurable ([Layout, actions and colours](CONFIGURATION.md#layout-actions-and-colours)). The rule is in [CONTRIBUTING](../CONTRIBUTING.md#scope-of-the-drawing).
 
 ## My integration has no entity for the diverter valve. Does the valve still work?
 
@@ -34,15 +34,15 @@ The preview shows your answer at once; nothing is saved until you press *Save*, 
 
 ## A stat tile stays empty or shows "–"
 
-Tiles for today, the week, the month or the year read the period from the long-term statistics of a total counter. Home Assistant keeps those statistics only for sensors with a `state_class`; check the attributes of the counter under *Developer tools → States*. Energy counters need `total` or `total_increasing`. Start and hour counters also work with `measurement` (myPyllant reports them that way): since they only count up, the card takes the period from their highest and lowest value. Without a `state_class`, map a counter of the period itself, or a total counter that has one, with `tile_sources` ([Stat tiles](../README.md#stat-tiles)). A newly mapped counter fills its periods as Home Assistant collects statistics.
+Tiles for today, the week, the month or the year read the period from the long-term statistics of a total counter. Home Assistant keeps those statistics only for sensors with a `state_class`; check the attributes of the counter under *Developer tools → States*. Energy counters need `total` or `total_increasing`. Start and hour counters also work with `measurement` (myPyllant reports them that way): since they only count up, the card takes the period from their highest and lowest value. Without a `state_class`, map a counter of the period itself, or a total counter that has one, with `tile_sources` ([Stat tiles](CONFIGURATION.md#stat-tiles)). A newly mapped counter fills its periods as Home Assistant collects statistics.
 
 ## Which sensor does the hot-water standby-loss tile need? Watts?
 
-No watts and no loss sensor: the tile shows the cool-down of the tank in K/h and computes it itself from the recorder history. It needs a plain temperature sensor in the tank (`dhw_top`, or `dhw_loss_sensor` when `dhw_top` is an estimated value) and an operating-mode or compressor entity, so it can tell standby from charging. Over the last 48 hours it fits the standby windows of at least 3 hours and leaves out charging, draw-off and the heater rod. A sensor that already reports °C/h cannot be fed into the tile. It is a temperature measure, not an energy: kWh would need the tank volume ([Stat tiles](../README.md#stat-tiles)).
+No watts and no loss sensor: the tile shows the cool-down of the tank in K/h and computes it itself from the recorder history. It needs a plain temperature sensor in the tank (`dhw_top`, or `dhw_loss_sensor` when `dhw_top` is an estimated value) and an operating-mode or compressor entity, so it can tell standby from charging. Over the last 48 hours it fits the standby windows of at least 3 hours and leaves out charging, draw-off and the heater rod. A sensor that already reports °C/h cannot be fed into the tile. It is a temperature measure, not an energy: kWh would need the tank volume ([Stat tiles](CONFIGURATION.md#stat-tiles)).
 
 ## How do I put switches or selects on the card, for example one per heating circuit?
 
-With `controls`, a list of entity ids or `{entity, name}` ([Configuration](../README.md#configuration)):
+With `controls`, a list of entity ids or `{entity, name}` ([Configuration](CONFIGURATION.md#options)):
 
 ```yaml
 controls:
@@ -56,7 +56,7 @@ Switches, buttons, scripts, selects, numbers, climate and water heater entities 
 
 ## PV covers the heat pump, but the card shows grid power too
 
-`pv`, `battery` and `grid` are the heat pump's own share from each source, not the house's meters. With whole-house sensors the card shows the house values: PV production and the grid import of the whole house flow into the heat pump. Remove `pv`, `battery` and `grid` from the card configuration: the card then takes the sources from the Energy dashboard (it needs power sensors there, not only kWh counters) and splits the heat pump's `power` by the house's current supply mix, marked with ≈. The split is proportional: while the house as a whole imports from the grid, part of the heat pump's power shows as grid too, even if the PV production alone would cover the heat pump ([Where the numbers come from](../README.md#where-the-numbers-come-from)).
+`pv`, `battery` and `grid` are the heat pump's own share from each source, not the house's meters. With whole-house sensors the card shows the house values: PV production and the grid import of the whole house flow into the heat pump. Remove `pv`, `battery` and `grid` from the card configuration: the card then takes the sources from the Energy dashboard (it needs power sensors there, not only kWh counters) and splits the heat pump's `power` by the house's current supply mix, marked with ≈. The split is proportional: while the house as a whole imports from the grid, part of the heat pump's power shows as grid too, even if the PV production alone would cover the heat pump ([Where the numbers come from](CONFIGURATION.md#where-the-numbers-come-from)).
 
 ## The card always shows "ready", although the heat pump runs
 
@@ -68,4 +68,4 @@ An old copy of the card is still loaded, usually the resource from before the re
 
 ## Which entities does the card use, and where do they come from?
 
-The diagnostic report (document button in the card header) lists every mapped entity with its source: `[preset]` found by the preset, `[own]` set in your configuration, and `[own · <integration>]` for an entity of another integration ([Diagnostic report](../README.md#diagnostic-report)). It stays local until you paste it; review it for private names first.
+The diagnostic report (document button in the card header) lists every mapped entity with its source: `[preset]` found by the preset, `[own]` set in your configuration, and `[own · <integration>]` for an entity of another integration ([Diagnostic report](CONFIGURATION.md#diagnostic-report)). It stays local until you paste it; review it for private names first.
