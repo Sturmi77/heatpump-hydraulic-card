@@ -1,9 +1,9 @@
 {
   "preset": "wolf",
   "reviewed": {
-    "date": "2026-11-17",
+    "date": "2026-11-22",
     "version": "0.0.53",
-    "note": "HA core c2f837b (UpdateFailedUnreachable, coordinator only) and wolf-comm 0.0.53 (nested descriptors: time programs, party and holiday dates; core does not use it yet) checked. Nothing changed for the preset."
+    "note": "wolf_smartset v0.8.1 checked (#475): new binary sensor fault (device class problem, read every 10 minutes) now mapped as the error entity of the wolf_smartset branch; the fault code sensor and the write-result event are not used. wolf-comm 0.0.53 and core unchanged for the preset."
   },
   "unmapped": {
     "hc_return": "Both integrations report one return temperature, at the heat pump; no circuit has its own."

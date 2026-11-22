@@ -1,9 +1,9 @@
 {
   "preset": "stiebel_isg",
   "reviewed": {
-    "date": "2026-11-17",
+    "date": "2026-11-22",
     "version": "2026.11",
-    "note": "main to 3094dfc checked: temperature numbers get a device class (unit conversion on Fahrenheit instances), LWZ fan level rejects fractions. Entity ids and keys unchanged."
+    "note": "main to 2748ae5 checked (#474): the active error sensor reads \"no error\" while the error list is empty; the preset uses the binary sensor error_status. Constant clean-up (a duplicate solar_collector_temperature removed, the key stays) and hardened input handling; new estimated water inverter COP sensors noted."
   },
   "unmapped": {
     "heat": "The ISG reports produced heat only as daily and total counters, no live heat output; the card estimates it from flow rate and spread.",

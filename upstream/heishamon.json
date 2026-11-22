@@ -1,9 +1,9 @@
 {
   "preset": "heishamon",
   "reviewed": {
-    "date": "2026-11-17",
-    "version": "2.14.0",
-    "note": "2.12.5 to 2.14.0 checked: definitions split into a package (moved, keys unchanged), HA < 2026.1 compatibility dropped, sensors unavailable while HeishaMon is offline (LWT), model refresh button, topics of HeishaMon 4.4. HeishaMon 4.4 turns the Installer settings topic group off by default (buffer/DHW installed, zone sensor settings, ...); the preset uses none of them."
+    "date": "2026-11-22",
+    "version": "2.15.0",
+    "note": "2.14.0 to 2.15.0 checked (#471): readbacks TOP144 to TOP169 and commands SET49 to SET55 added, existing keys unchanged. The watched definitions.py became the definitions package in 2.14 (paths updated). Bivalent boiler contact (TOP164) not mapped: it is enabled in every installation and would draw a boiler where there is none; SG Ready control (TOP149) is the enable setting, not the SG Ready state."
   },
   "unmapped": {
     "hc_return": "HeishaMon reports per zone the water temperature and its target, no return."
@@ -13,7 +13,12 @@
       "repo": "kamaradclimber/heishamon-homeassistant",
       "branch": "main",
       "paths": [
-        "custom_components/aquarea/definitions.py",
+        "custom_components/aquarea/definitions/sensors.py",
+        "custom_components/aquarea/definitions/binary_sensors.py",
+        "custom_components/aquarea/definitions/switches.py",
+        "custom_components/aquarea/definitions/numbers.py",
+        "custom_components/aquarea/definitions/selects.py",
+        "custom_components/aquarea/definitions/values.py",
         "custom_components/aquarea/sensor.py",
         "custom_components/aquarea/binary_sensor.py",
         "custom_components/aquarea/switch.py",
