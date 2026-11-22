@@ -1,1 +1,0 @@
-- Lithuanian: a second heat generator is "Katilas" ("Boileris" means a hot-water cylinder), the pump run-on reads "Siurblio išbėgimas", and the heater starts in the details are translated, which completes the card texts (#461, thanks Egidijus-hub).

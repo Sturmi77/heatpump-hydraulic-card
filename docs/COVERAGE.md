@@ -27,10 +27,10 @@ The percentage says how complete a preset is, not how well it was tested: see th
 | [`vaillant`](#vaillant) | 100 % | – | `heat`, `return`, `volume`, `hc_return`, `hc_pump` | 11 of 49 | 11 of 29 | yes | – | de, en |
 | [`emsesp`](#emsesp) | 100 % | – | `hc_return` | 22 of 49 | 20 of 29 | – | – | – |
 | [`heishamon`](#heishamon) | 92 % | `hc_pump` | `hc_return` | 20 of 49 | 17 of 29 | yes | – | – |
-| [`wolf`](#wolf) | 100 % | – | `hc_return` | 10 of 49 | 6 of 29 | – | – | de, en |
+| [`wolf`](#wolf) | 100 % | – | `hc_return` | 10 of 49 | 6 of 29 | yes | – | de, en |
 | [`airahome`](#airahome) | 100 % | – | `hc_return` | 18 of 49 | 4 of 29 | yes | – | – |
 | [`kronoterm`](#kronoterm) | 100 % | – | `volume`, `hc_return` | 11 of 49 | 9 of 29 | yes | – | – |
-| [`luxtronik`](#luxtronik) | 93 % | `hc_return` | – | 20 of 49 | 15 of 29 | – | – | – |
+| [`luxtronik`](#luxtronik) | 93 % | `hc_return` | – | 21 of 49 | 15 of 29 | – | – | – |
 | [`stiebel_isg`](#stiebel_isg) | 100 % | – | `heat`, `hc_return` | 17 of 49 | 9 of 29 | yes | yes | – |
 | [`thz`](#thz) | 100 % | – | `dhw_top` | 18 of 49 | 8 of 29 | yes | yes | – |
 | [`ebusd`](#ebusd) | 100 % | – | `hc_return` | 20 of 49 | 8 of 29 | yes | – | – |
@@ -50,7 +50,7 @@ English is the reference. A text without a translation shows in English.
 | Slovenčina (`sk`) | 100 % | 96 % (11 missing) |
 | Čeština (`cs`) | 100 % | 96 % (11 missing) |
 | Nederlands (`nl`) | 100 % | 96 % (11 missing) |
-| Lietuvių (`lt`) | 99 % (1 missing) | 0 % (283 missing) |
+| Lietuvių (`lt`) | 100 % | 0 % (283 missing) |
 
 ## Details per preset
 
@@ -220,7 +220,7 @@ Luxtronik (Alpha Innotec, Novelan, Roth …). Core fields 93 %, stat tiles: `cop
 
 | Area | Mapped | Shown without its own entity | Not mapped, with reason | Open |
 |---|---|---|---|---|
-| Heat pump | **`mode`**, **`compressor`**, `defrost`, **`power`**, **`heat`**, **`flow`**, **`return`**, **`volume`**, `source_volume`, `source_in`, `source_out`, **`outdoor`**, `heater` | **`valve`** | – | `status`, `fan_speed`, `brine_pressure`, `pv_boost` |
+| Heat pump | **`mode`**, **`compressor`**, `fan_speed`, `defrost`, **`power`**, **`heat`**, **`flow`**, **`return`**, **`volume`**, `source_volume`, `source_in`, `source_out`, **`outdoor`**, `heater` | **`valve`** | – | `status`, `brine_pressure`, `pv_boost` |
 | Tanks | **`dhw_top`**, **`dhw_target`**, `solar_collector`, `solar_pump` | – | – | `dhw_middle`, `dhw_bottom`, `dhw_mode`, `circulation`, `dhw_heater`, `buffer_top`, `buffer_middle`, `buffer_bottom`, `buffer_mode`, `buffer_heater` |
 | Heating circuit | **`hc_flow`**, `hc_setpoint`, **`hc_pump`**, **`room`**, `room_target`, `program` | – | – | **`hc_return`**, `hc_mode`, `hc_volume`, `hc_curve_offset`, `hc_mixer`, `hc_pressure` |
 | Details | `hours`, `starts_total`, `aux_hours`, `heat_total`, `compressor_speed`, `suction_temp`, `hot_gas`, `low_pressure`, `high_pressure`, `superheat` | – | – | `energy_total`, `env_energy`, `evap_temp`, `cond_temp`, `liquid_temp`, `eev`, `subcooling`, `cutout_high_pressure`, `cutout_low_pressure`, `cutout_temperature` |

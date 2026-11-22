@@ -59,9 +59,7 @@ Which preset should come next? Vote in the [poll](https://github.com/Sturmi77/he
 
 ## Current status
 
-The pre-release **[0.20.0-beta.3](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.20.0-beta.3)** is for testing: the editor asks where the integration cannot tell how the installation is built (buffer, pump, first heating circuit), new presets for NIBE F series, Samsung EHS with EHS Sentinel, Aira and Stiebel Eltron LWZ / Tecalor THZ, ground-source heat pumps in Bosch/Buderus Home Comfort, defrosts and starts counted from the history, and Lithuanian. In HACS: open the card, ⋮ → Redownload, and pick the version.
-
-The current release is **[0.19.0](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.19.0)**. What changed is in the [release notes](https://github.com/Sturmi77/heatpump-hydraulic-card/releases) and the [changelog](CHANGELOG.md), what comes next in the [development plan](docs/ROADMAP.md). Reports from real installations help most, above all for the presets marked *untested*: the [call for testers](https://github.com/Sturmi77/heatpump-hydraulic-card/discussions/453) or the [preset feedback form](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/new?template=preset_feedback.yml).
+The current release is **[0.20.0](https://github.com/Sturmi77/heatpump-hydraulic-card/releases/tag/v0.20.0)**: the editor asks where the integration cannot tell how the installation is built (buffer, pump, first heating circuit), new presets for NIBE F series, Samsung EHS with EHS Sentinel, Aira and Stiebel Eltron LWZ / Tecalor THZ, ground-source heat pumps in Bosch/Buderus Home Comfort, each heating circuit's flow from its own flow rate and the primary pump's own state, defrosts and starts counted from the history, labels that move to a free place, and Lithuanian. What changed is in the [release notes](https://github.com/Sturmi77/heatpump-hydraulic-card/releases) and the [changelog](CHANGELOG.md), what comes next in the [development plan](docs/ROADMAP.md). Reports from real installations help most, above all for the presets marked *untested*: the [call for testers](https://github.com/Sturmi77/heatpump-hydraulic-card/discussions/453) or the [preset feedback form](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/new?template=preset_feedback.yml).
 
 ## Features
 
@@ -221,7 +219,7 @@ The card follows the Home Assistant language. Built in, and how complete (genera
 | Slovenčina (`sk`) | 100 % | 96 % (11 missing) |
 | Čeština (`cs`) | 100 % | 96 % (11 missing) |
 | Nederlands (`nl`) | 100 % | 96 % (11 missing) |
-| Lietuvių (`lt`) | 99 % (1 missing) | 0 % (283 missing) |
+| Lietuvių (`lt`) | 100 % | 0 % (283 missing) |
 <!-- /coverage:languages -->
 
 Your own wording or another language with `texts` ([custom texts](docs/CONFIGURATION.md#custom-texts-and-languages)); a new built-in language for everybody, editor included: [docs/TRANSLATING.md](docs/TRANSLATING.md).
