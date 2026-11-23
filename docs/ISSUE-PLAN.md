@@ -1,10 +1,10 @@
 # Issue plan
 
-**GitHub assignments · state on 22 November 2026, with the 0.20.0 release.** The milestone table records the assigned issues, including the three lead issues. The recommendations below give the scope and evidence for each item. A field report can belong to a milestone without committing an entire preset or layout to that release. [Roadmap and milestone criteria](ROADMAP.md) · [Open issues](https://github.com/Sturmi77/heatpump-hydraulic-card/issues?q=is%3Aissue+is%3Aopen)
+**GitHub assignments · state on 23 November 2026.** The milestone table records the assigned issues, including the lead issues. The recommendations below give the scope and evidence for each item. A field report can belong to a milestone without committing an entire preset or layout to that release. [Roadmap and milestone criteria](ROADMAP.md) · [Open issues](https://github.com/Sturmi77/heatpump-hydraulic-card/issues?q=is%3Aissue+is%3Aopen)
 
 ## Pull requests
 
-None open. Everything on `main` up to 22 November is in `0.20.0`: #418, #419, #426, #440–#448, #450, #451 in beta.1; #454–#457 in beta.2; #452, #459, #460, #462, #463 and #464 in beta.3; after beta.3 #476 (upstream review: Luxtronik air inverters, Wolf fault) and #477 (Lithuanian completed).
+[Open pull requests](https://github.com/Sturmi77/heatpump-hydraulic-card/pulls). Everything on `main` up to 22 November is in `0.20.0`: #418, #419, #426, #440–#448, #450, #451 in beta.1; #454–#457 in beta.2; #452, #459, #460, #462, #463 and #464 in beta.3; after beta.3 #476 (upstream review: Luxtronik air inverters, Wolf fault) and #477 (Lithuanian completed).
 
 ## GitHub milestones
 
@@ -14,8 +14,9 @@ None open. Everything on `main` up to 22 November is in `0.20.0`: #418, #419, #4
 | [Field baseline (0.18.x)](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/13) | #298 (lead), #254 (#282 done); recruitment in the [call for testers](https://github.com/Sturmi77/heatpump-hydraulic-card/discussions/453) | Supported-preset cohort and field confirmations. Daikin is a separate exploratory pilot outside the cohort. |
 | [0.19.0](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/14) | closed with the release: #300 (lead), #23, #4, #344, #349, #359, #195 (done before: #289, #290, #323–#327, #333, #338, #346, #357, #360, #361, #365, #367) | Released on 14 November: cycle details, circuit spread, complete heat/power pairs on a real cascade, display units and the phone readability trial. |
 | [0.20.0](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/12) | closed with the release: #299 (lead), #403, #407, #415, #416 (#269 done before) | Released on 22 November after three pre-releases (18, 19 and 22 November): installation confirmation (#299), new presets NIBE, EHS Sentinel, Aira and THZ, counts from the history. Moved on: #253 to 0.21.0, #413 (point 4) and #417 (confirmation on 0.20.0) to Later. |
-| [0.21.0](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/16) | #173 (second unit `target: buffer`, numbers only if winter data show overlaps), #395 (rest of stage 3), #253 (NIBE F370/F470 exhaust air variant) | Drawing work that needs the layout step, presets with new field data. Noted from reports: the power at the heater rod (#449), the system pressure at the primary circuit (forum), the open review points of the THZ preset (#459), Bosch/Buderus gateways with an iCom module (#467). |
-| [Later](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/15) | #12, #27, #31, #36, #82, #101, #114, #224, #248, #250, #252, #255, #256, #260, #261, #267, #276, #309, #315–#318, #322, #331, #366, #413, #417 | Open follow-ups with no release commitment. For analytics, take #27 before #114. |
+| [0.21.0](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/16) | [#481](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/481) (tile editor), #449 (heater power in the schematic), #173 (second unit `target: buffer`, numbers only if winter data show overlaps), #395 (rest of stage 3), #253 (NIBE F370/F470 exhaust air variant) | Drawing work that needs the layout step, presets with new field data. Noted from reports: the system pressure at the primary circuit (forum), the open review points of the THZ preset (#459), Bosch/Buderus gateways with an iCom module (#467). |
+| [0.22.0](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/17) | [#482](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/482) (lead) | Compare heating runs within the existing timeline. |
+| [Later](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/15) | #12, #27, #31, #36, #82, #101, #114, #224, #248, #250, #252, #255, #256, #260, #261, #267, #276, #309, #315–#318, #322, #331, #366, #413, #417, #427, #480 | Open follow-ups with no release commitment. For analytics, take #27 before #114. |
 
 ## Lead issues
 
@@ -24,6 +25,8 @@ None open. Everything on `main` up to 22 November is in `0.20.0`: #418, #419, #4
 | 1 | [#298 · Measure first setup on real installations](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/298) | A short voluntary field-test form linked from the [call for testers](https://github.com/Sturmi77/heatpump-hydraulic-card/discussions/453), a versioned ten-installation cohort, and a published baseline with unsuccessful and pending cases. Record setup time, manual fields, YAML and confirmation of the actual flow path. |
 | 2 | [#300 · Show measurements for a selected operating cycle](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/300) | Extend the existing timeline selection with heating and DHW run details. Match two real recorder traces, label mode-only phases and partial runs, and leave unsupported measurements empty. |
 | 3 | [#299 · Confirm ambiguous hydraulic layouts in the editor](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/299) | Released in 0.20.0 (#447): buffer, shared ViCare pump and first heating circuit, with preview, "I don't know" and explicit save; existing overrides stay. Closed with the release; comparing fresh setup outcomes with the baseline continues in #298 once it has reports. |
+| 4 | [#481 · Choose tile values](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/481) | Pick existing values without YAML and verify calendar and run boundaries. |
+| 5 | [#482 · Compare heating runs](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/482) | Compare up to three runs on a phone using complete and partial demo history. |
 
 ## 0.20.0 · Confirm the installation
 
