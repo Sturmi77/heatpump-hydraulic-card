@@ -1,6 +1,6 @@
 # Development plan
 
-**State on 22 November 2026.** A household should be able to add the card, recognize its own installation, and see where heat is going. When something looks unusual, the same view should help the operator understand what happened. Presets do the routine setup; the operator supplies facts about the installation that Home Assistant cannot establish. [Issue assignments](ISSUE-PLAN.md) · [Changelog](../CHANGELOG.md) · [Releases](https://github.com/Sturmi77/heatpump-hydraulic-card/releases)
+**State on 23 November 2026.** A household should be able to add the card, recognize its own installation, and see where heat is going. When something looks unusual, the same view should help the operator understand what happened. Presets do the routine setup; the operator supplies facts about the installation that Home Assistant cannot establish. [Issue assignments](ISSUE-PLAN.md) · [Changelog](../CHANGELOG.md) · [Releases](https://github.com/Sturmi77/heatpump-hydraulic-card/releases)
 
 Correctness and supportability come ahead of new surface area. Effort is relative: `S` local, `M` several code paths, `L` public API or data logic, `XL` architecture or a second layout.
 
@@ -20,6 +20,8 @@ What each release contained is in the [changelog](../CHANGELOG.md). The 0.16 lin
 | 1 | Field baseline on 0.18.x | Tell how often a fresh preset produces the correct schematic, how long it takes, and where people need help. | collecting reports |
 | 2 | 0.19.0 · Understand a cycle | Select a heating or hot-water cycle and see its duration and the measurements that explain it. | released on 14 November |
 | 3 | 0.20.0 · Confirm the installation | Resolve an ambiguous layout in the editor by answering a short question and seeing the result. | released on 22 November |
+| 4 | [0.21.0 · Choose tile values](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/16) | Put an existing card reading or HA entity on a tile from the editor. | planned |
+| 5 | [0.22.0 · Compare heating runs](https://github.com/Sturmi77/heatpump-hydraulic-card/milestone/17) | Compare duration, pauses and conditions for nearby heating runs. | planned |
 
 Understanding a cycle comes before confirming the installation (order changed on 4 November). The editor questions are chosen from the field baseline, which needs about ten reports; cycle details need recorder traces from two installations instead, which were available. Reports are collected with the [field-test form](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/new?template=field_test.yml) while the cycle work goes on. Editor and preset detection stay unchanged during the trial, so the cohort measures the same setup. Each milestone has a lead issue: [#298](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/298) (field measurement), [#300](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/300) (cycle details) and [#299](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/299) (installation confirmation).
 
@@ -66,6 +68,18 @@ Understanding a cycle comes before confirming the installation (order changed on
 **State.** Released in 0.20.0 ([#447](https://github.com/Sturmi77/heatpump-hydraulic-card/pull/447), in the pre-releases since beta.1). The field baseline has no reports yet, so the questions were chosen from the issues so far, from the common case to the rarer one: a buffer without sensors ([#266](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/266)), the ViCare pump without a buffer ([#344](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/344)) and heating circuits from number 2 on ([#269](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/269), Open3E and myPyllant). The answer goes to the preview at once through the existing keys and is saved with the card; "I don't know" takes it back. A question about the role of a sensor was left out: no preset has such a case today. The measurement against the baseline is still open.
 
 **Exit check.** Replay the baseline cases and repeat the trial with fresh users on comparable configurations. Record the same measures beside the baseline. Aim for at least 8/10 correct in five minutes without YAML, fewer manual assignments in ambiguous cases, and no extra prompt on the unambiguous reference cases. Verify on a phone as well as a desktop. A misleading path or an overwritten manual mapping fails the relevant case even if setup was quick.
+
+## 4. Choose values for tiles (0.21.0)
+
+The [tile editor issue](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/481) adds three choices: an existing card value grouped by component or circuit, a catalog statistic and period, or a Home Assistant entity with an optional name and preview. Mapped tiles use the same labels, units and calculations as the schematic. Add the previous calendar month for suitable statistics and the last complete heating run when its bounds are known. The existing monthly COP already covers the current month. For [the heater rod](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/449), also show measured power beside the rod when its entity supplies W or kW; a binary signal shows its state.
+
+**Exit check.** Build a mixed tile row without YAML, reopen it, and verify its sources, labels and actions. Check the previous month against matching counters and the last run against the timeline. The [full monthly table](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/480) and [building heat-loss estimate](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/427) remain in Later. An existing building metric can be selected as a Home Assistant entity.
+
+## 5. Compare heating runs (0.22.0)
+
+The [run comparison](https://github.com/Sturmi77/heatpump-hydraulic-card/issues/482) opens in the existing timeline panel. Compare a selected heating run with up to two previous complete heating runs in the visible window. Show duration and preceding pause first, followed by available outdoor temperature, flow temperature and defrost count. Mark ongoing or clipped runs and gaps. A cascade with a shared signal reports system runs. The last-run tile opens the same timeline selection.
+
+**Exit check.** On a phone, select and compare in two taps without horizontal scrolling. Demonstrate a pair of short runs followed by a longer one, an unknown pause and a mode change within one compressor run. Use reproducible demo history.
 
 ## Alongside the milestones
 
