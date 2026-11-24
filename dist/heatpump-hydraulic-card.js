@@ -4587,9 +4587,10 @@ class HeatpumpFlowCard extends HTMLElement {
     if (key === 'heater' && this._heaterOff.length && !Number.isFinite(parseFloat(s)) && !['unknown', 'unavailable', 'none', ''].includes(s)) {
       return this._heaterOff.includes(s) ? 0 : 1;
     }
+    // A heater_map decides for every number, also 0 and below, as in the run details.
+    if (key === 'heater') { const lv = this._heaterMapped(s); if (lv !== undefined) return lv; }
     const v = parseFloat(s);
     if (!Number.isFinite(v) || v <= 0) return 0;
-    if (key === 'heater') { const lv = this._heaterMapped(s); if (lv !== undefined) return lv; }
     return ['w', 'kw', '%'].includes(this._unit(key)) ? 1 : Math.min(Math.round(v), 3);
   }
   // The heater_map turns a numeric state of the heater into a stage 0 to 3; numbers not in it (off, other heat sources)

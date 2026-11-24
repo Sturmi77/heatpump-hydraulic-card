@@ -3643,6 +3643,9 @@
     check(ownPower === 'on' && ownStage === 'on2' && ownOff === 'off' && ownMap === 'on2' && ownMapOff === 'off',
       `THZ: the preset's heater_map leaves an own heater entity alone, a map of the configuration applies to it (${[ownPower, ownStage, ownOff, ownMap, ownMapOff].join(' / ')})`);
     check(merged === 'on' && kept === 'on2' && same === 'off', `THZ: heater_map of the configuration is merged over the preset's; the same entity named in the configuration keeps the map (${merged} / ${kept} / ${same})`);
+    const low = { ...ownEnt, heater_map: { 0: 1, '-1': 2 } };
+    const lowMap = [await ownRod(low, '0'), await ownRod(low, '-1'), await ownRod(low, '1'), await ownRod(low, 'unavailable'), await ownRod(ownEnt, '-1')];
+    check(lowMap.join() === 'on,on2,off,off,off', `heater_map: 0 and negative numbers can be a stage; without a map they are off (${lowMap.join()})`);
     const mapLine = (cfg) => C._diagnosticReport({ ...config, ...cfg }, hassOf(toStates({ ...base('heat'), 'sensor.own_heater': ['0', 'W'] }), reg)).split('\n').filter((l) => l.includes('heater_map')).join(' | ');
     const lineOwn = mapLine({ ...ownEnt, heater_map: { 7: 2 } }); const linePreset = mapLine({});
     check(/\(preset, not used: own heater entity\)/.test(lineOwn) && /7=2 \(configuration\)/.test(lineOwn) && /\(preset\)/.test(linePreset) && !/not used/.test(linePreset),
