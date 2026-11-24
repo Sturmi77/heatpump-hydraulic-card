@@ -9091,7 +9091,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     if (this._config.controls === undefined && !r.presetControls.length) delete data.controls;
     if (custom) {
       data.tiles = tiles.value;
-      data.tile_entity = '';
+      data.tile_entity = this._tilePicked || '';
       tiles.names.forEach((t) => { data[t.field] = t.name; });
     }
     this._priceShown = custom;
@@ -9191,6 +9191,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     if (JSON.stringify(errors) !== JSON.stringify(this._presetErrors || [])) config.errors = errors; else delete config.errors;
     if (Object.keys(ents).length) config.entities = ents; else delete config.entities;
     // Tiles: off = default tiles; switched on = start from the default set; tiles with own options stay as in YAML.
+    const picked = value.tile_entity && value.tile_entity !== this._tilePicked ? value.tile_entity : '';
     delete config.tiles_custom; delete config.tile_entity;
     Object.keys(config).filter((k) => /^tile_name_\d+$/.test(k)).forEach((k) => { delete config[k]; });
     delete config.price_fixed; delete config.price_entity;
@@ -9201,7 +9202,12 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     }
     if (!value.tiles_custom) delete config.tiles;
     else if (!Array.isArray(this._config.tiles)) config.tiles = this._tiles.defaults;
-    else config.tiles = Array.isArray(value.tiles) ? HeatpumpFlowCard._tilesToStore(this._tiles, value.tiles, value, value.tile_entity) : this._config.tiles;
+    else config.tiles = Array.isArray(value.tiles) ? HeatpumpFlowCard._tilesToStore(this._tiles, value.tiles, value, picked) : this._config.tiles;
+    // The entity picker keeps showing its choice while the form passes the same empty value: it takes the entity once, then is emptied.
+    if (picked) {
+      this._tilePicked = picked;
+      setTimeout(() => { this._tilePicked = ''; this._render(); });
+    }
     this._config = config;
     this._loadEnergyInfo();
     this._loadRegistry();

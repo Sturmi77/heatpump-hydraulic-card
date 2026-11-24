@@ -3162,8 +3162,15 @@
     ed._changed({ ...form(), tiles: ['yaml:2', 'value:hc_setpoint', 'cop_heating:today', 'value:hc_flow'] });
     check(JSON.stringify(out.tiles) === JSON.stringify([yamlTiles[2], 'value:hc_setpoint', 'cop_heating', yamlTiles[4]]), `#481: moved, removed and added tiles (${JSON.stringify(out.tiles)})`);
     ed._changed({ ...form(), tile_entity: 'sensor.heatpump_dhw_middle' });
-    check(JSON.stringify(out.tiles[4]) === '{"entity":"sensor.heatpump_dhw_middle"}' && ed._form.data.tile_entity === '', `#481: an entity becomes a tile (${JSON.stringify(out.tiles)})`);
+    // The picker is emptied through its own value: the form passes the entity once, then nothing. An event in between adds nothing.
+    const during = ed._form.data.tile_entity;
+    ed._changed({ ...form(), title: 'Again' });
+    const between = out.tiles.length;
+    await wait(10);
+    check(JSON.stringify(out.tiles[4]) === '{"entity":"sensor.heatpump_dhw_middle"}' && between === 5 && during === 'sensor.heatpump_dhw_middle' && ed._form.data.tile_entity === '',
+      `#481: an entity becomes a tile and leaves the picker (${JSON.stringify(out.tiles)}, ${during} / ${ed._form.data.tile_entity})`);
     ed._changed({ ...form(), tile_entity: 'sensor.heatpump_dhw_middle' });
+    await wait(10);
     check(out.tiles.length === 5, '#481: the same entity is not added twice');
     ed._changed({ ...form(), tile_name_4: 'Middle ' });
     check(JSON.stringify(out.tiles[4]) === '{"entity":"sensor.heatpump_dhw_middle","name":"Middle "}' && ed._form.data.tile_name_4 === 'Middle ', `#481: an entity tile takes a name while typing (${JSON.stringify(out.tiles[4])})`);
