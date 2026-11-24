@@ -3059,7 +3059,7 @@
     const text = (card, id) => card.shadowRoot.getElementById(id)?.textContent || '';
 
     // With a preset: the same reading, unit and calculation as the drawing and the details.
-    const s = setups[0];
+    const s = setups.find((x) => x.name === 'Lambda' && x.config.title === 'Lambda');
     const hass = hassOf(toStates(s.states('heat')), s.registry || {}, null, s);
     const card = mount({ ...s.config, details_open: true, tiles: ['value:flow', 'value:dhw_bottom', 'value:heat', 'value:superheat', 'value:cutout_low_pressure', 'value:buffer_mode',
       'value:program', 'value:pv', { value: 'hc_flow', name: 'Radiators' }, 'spread'] }, hass);
@@ -3084,11 +3084,18 @@
       && zero.t['Compressor starts total'] === '0' && zero.t['Power from grid'] === '0 W' && zero.t['Dew point'] === '10.2 °C', `#481: zero is shown as zero, the dew point is calculated (${JSON.stringify(zero.t)})`);
     const dead = await tilesOf({ ...own, tiles: ownTiles }, hassOf(toStates(Object.fromEntries(Object.keys(ownStates).map((k) => [k, 'unavailable'])))));
     check(dead.n === 8 && Object.values(dead.t).every((v) => v === '–'), `#481: unavailable values show no number (${JSON.stringify(dead.t)})`);
+    // An unavailable thermostat that keeps its attributes has no reading; a list of rooms shows the members that report.
+    const climate = (state) => ({ state, attributes: { current_temperature: 21, temperature: 22 } });
+    const thermostat = { power_sources: 'manual', entities: { room: 'climate.room', room_target: 'climate.room', room_humidity: 'sensor.hum', dhw_target: 'water_heater.tank' }, tiles: ['value:room', 'value:room_target', 'value:dew_point', 'value:dhw_target'] };
+    const thermo = async (state) => Object.values((await tilesOf(thermostat, hassOf(toStates({ 'climate.room': climate(state), 'water_heater.tank': climate(state), 'sensor.hum': ['50', '%'] })))).t).join(' ');
+    const live = await thermo('heat'); const stale = await thermo('unavailable');
+    const rooms = await tilesOf({ power_sources: 'manual', entities: { room: ['sensor.ra', 'sensor.rb'] }, tiles: ['value:room'] }, hassOf(toStates({ 'sensor.ra': 'unavailable', 'sensor.rb': ['20', '°C'] })));
+    check(live === '21.0 °C 22.0 °C 10.2 °C 22.0 °C' && stale === '– – – –' && rooms.t.Room === '20.0 °C', `#481: attributes of an unavailable thermostat are no reading (${live} / ${stale} / ${JSON.stringify(rooms.t)})`);
     const rod = await tilesOf({ ...own, tiles: ['value:dhw_heater'] }, hassOf(toStates({ ...ownStates, 'sensor.rod': ['1.5', 'kW'] })));
     check(rod.t['DHW heater rod active'] === '1.5 kW', `#481: a heater shows its measured power (${JSON.stringify(rod.t)})`);
 
     // The split of the Energy dashboard needs the heat pump's power: without it the shares are unknown.
-    const dash = setups[1];
+    const dash = setups.find((x) => x.name === 'Lambda' && x.energy);
     const dashTiles = async (power) => {
       const states = toStates(dash.states('heat'));
       const c = mount({ ...dash.config, tiles: ['value:pv', 'value:grid'] }, hassOf(states, dash.registry || {}, dash.energy, dash)); await wait(60);

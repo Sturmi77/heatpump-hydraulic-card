@@ -5798,7 +5798,10 @@ class HeatpumpFlowCard extends HTMLElement {
   _valueText(key, L) {
     const i = this._i; const F = L.flow;
     const f = (v, d, u) => (Number.isFinite(v) ? `${this._fmt(v, d)} ${u}`.trim() : '–');
-    const known = this._has(key) && !['unknown', 'unavailable', 'none', ''].includes(String(this._s(key) ?? '').trim().toLowerCase());
+    const isKnown = (k) => this._has(k) && !['unknown', 'unavailable', 'none', ''].includes(String(this._s(k) ?? '').trim().toLowerCase());
+    const known = isKnown(key);
+    // An unavailable climate or water heater entity can keep its temperature attributes: no reading then. A list counts its members itself.
+    const read = (k) => isKnown(k) || !!this._sums?.[k];
     const onOff = (on) => (known ? (on ? i.run_on : i.run_off) : '–');
     const watts = ['w', 'kw', 'mw', 'gw', 'btu/h'].includes(this._unit(key));
     const power = (w) => (w >= 1000 && this._unit(key) !== 'w' ? f(w / 1000, 1, 'kW') : f(w, 0, 'W'));
@@ -5824,7 +5827,7 @@ class HeatpumpFlowCard extends HTMLElement {
       case 'heat': return Number.isFinite(L.heat) ? `${L.heatEstimated ? '≈' : ''}${f(L.heat, 1, 'kW')}` : '–';
       case 'power': case 'volume': case 'outdoor': case 'brine_pressure': case 'hc_pressure': case 'pv_share_today': {
         const text = this._liveTile(HFC_VALUE_LIVE[base], L)[0];
-        return known || this._sums?.[key] ? text : '–';
+        return read(key) ? text : '–';
       }
       case 'pv': case 'battery': case 'grid': {
         if (this._powerMode() !== 'energy') return f(this._w(key), 0, 'W');
@@ -5837,7 +5840,7 @@ class HeatpumpFlowCard extends HTMLElement {
       case 'hc_mixer': return f(this._n(key), 0, '%');
       case 'hc_mixer_opening': return onOff(this._on(key) || parseFloat(this._s(key)) > 0);
       case 'room_humidity': return f(this._roomHumidity(hc), 0, '%');
-      case 'dew_point': return f(this._dewPoint(hc), 1, '°C');
+      case 'dew_point': return known || read(this._roomKey(hc)) ? f(this._dewPoint(hc), 1, '°C') : '–';
       case 'hc_curve_offset': return known ? `${this._n(key) > 0 ? '+' : ''}${f(this._n(key), Number.isInteger(this._n(key)) ? 0 : 1, ['', '°c', 'k'].includes(this._unit(key)) ? 'K' : this._st(key).attributes.unit_of_measurement)}` : '–';
       case 'circulation_start': case 'circulation_end': return this._timeText(this._s(key)) || '–';
       case 'circulation_schedule': return known ? this._circulationProgram() || (this._on(key) ? i.run_on : i.run_off) : '–';
@@ -5847,7 +5850,7 @@ class HeatpumpFlowCard extends HTMLElement {
       default:
     }
     const kind = hfcKindOf(key);
-    if (kind === 'temperature') return f(this._n(key), 1, '°C');
+    if (kind === 'temperature') return read(key) ? f(this._n(key), 1, '°C') : '–';
     // Heater rods: the measured power where the entity reports one, else on/off with the stage.
     if (kind === 'onoff_power') {
       if (watts) return power(this._w(key));
