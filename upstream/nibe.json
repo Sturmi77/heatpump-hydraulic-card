@@ -1,9 +1,10 @@
 {
   "preset": "nibe",
   "reviewed": {
-    "date": "2026-11-22",
+    "date": "2026-11-24",
+    "at": "2026-11-24T05:56:54Z",
     "version": "2.26.0",
-    "note": "core 0f1a350 checked (#473): LOG.SET download added to the manifest only; nibe 2.26.0 already reviewed."
+    "note": "core 0f1a350 (LOG.SET download, manifest only) checked again (#485, reported once more for the same reason); nibe 2.26.0 already reviewed."
   },
   "unmapped": {
     "power": "The F series reports no electrical power of the compressor; only the electric addition has a power coil (mapped as heater).",
