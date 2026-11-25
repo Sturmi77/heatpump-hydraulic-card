@@ -106,6 +106,11 @@
   // the text not at all. The room line of a circuit drops its target where it does not fit; the target is its own text, the
   // room value a tspan and still recorded.
   const measuredX = (el) => /^t-hc-(mode|room)\d*$/.test(el.id);
+  // A label with a priority stands where its measured text has room (_roomLabels): its place and whether it stands are not recorded.
+  const measuredPlace = (el, a) => el.dataset.prio === 'room' && (/^data-(prio|rank|places)$/.test(a.name)
+    || (el.dataset.places && (a.name === 'x' || a.name === 'text-anchor'))
+    || (a.name === 'class' && !a.value.split(/\s+/).some((c) => c && c !== 'room' && c !== 'outside')));
+  const measuredClass = (el, value) => (el.dataset.prio === 'room' ? value.split(/\s+/).filter((c) => c && c !== 'room' && c !== 'outside').join(' ') : value);
   const measuredText = (el, root) => {
     if (/^t-hc-room\d*$/.test(el.id)) return true;
     const m = /^t-hc(\d*)$/.exec(el.id); return !!m && !!root.getElementById(`t-hc-now${m[1]}`);
@@ -123,9 +128,9 @@
       const name = `${el.tagName}${el.id ? `#${el.id}` : ''}`;
       const g = []; const s = [];
       for (const a of [...el.attributes].sort((p, q) => (p.name < q.name ? -1 : 1))) {
-        if (a.name === 'id') continue;
+        if (a.name === 'id' || measuredPlace(el, a)) continue;
         if (GEO.has(a.name)) g.push(`${a.name}=${a.name === 'x' && measuredX(el) ? '*' : a.value}`);
-        else if (a.name === 'style') { if (style(a.value)) s.push(`style=${style(a.value)}`); } else s.push(`${a.name}=${a.value}`);
+        else if (a.name === 'style') { if (style(a.value)) s.push(`style=${style(a.value)}`); } else s.push(`${a.name}=${a.name === 'class' ? measuredClass(el, a.value) : a.value}`);
       }
       const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('');
       if (own.trim() && !measuredText(el, root)) s.push(`"${own}"`);
@@ -484,8 +489,9 @@
         }
         const name = `wall ${storage} ${dhw} solar=${solar} rods=${mask} ${config.language} ${config.layout} hc${c.hcs}`;
         let card;
+        // In "cool" the rods report their power, which stands at each rod where there is room (#449).
         for (const mode of ['heat', 'cool'].filter((m) => want(`${name} ${m}`))) {
-          const hass = hassOf(toStates({ ...statesOf(c, mode), 'sensor.t_buffer_middle': ['33', '°C'], 'binary_sensor.t_rod': 'on',
+          const hass = hassOf(toStates({ ...statesOf(c, mode), 'sensor.t_buffer_middle': ['33', '°C'], 'binary_sensor.t_rod': mode === 'cool' ? [mask % 2 ? '12.4' : '0.85', 'kW'] : 'on',
             'sensor.t_mix': ['85', '%'], 'sensor.t_set': ['35', '°C'], 'sensor.t_pressure': ['1.8', 'bar'], 'sensor.t_humidity': ['72', '%'] }));
           if (!card) card = mount(config, hass, mask % 3 === 0); else card.hass = hass;
           check(card.shadowRoot.querySelectorAll('.heater-flange').length === present.length * (station ? 1 : 2), `${name}: configured rods drawn`);
