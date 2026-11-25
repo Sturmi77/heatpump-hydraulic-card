@@ -2911,10 +2911,10 @@
     const hass = hassOf(toStates(s.states('heat')), {}, null, s);
     const o = C._tileOptions(s.config, C._resolve(s.config, hass), hass);
     const vals = o.options.map((x) => x.value);
-    check(o.editable && ['cop_heating:month', 'energy_heating:week', 'spread', 'cop_total'].every((v) => vals.includes(v)), `editor options (${vals.join(',')})`);
+    check(['cop_heating:month', 'energy_heating:week', 'spread', 'cop_total'].every((v) => vals.includes(v)), `editor options (${vals.join(',')})`);
     check(!vals.includes('energy_aux') && !vals.some((v) => v.startsWith('cost')), 'editor offers only fillable tiles');
     check(o.value[0] === 'cop_heating:today' && o.defaults.includes('spread'), `editor value and defaults (${o.value[0]} / ${o.defaults.join(',')})`);
-    check(!C._tileOptions({ ...s.config, tiles: [{ key: 'spread', name: 'x' }] }, C._resolve(s.config, hass), hass).editable, 'own tile options are YAML only');
+    check(C._tileOptions({ ...s.config, tiles: [{ key: 'spread', name: 'x' }] }, C._resolve(s.config, hass), hass).value.join() === 'yaml:0', 'own tile options are YAML only');
     const ed = document.createElement('heatpump-flow-card-editor');
     let out;
     ed.addEventListener('config-changed', (ev) => { out = ev.detail.config; });
@@ -3048,8 +3048,161 @@
     check(ev.length === 0, 'single tap waits for a possible double tap');
     await wait(300);
     check(ev.length === 1 && ev[0][0] === 'more-info', `then falls back to more-info (${JSON.stringify(ev)})`);
-    check(!C._tileOptions({ ...s.config, tiles: [{ key: 'spread', tap_action: { action: 'none' } }] }, C._resolve(s.config, card._hass), card._hass).editable, 'tiles with actions are YAML only');
+    check(C._tileOptions({ ...s.config, tiles: [{ key: 'spread', tap_action: { action: 'none' } }] }, C._resolve(s.config, card._hass), card._hass).value.join() === 'yaml:0', 'tiles with actions are YAML only');
     card.remove();
+  }
+
+  // 9b. card values and Home Assistant entities as tiles (#481): every value of the drawing or the details, chosen in the editor
+  {
+    const values = (card) => Object.fromEntries(tileRows(card));
+    const tilesOf = async (config, hass) => { const card = mount(config, hass); await wait(20); const t = values(card); const n = tileRows(card).length; card.remove(); return { t, n }; };
+    const text = (card, id) => card.shadowRoot.getElementById(id)?.textContent || '';
+
+    // With a preset: the same reading, unit and calculation as the drawing and the details.
+    const s = setups.find((x) => x.name === 'Lambda' && x.config.title === 'Lambda');
+    const hass = hassOf(toStates(s.states('heat')), s.registry || {}, null, s);
+    const card = mount({ ...s.config, details_open: true, tiles: ['value:flow', 'value:dhw_bottom', 'value:heat', 'value:superheat', 'value:cutout_low_pressure', 'value:buffer_mode',
+      'value:program', 'value:pv', { value: 'hc_flow', name: 'Radiators' }, 'spread'] }, hass);
+    await wait(20);
+    const t = values(card);
+    check(t['Heat pump flow temperature'] === text(card, 't-vl').replace(/^VL\s*/, '') && t['DHW tank bottom'] === text(card, 't-dhw-bottom'), `#481: temperatures as in the drawing (${JSON.stringify(t)})`);
+    check(text(card, 't-hp-power').endsWith(`→ ${t['Heat output']}`), `#481: heat output as in the drawing (${t['Heat output']} / ${text(card, 't-hp-power')})`);
+    check(t.Superheat === text(card, 'd-superheat') && /K$/.test(t.Superheat) && t['Low-pressure cut-outs'] === text(card, 'd-cutout_low_pressure'), `#481: derived values and counts as in the details (${t.Superheat}, ${t['Low-pressure cut-outs']})`);
+    check(t['Buffer mode'] === text(card, 't-buf-mode') && t['Heating program'] === 'Eco' && t['Power from PV'] === text(card, 't-src-pv-v'), `#481: states and power sources as in the drawing (${t['Buffer mode']}, ${t['Heating program']}, ${t['Power from PV']})`);
+    check(t.Radiators === '30.1 °C' && Object.keys(t).length === 10, `#481: a value tile takes a name (${JSON.stringify(t)})`);
+    check(card.shadowRoot.querySelector('#stats .stat[data-tile="0"]').dataset.entity === card._e.flow, '#481: a tap on a value tile opens its entity');
+    card.remove();
+
+    // A custom configuration: unavailable stays apart from zero, a value without an entity has no tile.
+    const own = { power_sources: 'manual', entities: { power: 'sensor.p', heat: 'sensor.h', flow: 'sensor.f', return: 'sensor.r', dhw_heater: 'sensor.rod', hc_pump: 'binary_sensor.pump', starts_total: 'sensor.starts',
+      room: 'sensor.room', room_humidity: 'sensor.hum', grid: 'sensor.grid' } };
+    const ownTiles = ['value:flow', 'value:return', 'value:heat', 'value:dhw_heater', 'value:hc_pump', 'value:starts_total', 'value:dew_point', 'value:grid', 'value:buffer_top'];
+    const ownStates = { 'sensor.p': ['0', 'W'], 'sensor.h': ['0', 'kW'], 'sensor.f': ['0', '°C'], 'sensor.r': ['27', '°C'], 'sensor.rod': ['0', 'W'], 'binary_sensor.pump': 'off', 'sensor.starts': '0',
+      'sensor.room': ['21', '°C'], 'sensor.hum': ['50', '%'], 'sensor.grid': ['0', 'W'] };
+    const zero = await tilesOf({ ...own, tiles: ownTiles }, hassOf(toStates(ownStates)));
+    check(zero.n === 8 && zero.t['Heat pump flow temperature'] === '0.0 °C' && zero.t['Heat output'] === '0.0 kW' && zero.t['DHW heater rod active'] === '0 W' && zero.t['Circuit pump running'] === 'off'
+      && zero.t['Compressor starts total'] === '0' && zero.t['Power from grid'] === '0 W' && zero.t['Dew point'] === '10.2 °C', `#481: zero is shown as zero, the dew point is calculated (${JSON.stringify(zero.t)})`);
+    const dead = await tilesOf({ ...own, tiles: ownTiles }, hassOf(toStates(Object.fromEntries(Object.keys(ownStates).map((k) => [k, 'unavailable'])))));
+    check(dead.n === 8 && Object.values(dead.t).every((v) => v === '–'), `#481: unavailable values show no number (${JSON.stringify(dead.t)})`);
+    // An unavailable thermostat that keeps its attributes has no reading; a list of rooms shows the members that report.
+    const climate = (state) => ({ state, attributes: { current_temperature: 21, temperature: 22 } });
+    const thermostat = { power_sources: 'manual', entities: { room: 'climate.room', room_target: 'climate.room', room_humidity: 'sensor.hum', dhw_target: 'water_heater.tank' }, tiles: ['value:room', 'value:room_target', 'value:dew_point', 'value:dhw_target'] };
+    const thermo = async (state) => Object.values((await tilesOf(thermostat, hassOf(toStates({ 'climate.room': climate(state), 'water_heater.tank': climate(state), 'sensor.hum': ['50', '%'] })))).t).join(' ');
+    const live = await thermo('heat'); const stale = await thermo('unavailable');
+    const rooms = await tilesOf({ power_sources: 'manual', entities: { room: ['sensor.ra', 'sensor.rb'] }, tiles: ['value:room'] }, hassOf(toStates({ 'sensor.ra': 'unavailable', 'sensor.rb': ['20', '°C'] })));
+    check(live === '21.0 °C 22.0 °C 10.2 °C 22.0 °C' && stale === '– – – –' && rooms.t.Room === '20.0 °C', `#481: attributes of an unavailable thermostat are no reading (${live} / ${stale} / ${JSON.stringify(rooms.t)})`);
+    const rod = await tilesOf({ ...own, tiles: ['value:dhw_heater'] }, hassOf(toStates({ ...ownStates, 'sensor.rod': ['1.5', 'kW'] })));
+    check(rod.t['DHW heater rod active'] === '1.5 kW', `#481: a heater shows its measured power (${JSON.stringify(rod.t)})`);
+
+    // The split of the Energy dashboard needs the heat pump's power: without it the shares are unknown.
+    const dash = setups.find((x) => x.name === 'Lambda' && x.energy);
+    const dashTiles = async (power) => {
+      const states = toStates(dash.states('heat'));
+      const c = mount({ ...dash.config, tiles: ['value:pv', 'value:grid'] }, hassOf(states, dash.registry || {}, dash.energy, dash)); await wait(60);
+      if (power !== undefined) { states[c._e.power] = { ...states[c._e.power], state: power }; c.hass = { ...c._hass, states: { ...states } }; await wait(20); }
+      const out = values(c); c.remove(); return out;
+    };
+    const split = await dashTiles(); const noPower = await dashTiles('unavailable');
+    check(/^≈[\d,]+ W$/.test(split['Power from PV'] || '') && noPower['Power from PV'] === '–' && noPower['Power from grid'] === '–', `#481: Energy dashboard shares (${JSON.stringify(split)} / ${JSON.stringify(noPower)})`);
+
+    // Two named circuits: the circuit stands in the name of the tile, in the editor in the group; circuit 3 does not exist.
+    const two = { power_sources: 'manual', hc_count: 2, hc_name: 'Ground floor', hc2_name: 'Upstairs', entities: { hc_flow: 'sensor.a', hc2_flow: 'sensor.b', hc3_flow: 'sensor.c', room: 'sensor.ra', hc2_room: 'sensor.rb' } };
+    const twoHass = hassOf(toStates({ 'sensor.a': ['31', '°C'], 'sensor.b': ['42.5', '°C'], 'sensor.c': ['50', '°C'], 'sensor.ra': ['21', '°C'], 'sensor.rb': ['19.5', '°C'] }));
+    const circuits = await tilesOf({ ...two, tiles: ['value:hc_flow', 'value:hc2_flow', 'value:hc3_flow', 'value:room', 'value:hc2_room'] }, twoHass);
+    check(circuits.n === 4 && circuits.t['Circuit flow temperature · Ground floor'] === '31.0 °C' && circuits.t['Circuit flow temperature · Upstairs'] === '42.5 °C'
+      && circuits.t['Room · Ground floor'] === '21.0 °C' && circuits.t['Room · Upstairs'] === '19.5 °C', `#481: named circuits (${JSON.stringify(circuits.t)})`);
+    const labels = C._tileOptions(two, C._resolve(two, twoHass), twoHass).options;
+    check(labels.some((o) => o.value === 'value:hc2_flow' && o.label === 'Upstairs › Circuit flow temperature') && labels.some((o) => o.value === 'value:room' && o.label === 'Ground floor › Room')
+      && !labels.some((o) => o.value === 'value:hc3_flow'), `#481: values grouped by circuit (${labels.map((o) => o.label).join(', ')})`);
+
+    // Every value the editor offers for a demo installation has a tile; a value of the catalog is not offered twice.
+    const all = [];
+    for (const x of setups) {
+      const h = hassOf(toStates(x.states('heat')), x.registry || {}, null, x); const cfg = { ...x.config, power_sources: 'manual' };
+      const offered = C._tileOptions(cfg, C._resolve(cfg, h), h).options.map((o) => o.value).filter((v) => v.startsWith('value:'));
+      const got = await tilesOf({ ...cfg, tiles: offered }, h);
+      if (got.n !== offered.length || !offered.length || Object.values(got.t).some((v) => !v || /NaN|undefined|unavailable|unknown/.test(v))) all.push(`${x.name}: ${offered.length}/${got.n} ${JSON.stringify(got.t)}`);
+      if (['value:outdoor', 'value:power', 'value:energy_total', 'value:cop_heating_today'].some((v) => offered.includes(v))) all.push(`${x.name}: offered twice`);
+    }
+    check(!all.length, `#481: offered values have a tile (${all.join(' | ')})`);
+
+    // Invalid values are refused with the way to write them.
+    const refused = ['value:nope', 'value', { value: 'hc9_flow' }].map((x) => { try { mount({ tiles: [x] }, hassOf({})).remove(); return ''; } catch (err) { return err.message; } });
+    check(refused.every((m) => /value:<entity key>/.test(m)), `#481: unknown values are refused (${refused.join(' | ')})`);
+    let accepted = true;
+    try { document.createElement('heatpump-flow-card').setConfig({ tiles: ['value:unit2', { value: 'room' }, { entity: 'sensor.x', value: 'ignored' }] }); } catch (err) { accepted = err.message; }
+    check(accepted === true, `#481: units, objects and entity tiles are accepted (${accepted})`);
+
+    // Units of a cascade: the row of the details, without power "–".
+    const unitsCfg = { power_sources: 'manual', units: [{ name: 'Unit A', power: 'sensor.u1p', heat: 'sensor.u1h' }, { power: 'sensor.u2p', heat: 'sensor.u2h' }],
+      entities: { flow: 'sensor.f', return: 'sensor.r' }, details_open: true, tiles: ['value:unit1', 'value:unit2', 'value:unit3'] };
+    const now = new Date().toISOString();
+    const fresh = (state, unit) => ({ state, attributes: { unit_of_measurement: unit }, last_updated: now, last_reported: now });
+    const uc = mount(unitsCfg, hassOf(toStates({ 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.u1p': fresh('1000', 'W'), 'sensor.u1h': fresh('4', 'kW'), 'sensor.u2p': 'unavailable', 'sensor.u2h': fresh('0', 'kW') })));
+    await wait(20);
+    const ut = values(uc);
+    check(Object.keys(ut).length === 2 && ut['Unit A'] === text(uc, 'd-unit1') && /1,000 W → 4\.0 kW/.test(ut['Unit A']) && ut['Unit 2'] === '–', `#481: units of a cascade (${JSON.stringify(ut)})`);
+    uc.remove();
+
+    // Editor: reopening and saving keeps the tiles as they stand, chips of YAML tiles can be moved and removed, entities are added.
+    const yamlTiles = ['cop_heating', { key: 'spread' }, { key: 'energy', price: 0.3, tap_action: { action: 'navigate', navigation_path: '/energy' } }, { entity: 'sensor.heatpump_dhw_middle', unit: 'C' },
+      { value: 'hc_flow', name: 'Flow' }, { entity: 'sensor.heatpump_buffer_middle', name: 'Middle' }, 'value:dhw_bottom', 'spread', { value: 'flow', hold_action: { action: 'none' } }];
+    const ed = document.createElement('heatpump-flow-card-editor');
+    let out;
+    ed.addEventListener('config-changed', (ev) => { out = ev.detail.config; });
+    const cfg = { preset: 'lambda', tiles: JSON.parse(JSON.stringify(yamlTiles)) };
+    ed.setConfig(cfg); ed.hass = hass; await wait(10);
+    const form = () => ({ ...ed._form.data });
+    const flat = (list) => list.flatMap((x) => (x.schema ? flat(x.schema) : [x]));
+    const names = flat(ed._form.schema).map((x) => x.name);
+    check(['tiles', 'tile_entity', 'tile_name_4', 'tile_name_5', 'tile_name_6'].every((x) => names.includes(x)) && !names.includes('tile_name_2') && !names.includes('tile_name_8'),
+      `#481: the editor lists tiles, the entity picker and the names (${names.filter((x) => x.startsWith('tile')).join()})`);
+    const tilesField = flat(ed._form.schema).find((x) => x.name === 'tiles');
+    const labelOf = (v) => tilesField.selector.select.options.find((o) => o.value === v)?.label;
+    check(ed._form.data.tiles.join() === 'cop_heating:today,spread,yaml:2,yaml:3,value:hc_flow,entity:sensor.heatpump_buffer_middle,value:dhw_bottom,yaml:7,yaml:8'
+      && / · YAML$/.test(labelOf('yaml:2')) && /^Electricity/.test(labelOf('yaml:2')) && labelOf('value:hc_flow') === 'Flow' && labelOf('entity:sensor.heatpump_buffer_middle') === 'Middle',
+    `#481: every tile is a chip (${ed._form.data.tiles.map((v) => `${v}=${labelOf(v)}`).join(', ')})`);
+    check(ed._form.computeHelper({ name: 'tiles' }) && /29\.4/.test(ed._form.computeHelper({ name: 'tile_name_5' })) && ed._form.computeLabel({ name: 'tile_name_4' }) === 'Name: Circuit flow temperature',
+      `#481: preview and label of a name field (${ed._form.computeHelper({ name: 'tile_name_5' })} / ${ed._form.computeLabel({ name: 'tile_name_4' })})`);
+    ed._changed({ ...form(), title: 'New title' });
+    check(JSON.stringify(out.tiles) === JSON.stringify(yamlTiles) && out.title === 'New title' && !Object.keys(out).some((k) => /^tile_/.test(k)), `#481: saving keeps YAML tiles and actions unchanged (${JSON.stringify(out.tiles)})`);
+    ed._changed({ ...form(), tiles: ['yaml:2', 'value:hc_setpoint', 'cop_heating:today', 'value:hc_flow'] });
+    check(JSON.stringify(out.tiles) === JSON.stringify([yamlTiles[2], 'value:hc_setpoint', 'cop_heating', yamlTiles[4]]), `#481: moved, removed and added tiles (${JSON.stringify(out.tiles)})`);
+    ed._changed({ ...form(), tile_entity: 'sensor.heatpump_dhw_middle' });
+    // The picker is emptied through its own value: the form passes the entity once, then nothing. An event in between adds nothing.
+    const during = ed._form.data.tile_entity;
+    ed._changed({ ...form(), title: 'Again' });
+    const between = out.tiles.length;
+    await wait(10);
+    check(JSON.stringify(out.tiles[4]) === '{"entity":"sensor.heatpump_dhw_middle"}' && between === 5 && during === 'sensor.heatpump_dhw_middle' && ed._form.data.tile_entity === '',
+      `#481: an entity becomes a tile and leaves the picker (${JSON.stringify(out.tiles)}, ${during} / ${ed._form.data.tile_entity})`);
+    ed._changed({ ...form(), tile_entity: 'sensor.heatpump_dhw_middle' });
+    await wait(10);
+    check(out.tiles.length === 5, '#481: the same entity is not added twice');
+    ed._changed({ ...form(), tile_name_4: 'Middle ' });
+    check(JSON.stringify(out.tiles[4]) === '{"entity":"sensor.heatpump_dhw_middle","name":"Middle "}' && ed._form.data.tile_name_4 === 'Middle ', `#481: an entity tile takes a name while typing (${JSON.stringify(out.tiles[4])})`);
+    ed._changed({ ...form(), tile_name_1: 'Target', tile_name_3: undefined, tile_name_4: '' });
+    check(JSON.stringify(out.tiles.slice(1)) === '[{"value":"hc_setpoint","name":"Target"},"cop_heating","value:hc_flow",{"entity":"sensor.heatpump_dhw_middle"}]', `#481: names set and cleared (${JSON.stringify(out.tiles)})`);
+    // Further values of the details, from the preset or the configuration: offered once, stored as the entity with its own name.
+    const det = { ...s.config, details: [{ entity: 'sensor.heating_curve_flow', name: 'Heating curve flow' }, 'sensor.heatpump_dhw_middle', { entity: 'sensor.living_room_temperature', unit: 'C', decimals: 0 }, 'sensor.nope', 'sensor.heating_curve_flow'], entities: {}, tiles: ['spread'] };
+    const detOf = (c) => C._tileOptions(c, C._resolve(c, hass), hass);
+    const more = detOf(det).options.filter((o) => o.value.startsWith('entity:'));
+    check(more.map((o) => o.label).join() === `More › Heating curve flow,More › ${C.prototype._entityName.call({ _hass: hass }, 'sensor.heatpump_dhw_middle')},More › ${C.prototype._entityName.call({ _hass: hass }, 'sensor.living_room_temperature')}`,
+      `#481: the further values of the details are offered (${more.map((o) => o.label).join()})`);
+    const stored = C._tilesToStore(detOf(det), ['spread', 'entity:sensor.heating_curve_flow', 'entity:sensor.heatpump_dhw_middle', 'entity:sensor.living_room_temperature'], {});
+    check(JSON.stringify(stored) === '["spread",{"entity":"sensor.heating_curve_flow","name":"Heating curve flow"},{"entity":"sensor.heatpump_dhw_middle"},{"entity":"sensor.living_room_temperature","unit":"C","decimals":0}]', `#481: stored as entity tiles (${JSON.stringify(stored)})`);
+    const again = detOf({ ...det, tiles: stored });
+    check(again.value.join() === 'spread,entity:sensor.heating_curve_flow,entity:sensor.heatpump_dhw_middle,yaml:3' && again.options.filter((o) => o.value === 'entity:sensor.heating_curve_flow').map((o) => o.label).join() === 'Heating curve flow'
+      && !again.options.some((o) => o.value === 'entity:sensor.living_room_temperature'), `#481: and read back (${again.value.join()})`);
+    const mappedDet = detOf({ ...det, details: ['sensor.heatpump_dhw_middle'], entities: { dhw_middle: 'sensor.heatpump_dhw_middle' } });
+    check(!mappedDet.options.some((o) => o.value.startsWith('entity:')), '#481: a detail that is a mapped value is not offered twice');
+    ed._changed({ ...form(), tiles: [] });
+    check(Array.isArray(out.tiles) && !out.tiles.length, '#481: an empty selection hides the row');
+    ed._changed({ ...form(), tiles_custom: false });
+    check(!('tiles' in out), '#481: switching the own selection off removes the tiles');
+    const shown = mount({ ...s.config, tiles: yamlTiles }, hass); await wait(20);
+    check(tileRows(shown).length === yamlTiles.length && shown._tileActs[2].tap_action?.navigation_path === '/energy' && shown._tileActs[8].hold_action?.action === 'none', '#481: the card shows every kind of tile with its actions');
+    shown.remove();
   }
 
   // 10. theming through --hfc-* variables, layouts, actions on every element of the schematic
