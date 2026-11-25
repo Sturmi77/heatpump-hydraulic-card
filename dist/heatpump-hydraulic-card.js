@@ -5518,6 +5518,8 @@ class HeatpumpFlowCard extends HTMLElement {
       let cost = 0; let kwh = 0; let last = NaN;
       (res?.[energy] || []).forEach((r) => {
         const p = means.get(new Date(r.start).getTime());
+        // The last month leaves out the hours without a price of their own; _cost counts them at the mean of the others.
+        if (period === 'last_month' && !Number.isFinite(p)) return;
         if (Number.isFinite(p)) last = p;
         if (Number.isFinite(r.change) && Number.isFinite(last)) { cost += r.change * last; kwh += r.change; }
       });

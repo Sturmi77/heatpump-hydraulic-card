@@ -7139,6 +7139,8 @@
     const dyn = (rows) => monthHass({ ...states, 'sensor.price': { state: '9.99', attributes: { unit_of_measurement: 'EUR/kWh', state_class: 'measurement' } } }, { ws: (x) => { costQuery = x; return Promise.resolve(rows); } });
     const full = await tilesOf({ price: 'sensor.price', tiles: ['cost:last_month'] }, dyn({ 'sensor.el': [{ start: 0, change: 100 }, { start: H, change: 200 }], 'sensor.price': [{ start: 0, mean: 0.1 }, { start: H, mean: 0.2 }] }));
     const part = await tilesOf({ price: 'sensor.price', tiles: ['cost:last_month'] }, dyn({ 'sensor.el': [{ start: 0, change: 200 }, { start: H, change: 100 }], 'sensor.price': [{ start: H, mean: 0.2 }] }));
+    const gap = await tilesOf({ price: 'sensor.price', tiles: ['cost:last_month'] }, dyn({ 'sensor.el': [{ start: 0, change: 100 }, { start: H, change: 100 }, { start: 2 * H, change: 100 }], 'sensor.price': [{ start: 0, mean: 0.1 }, { start: 2 * H, mean: 0.3 }] }));
+    check(gap['Cost · last month'] === '≈€60.00', `#481: an hour without a price after one with a price (${gap['Cost · last month']})`);
     check(full['Cost · last month'] === '€50.00' && part['Cost · last month'] === '≈€60.00' && !!costQuery.end_time && costQuery.period === 'hour', `#481: cost of the last month (${full['Cost · last month']} / ${part['Cost · last month']})`);
 
     // The last complete heating run. Minutes before now; the history API gives the state at the start of the window first.
