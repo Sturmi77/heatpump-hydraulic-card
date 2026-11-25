@@ -31,6 +31,7 @@ const validate = (m) => {
   const at = `upstream/${m.name}`;
   if (m.name !== `${m.preset}.json`) problems.push(`${at}: "preset" must match the file name.`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(m.reviewed?.date || '')) problems.push(`${at}: reviewed.date must be YYYY-MM-DD.`);
+  if (m.reviewed?.at !== undefined && !(typeof m.reviewed.at === 'string' && m.reviewed.at.startsWith(m.reviewed.date) && !Number.isNaN(Date.parse(m.reviewed.at)))) problems.push(`${at}: reviewed.at must be an ISO time on reviewed.date.`);
   if (!Array.isArray(m.sources) || !m.sources.length) problems.push(`${at}: sources must list at least one repository.`);
   (m.sources || []).forEach((s, n) => {
     if (!/^[\w.-]+\/[\w.-]+$/.test(s.repo || '')) problems.push(`${at}: sources[${n}].repo must be owner/name.`);
@@ -57,12 +58,21 @@ const latestRelease = async (repo) => {
   return r ? { tag: r.tag_name, date: r.published_at, url: r.html_url } : null;
 };
 
-// Commits on the branch that touch one of the files since the review date, newest first, without noise.
+// Start of what is new: the time of the review (`reviewed.at`, written by --ack), else the end of the review day. Counting
+// from the start of the review day reported the commits that the review had just checked once more.
+const reviewedUntil = (reviewed) => {
+  if (reviewed.at) return new Date(reviewed.at).toISOString();
+  const next = new Date(`${reviewed.date}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString();
+};
+
+// Commits on the branch that touch one of the files after the review, newest first, without noise.
 const changesSince = async (source, since) => {
   const found = new Map();
   const missing = [];
   for (const path of source.paths) {
-    const list = await gh(`/repos/${source.repo}/commits?sha=${encodeURIComponent(source.branch)}&path=${encodeURIComponent(path)}&since=${since}T00:00:00Z&per_page=30`);
+    const list = await gh(`/repos/${source.repo}/commits?sha=${encodeURIComponent(source.branch)}&path=${encodeURIComponent(path)}&since=${encodeURIComponent(since)}&per_page=30`);
     if (list === null || (!list.length && !(await gh(`/repos/${source.repo}/contents/${path}?ref=${encodeURIComponent(source.branch)}`)))) { missing.push(path); continue; }
     for (const c of list) {
       const subject = c.commit.message.split('\n')[0];
@@ -77,13 +87,14 @@ const changesSince = async (source, since) => {
 
 const inspect = async (m) => {
   const sources = [];
+  const since = reviewedUntil(m.reviewed);
   for (const source of m.sources) {
     const [release, changes] = await Promise.all([
       source.releases === false ? null : latestRelease(source.repo),
-      changesSince(source, m.reviewed.date),
+      changesSince(source, since),
     ]);
     // A release counts when it is not the reviewed one and was published after the review.
-    const newRelease = release && release.tag !== m.reviewed.version && release.date.slice(0, 10) > m.reviewed.date ? release : null;
+    const newRelease = release && release.tag !== m.reviewed.version && new Date(release.date).toISOString() > since ? release : null;
     sources.push({ source, release, newRelease, ...changes });
   }
   const changed = sources.some((s) => s.newRelease || s.commits.length);
@@ -154,7 +165,8 @@ const ack = async (preset) => {
     version = (await latestRelease(source.repo))?.tag ?? version;
     if (version) break;
   }
-  m.reviewed = { date: new Date().toISOString().slice(0, 10), version, ...(m.reviewed.note && flag('--keep-note') ? { note: m.reviewed.note } : {}) };
+  const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+  m.reviewed = { date: now.slice(0, 10), at: now, version, ...(m.reviewed.note && flag('--keep-note') ? { note: m.reviewed.note } : {}) };
   await writeFile(file, `${JSON.stringify(m, null, 2)}\n`);
   console.log(`upstream/${preset}.json: reviewed ${m.reviewed.date}${version ? `, version ${version}` : ''}.`);
 };
