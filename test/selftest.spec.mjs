@@ -26,6 +26,13 @@ test('report fixture keeps configuration maps and thermostat attributes', async 
   expect(fixture.config.valve_map).toEqual({ on: 'dhw', off: 'heating' });
   expect(fixture.config.entities).toEqual({ dhw_top: 'climate.f_dhw_top', dhw_target: 'climate.f_dhw_top' });
   expect(fixture.states['climate.f_dhw_top']).toEqual({ state: 'heat', attributes: { current_temperature: 49.6, temperature: 50 } });
+  // What the preset reads from the installation carries its origin in the report; the case takes the value alone (#253).
+  writeFileSync(report, ['Heat Pump Hydraulic Card diagnostic report', 'Preset: nibe', 'Source type: exhaust, read from the installation',
+    'Storage: combined · hot water: tank_in_tank · condenser: tank, read from the installation · parallel buffer: combined storage · series buffer: no · primary pump: no',
+    '', 'Entity mappings:', '- mode: sensor.prio_43086 = HEAT', ''].join('\n'));
+  expect(run().config).toMatchObject({ source_type: 'exhaust', storage: 'combined', condenser: 'tank', dhw_type: 'tank_in_tank', primary_pump: false });
+  writeFileSync(report, ['Heat Pump Hydraulic Card diagnostic report', 'Preset: kronoterm', '', 'Entity mappings:', '- mode: sensor.m = heat', '',
+    'Maps:', '- valve_map: on=dhw, off=heating (preset)', ''].join('\n'));
   expect(run('--set', 'valve_map=custom').config.valve_map).toBe('custom');
 });
 
