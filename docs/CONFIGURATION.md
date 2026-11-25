@@ -132,6 +132,8 @@ tiles:
   - env_energy:month          # environmental energy from a total counter's long-term statistics
   - starts
   - defrosts:yesterday
+  - cop_total:7d              # last 7 complete days, with the trend against the 7 days before
+  - cop_weather               # the same COP against the usual at this outdoor temperature
   - cost:month                # electricity × price, currency from the HA settings
   - key: energy_heating
     period: month
@@ -164,9 +166,13 @@ tiles:
 
 Tile keys that take a source: the electricity, environmental energy and heat keys, `cop_heating`, `cop_dhw`, `cop_cooling`, `cop_total`, `spf`, the starts and runtime keys, `pv_production` and `solar_thermal`. Live values (`cop_live`, `spread`, `power` …), `cost`, `load_classes`, `dhw_loss` and `pv_boost_share` are computed and take none.
 
+**Rolling windows and trends:** the periods `7d` and `30d` are the last 7 and 30 complete days, from the daily long-term statistics of the counters (without today). They work for electricity, heat, COP, starts and runtime. The tile adds a trend against as many days before: ▲ or ▼ with the change, ▶ below 3 %. Green and red only judge a COP; more electricity or heat is neither good nor bad. A COP is the heat of the days divided by their electricity, over the days both counters have; a day that was reset or corrected is left out, and with less than 85 % of the days there is no value. `trend: false` leaves the arrow out (`{key: cop_total, period: 7d, trend: false}`).
+
+**Weather-adjusted COP:** a COP falls when it gets colder, so a plain trend mostly shows the weather. `cop_weather` (all heat) and `cop_heating_weather` (heating) compare the COP of the last 7 days with what was usual at the same outdoor temperatures: `≈4.71 ▶ +1.5 %`. The card learns the usual from the 28 days before (a straight line through the daily COPs over the mean outdoor temperature, weighted by electricity). Deviations below 3 %, or below twice the scatter of the learned days, show ▶. A `?` marks days colder or warmer than anything learned. Needs total counters for heat and electricity and an `outdoor` sensor with `state_class: measurement`, at least 14 usable days over 4 K; without them the tile shows "–". It is a simple model: other influences (flow temperature, hot-water share, sun) are not in it.
+
 **Actions:** a tap opens the more-info dialog of the tile's entity. `tap_action`, `hold_action` (500 ms) and `double_tap_action` accept every Home Assistant action (`more-info`, `navigate`, `url`, `toggle`, `perform-action`, `assist`, `none`, with `confirmation`). Tiles with their own name, entity, price or action are edited in YAML.
 
-Periods: `now`, `today`, `yesterday`, `week`, `month`, `year`, `total`. A tile is only shown when the installation can fill it. Values come from, in this order:
+Periods: `now`, `today`, `yesterday`, `week`, `month`, `year`, `total`, `7d`, `30d`. A tile is only shown when the installation can fill it. Values come from, in this order:
 1. the preset's own entity for that period (e.g. Lambda `hp1_heating_cop_monthly`)
 2. for the default tiles' entities (`cop_heating_today` …): "today"
 3. the change over the period from Home Assistant's **long-term statistics** of a total counter (needs `state_class: total_increasing`, true for most energy counters). This gives EMS-ESP and others "today", "this month" and so on, although they only report totals. Start and hour counters with `state_class: measurement` give their periods from the highest and lowest value of the period.
@@ -175,7 +181,7 @@ Periods: `now`, `today`, `yesterday`, `week`, `month`, `year`, `total`. A tile i
 
 | Group | Tile keys |
 |---|---|
-| Efficiency | `cop_live`, `cop_heating`, `cop_dhw`, `cop_cooling`, `cop_total`, `spf` (year) |
+| Efficiency | `cop_live`, `cop_heating`, `cop_dhw`, `cop_cooling`, `cop_total`, `spf` (year), `cop_weather`, `cop_heating_weather` (7d) |
 | Electricity | `energy`, `energy_heating`, `energy_dhw`, `energy_cooling`, `energy_defrost`, `energy_standby`, `energy_aux` (heater) |
 | Environmental energy | `env_energy` |
 | Heat | `heat`, `heat_heating`, `heat_dhw`, `heat_cooling`, `heat_defrost` |
