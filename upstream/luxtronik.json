@@ -1,9 +1,10 @@
 {
   "preset": "luxtronik",
   "reviewed": {
-    "date": "2026-11-22",
+    "date": "2026-11-24",
+    "at": "2026-11-24T05:56:53Z",
     "version": "2026.11.18",
-    "note": "2026.11.01 to 2026.11.18 and main to 01b93fe checked (#472): status line tables decoded as the firmware does, the derived operating mode (status) unchanged for every raw code; air inverters get compressor_speed in rpm (now mapped next to pump_frequency) and fan_speed in rpm (now mapped); fan_control_signal (LD9V, 0.1 V, never 0) left out; error code texts and the inverter silent mode switch do not concern the preset."
+    "note": "main to 01b93fe checked again (#484, reported once more because the watch counted from the start of the review day): the inverter silent mode switch, its program select and its schedule texts do not concern the preset; the air inverter model list moved to const.py with the same models. Findings of 2026-11-22 (#472) stand: compressor_speed in rpm and fan_speed mapped, fan_control_signal left out."
   },
   "sources": [
     {

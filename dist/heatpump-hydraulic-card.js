@@ -36,7 +36,8 @@ const HFC_SCRIPT_URL = (() => {
 //   valve_map                  → raw state of the `valve` entity → dhw | heating (default: on, Tank, DHW … mean hot water)
 //   heater_map                 → numeric state of the `heater` entity → heater stage 1 to 3; any other number is off. For
 //                                stage fields that also count other heat sources (THZ: 2 = heat pump, 3 to 5 = booster).
-//                                On-states of a binary fallback still mean stage 1.
+//                                On-states of a binary fallback still mean stage 1. Applies to the preset's own heater entity
+//                                only; `heater_map` in the configuration applies to any heater and is merged over it.
 //   defaults(entities, hass)   → { unit_style, unit_size, buffer, primary_pump } the installation reports; the card configuration wins
 // ctx.key(platform, domain, translation_key) finds entities via the entity registry (language-independent),
 // ctx.match(regex, platform) finds the first entity id matching a pattern, ctx.state(entity_id) reads a current state.
@@ -1667,6 +1668,8 @@ const HFC_PRESETS = {
   // messages become number, switch or select entities instead of sensors.
   ehs_sentinel: {
     name: 'Samsung EHS (EHS Sentinel)',
+    // Confirmed by the reporter of #403 on 0.20.0-beta.1.
+    tested: true,
     unit_style: 'samsung',
     // The primary water pump (0x4089) runs for hot water, too.
     primary_pump: true,
@@ -3689,6 +3692,10 @@ class HeatpumpFlowCard extends HTMLElement {
         throw new Error(`sg_ready_map must map raw states to ${HFC_SG_READY_STATES.join(', ')}`);
       }
     }
+    if (config.heater_map !== undefined && config.heater_map !== null && (typeof config.heater_map !== 'object' || Array.isArray(config.heater_map)
+      || Object.entries(config.heater_map).some(([k, v]) => !/^-?\d+$/.test(k.trim()) || ![0, 1, 2, 3].includes(v === '' || v === null ? NaN : +v)))) {
+      throw new Error('heater_map must map whole numbers of the heater entity to a stage: 0 (off), 1, 2 or 3');
+    }
     if (config.errors !== undefined && (!Array.isArray(config.errors) || config.errors.some((id) => typeof id !== 'string'))) {
       throw new Error('errors must be a list of entity ids');
     }
@@ -3724,7 +3731,8 @@ class HeatpumpFlowCard extends HTMLElement {
       sg: { ...HFC_SG_READY_MAP, ...(preset?.sg_ready_map || {}), ...(config.sg_ready_map || {}) },
       // The keys are lower case, so a state matches whatever case the key was written in; the values are dhw or heating.
       valve: Object.fromEntries(Object.entries({ ...(preset?.valve_map || {}), ...(config.valve_map || {}) }).map(([k, v]) => [String(k).toLowerCase(), hfcValveSide(v)])),
-      heater: preset?.heater_map || null,
+      // Set in _build: the preset's map belongs to the preset's heater entity, which is known once the entities are resolved.
+      heater: null,
     };
     this._runningStates = config.running_states || preset?.running_states || [];
     this._statusLabels = preset?.status_labels || {};
@@ -4074,7 +4082,8 @@ class HeatpumpFlowCard extends HTMLElement {
     const isMap = (m) => !!m && typeof m === 'object' && !Array.isArray(m) && Object.keys(m).length > 0;
     const mapText = (m) => { const list = Object.entries(m); return list.length > 8 ? `${list.length} entries` : list.map(([k, v]) => `${clean(k)}=${clean(v)}`).join(', '); };
     const mapLines = HFC_MAP_KEYS.flatMap((name) => [[r.preset?.[name], 'preset'], [config[name], 'configuration']]
-      .filter(([m]) => isMap(m)).map(([m, from]) => `- ${name}: ${mapText(m)} (${from})`));
+      .filter(([m]) => isMap(m)).map(([m, from]) => `- ${name}: ${mapText(m)} (${from}${name === 'heater_map' && from === 'preset'
+        && !HeatpumpFlowCard._presetHeaterMap(r) ? `, not used: ${r.entities.heater ? 'own heater entity' : 'no heater entity'}` : ''})`));
     const misplaced = HFC_MAP_KEYS.filter((name) => config.entities && typeof config.entities === 'object' && name in config.entities)
       .map((name) => `- ${name} under entities: ignored, it belongs at the top level of the card configuration`);
     // Shared pump (#344): the same rule as the card's _sharedPump, from the configuration and the resolved entities.
@@ -4195,6 +4204,17 @@ class HeatpumpFlowCard extends HTMLElement {
     return lines.join('\n');
   }
 
+  // The heater stages by number: the preset's map only for the heater entity the preset found (a power sensor of one's own in W would
+  // read as off, #459), the configuration's map for any heater entity. null = no map.
+  static _presetHeaterMap(r) {
+    return r.preset?.heater_map && r.entities.heater && r.entities.heater === r.fromPreset.heater ? r.preset.heater_map : null;
+  }
+  static _heaterMapOf(config, r) {
+    const map = { ...(HeatpumpFlowCard._presetHeaterMap(r) || {}) };
+    Object.entries(config.heater_map || {}).forEach(([k, v]) => { map[String(+k)] = +v; });
+    return Object.keys(map).length ? map : null;
+  }
+
   _build() {
     const r = HeatpumpFlowCard._resolve(this._config, this._hass);
     this._e = r.entities;
@@ -4205,6 +4225,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._details = r.details;
     // Preset sensors whose refrigerant role holds only in heating; an entity set in the config keeps its role.
     this._heatingRoles = (r.preset?.heating_roles || []).filter((k) => this._e[k] && this._e[k] === r.fromPreset[k] && !(this._config.entities || {})[k]);
+    this._maps.heater = HeatpumpFlowCard._heaterMapOf(this._config, r);
     // An action for a key without an entity does nothing; say so once instead of failing silently.
     if (r.ready && this._config.actions) {
       const lost = Object.keys(this._config.actions).filter((k) => !this._e[k] && !(this._warned || (this._warned = {}))[k]);
@@ -4583,12 +4604,13 @@ class HeatpumpFlowCard extends HTMLElement {
     if (key === 'heater' && this._heaterOff.length && !Number.isFinite(parseFloat(s)) && !['unknown', 'unavailable', 'none', ''].includes(s)) {
       return this._heaterOff.includes(s) ? 0 : 1;
     }
+    // A heater_map decides for every number, also 0 and below, as in the run details.
+    if (key === 'heater') { const lv = this._heaterMapped(s); if (lv !== undefined) return lv; }
     const v = parseFloat(s);
     if (!Number.isFinite(v) || v <= 0) return 0;
-    if (key === 'heater') { const lv = this._heaterMapped(s); if (lv !== undefined) return lv; }
     return ['w', 'kw', '%'].includes(this._unit(key)) ? 1 : Math.min(Math.round(v), 3);
   }
-  // A preset's heater_map turns a numeric state of the heater into a stage 0 to 3; numbers not in it (off, other heat sources)
+  // The heater_map turns a numeric state of the heater into a stage 0 to 3; numbers not in it (off, other heat sources)
   // are 0. undefined without a map or for a state that is not a number (an on-state of a binary fallback).
   _heaterMapped(state) {
     const v = parseFloat(state);

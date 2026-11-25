@@ -44,6 +44,7 @@ Everything on this page can also be set in the card editor, except where it says
 | `badges` | `[{entity, label}]` chips shown while the entity is on; each can carry `tap_action`, `hold_action` and `double_tap_action`. |
 | `program_map` | Raw state of the program entity → `eco`, `night`, `party`, `holiday` or `none`, merged over the preset. Without an entry the card recognises common words (eco, reduced, setback, absenk…, party, holiday, urlaub …). |
 | `sg_ready_map` | Raw state of `sg_ready` → `normal`, `blocked`, `boost` or `forced`, merged over the preset. Standard SG-Ready numbers work without a map: 1 = blocked, 2 = normal, 3 = raised targets, 4 = forced operation. Text or binary entities need an explicit map unless they already report one of the four normalized names or the states of the OpenEMS / FEMS heat pump controller. |
+| `heater_map` | Number of the `heater` entity → heater stage `0` (off), `1`, `2` or `3`, for a stage field that also counts other heat sources; a number that is not in the map is off. Merged over the preset's map (`thz`), which applies only to the heater entity the preset found, not to one of your own. Example: `heater_map: {3: 1, 4: 2, 5: 3}`. |
 | `compressor_speed_max` | Hz or rpm that count as full speed when `compressor_speed` is not a percentage (default: 100 Hz, 6000 rpm). Sets the pace of the animation. |
 | `animations` | `auto` (default, respects reduced motion), `always` or `off`. |
 | `flow_speed` | Multiplier for all animation speeds, from `0.2` to `3` (default `1`). |
