@@ -110,6 +110,9 @@
   const measuredPlace = (el, a) => el.dataset.prio === 'room' && (/^data-(prio|rank|places)$/.test(a.name)
     || (el.dataset.places && (a.name === 'x' || a.name === 'text-anchor'))
     || (a.name === 'class' && !a.value.split(/\s+/).some((c) => c && c !== 'room' && c !== 'outside')));
+  // So does, on a narrow schematic, whether the group of such a label alone can be reached by the keyboard.
+  const measuredGroup = (el, a, narrow) => narrow && /^(role|tabindex|aria-label)$/.test(a.name) && el.children.length > 0
+    && [...el.children].every((c) => c.dataset.prio === 'room');
   const measuredClass = (el, value) => (el.dataset.prio === 'room' ? value.split(/\s+/).filter((c) => c && c !== 'room' && c !== 'outside').join(' ') : value);
   const measuredText = (el, root) => {
     if (/^t-hc-room\d*$/.test(el.id)) return true;
@@ -124,11 +127,12 @@
     const svg = root.getElementById('svg');
     if (!svg) return { geo: ['(no schematic)'], state: [`failed ${!!card._failed}`] };
     const geo = []; const state = [];
+    const narrow = parseFloat(getComputedStyle(svg).getPropertyValue('--k')) >= 1.4;
     for (const el of [svg, ...svg.querySelectorAll('*')]) {
       const name = `${el.tagName}${el.id ? `#${el.id}` : ''}`;
       const g = []; const s = [];
       for (const a of [...el.attributes].sort((p, q) => (p.name < q.name ? -1 : 1))) {
-        if (a.name === 'id' || measuredPlace(el, a)) continue;
+        if (a.name === 'id' || measuredPlace(el, a) || measuredGroup(el, a, narrow)) continue;
         if (GEO.has(a.name)) g.push(`${a.name}=${a.name === 'x' && measuredX(el) ? '*' : a.value}`);
         else if (a.name === 'style') { if (style(a.value)) s.push(`style=${style(a.value)}`); } else s.push(`${a.name}=${a.name === 'class' ? measuredClass(el, a.value) : a.value}`);
       }

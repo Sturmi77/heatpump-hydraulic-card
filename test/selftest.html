@@ -7305,6 +7305,9 @@
     c = await draw({ dhw_heater: 'binary_sensor.rod', buffer_heater: 'sensor.pct' });
     check(q(c, 'heater-dhw').classList.contains('on') && !shown(c, 't-heater-dhw') && !shown(c, 't-heater-buf'), '#449: an on/off or percent entity shows its state only');
     c.remove();
+    c = await draw({ dhw_heater: 'sensor.stage' }, { 'sensor.stage': '2' });
+    check(q(c, 'heater-dhw').classList.contains('on') && !shown(c, 't-heater-dhw'), '#449: a stage number is not a power');
+    c.remove();
     // The rod at the bottom sensor: no room left of it, so the value stands outside the tank.
     c = await draw({ dhw_heater_bottom: 'sensor.rod', dhw_middle: 'sensor.t2' });
     const out = q(c, 't-heater-dhw-bottom');

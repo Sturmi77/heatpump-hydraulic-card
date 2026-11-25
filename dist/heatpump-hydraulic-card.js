@@ -4980,7 +4980,10 @@ class HeatpumpFlowCard extends HTMLElement {
       const home = el._roomHome || (el._roomHome = { x: el.getAttribute('x'), anchor: el.getAttribute('text-anchor') || 'start' });
       const places = [home, ...(el.dataset.places || '').split(';').map((s) => s.trim().split(/\s+/)).filter((p) => p[0]).map(([x, anchor]) => ({ x, anchor: anchor || home.anchor }))];
       el.classList.add('room');
-      const at = places.findIndex((p) => {
+      // A label with a width budget stands in full or not at all.
+      if (el._fit && el.textContent === el._fit.shown) { el.textContent = el._fit.full; el._fit = null; }
+      let wide = 0; try { wide = el.dataset.fit ? el.getComputedTextLength() - parseFloat(el.dataset.fit) : 0; } catch (err) { /* not laid out */ }
+      const at = wide > 0 ? -1 : places.findIndex((p) => {
         if (places.length > 1) { el.setAttribute('x', p.x); el.setAttribute('text-anchor', p.anchor); }
         const b = text(el);
         return b && free(el, b) && labels.push(b);
