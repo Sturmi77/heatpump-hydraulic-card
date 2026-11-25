@@ -242,7 +242,7 @@ const HFC_PRESETS = {
         sg_ready: s('local_only:signals:SRC.CUHP.SmartGridMode'),
         // The circuit flow rate is a signal of circuit 1 only.
         hc_volume: i.hc === 1 ? s('local_only:signals:SRC.HC1.FlowCtrl.PumpVolumeFlow') : undefined,
-        hc_pressure: s('gateway:system_pressure', 'heatSources:systemPressure'),
+        system_pressure: s('gateway:system_pressure', 'heatSources:systemPressure'),
         room: r(`${hc}:roomtemperature`),
         room_target: r(`${hc}:currentRoomSetpoint`),
         compressor_speed: s('gateway:modulation', 'heatSources:actualModulation') || r('heatSources:hs1:refrigerant:compressorActualSpeed'),
@@ -546,7 +546,7 @@ const HFC_PRESETS = {
         source_in: s('primary_inlet_temperature'),
         outdoor: s('outside_temperature'),
         // The pressure of the heating water, drawn at the first circuit; an air unit has no brine loop to show it at (#318).
-        hc_pressure: s('water_pressure'),
+        system_pressure: s('water_pressure'),
         dhw_top: s('dhw_buffer_top_temperature', 'domestic_hot_water_temperature'),
         dhw_middle: s('dhw_buffer_mid_temperature'),
         dhw_bottom: s('dhw_buffer_bottom_temperature'),
@@ -656,7 +656,7 @@ const HFC_PRESETS = {
         room_target: [zoneSensor('desired_temperature'), zoneClimate],
         program: zoneSensor('current_special_function'),
         cop_heating_today: m(new RegExp(`^sensor\\.${p}.*_heating_energy_efficiency(?:_\\d+)?$`)),
-        hc_pressure: e('system_water_pressure'),
+        system_pressure: e('system_water_pressure'),
         hours: counters.hours,
         starts_total: counters.starts,
         aux_hours: counters.aux_hours,
@@ -892,7 +892,7 @@ const HFC_PRESETS = {
         room: zoneRoom ? `sensor.${m}z1_temp` : [`sensor.${m}room_thermostat_temp`, `sensor.${m}z1_temp`],
         // Water pressure (TOP115, K/L series, seen in bar on a real installation in #276): only where the entity exists, so units
         // without it draw no empty pressure label. One system pressure, for the first circuit only.
-        hc_pressure: i.hc === 1 && ctx.state(`sensor.${m}water_pressure`) !== undefined ? `sensor.${m}water_pressure` : undefined,
+        system_pressure: i.hc === 1 && ctx.state(`sensor.${m}water_pressure`) !== undefined ? `sensor.${m}water_pressure` : undefined,
         program: [`sensor.${m}holiday_mode_state`, `switch.${m}holiday_mode_state`],
         hours: `sensor.${m}operations_hours`,
         starts_total: `sensor.${m}operations_counter`,
@@ -986,7 +986,7 @@ const HFC_PRESETS = {
         // In wolf_smartset "Ausgang MKP" duplicates "Mischerkreispumpe" and starts disabled, so the pump of the system tab comes first.
         hc_pump: hc(sm ? [s('mixer_circuit_pump'), s('mkp_mixer_circuit_pump')] : s('mkp_mixer_circuit_pump')),
         hc_mode: hc(s('mixer_circuit_status')),
-        hc_pressure: s('system_pressure'),
+        system_pressure: s('system_pressure'),
         room: s('room_temperature'),
         room_target: sm ? ctx.key('wolf_smartset', 'number', 'day_temperature_mixer_circuit_1') : s('day_temperature'),
         // wolf_smartset: the mixer circuit demand (Anforderung Mischerkreis, 36000400001) carries the time program and the party, holiday and eco modes.
@@ -1146,7 +1146,7 @@ const HFC_PRESETS = {
         circulation: b('circulation_pump'),
         hc_flow: [...s(`loop_${n}_inlet_temperature`, `loop_${n}_temp`), ...(thermostat.length ? [] : s(`loop_${n}_temperature`))],
         hc_pump: b(`circulation_loop_${n}`),
-        hc_pressure: s('heating_system_pressure'),
+        system_pressure: s('heating_system_pressure'),
         room: thermostat,
         room_target: thermostat.length ? [...s(`loop_${n}_room_current_setpoint`), c(`loop_${n}_temperature`)] : undefined,
         program: [ctx.key('kronoterm', 'select', 'operational_mode'), ...s('operation_program')],
@@ -1320,7 +1320,7 @@ const HFC_PRESETS = {
           hc_setpoint: s(`target_temperature_hk${n}`),
           hc_pump: b(`heating_circuit_${n}_pump`, `pump_on_hk${n}`),
         } : {}),
-        ...(n === 1 ? { room: roomActual, room_target: roomTarget, hc_pressure: reading(s('heater_pressure')) } : { hc_room: roomActual, hc_room_target: roomTarget }),
+        ...(n === 1 ? { room: roomActual, room_target: roomTarget, system_pressure: reading(s('heater_pressure')) } : { hc_room: roomActual, hc_room_target: roomTarget }),
         // THZ/LWZ units get their own operation-mode select (`operation_mode_thz`, integration after 2026.9).
         program: k('select', 'operation_mode', 'operation_mode_thz'),
         compressor_speed: reading(s('compressor_speed')),
@@ -1438,7 +1438,7 @@ const HFC_PRESETS = {
         // Low end of the heating curve (K, setting of block p14): it shifts the curve of circuit 1.
         hc_curve_offset: k('number', 'low_end_hc1'),
         hc_pump: b('heating_circuit_pump', 'pump_hc'),
-        hc_pressure: reading(s('pressure_hc')),
+        system_pressure: reading(s('pressure_hc')),
         // Room values of the remote control (FEK, FE7) first, else the inside sensor of the status block.
         room: reading(s('inside_temp_rc', 'inside_temp')),
         room_target: reading(s('room_set_temp')),
@@ -1541,7 +1541,7 @@ const HFC_PRESETS = {
         // Mixer movement of a mixed circuit, signed: above 0 opening, below 0 closing (VR 71, #1).
         hc_mixer_opening: c(`hc${i.hc}mixermovement`),
         // One system pressure: only for the first circuit, the further ones would copy it as hc2_pressure …
-        hc_pressure: i.hc === 1 ? [h('flowpressure'), c('waterpressure')] : undefined,
+        system_pressure: i.hc === 1 ? [h('flowpressure'), c('waterpressure')] : undefined,
         room: c(`z${i.hc}roomtemp`),
         room_target: c(`z${i.hc}actualroomtempdesired`),
         hours: h('runstatscompressorhours'),
@@ -1803,7 +1803,7 @@ const HFC_PRESETS = {
         dhw_target: [`number.${p}_hot_water_target`, `sensor.${p}_dhw_setpoint`],
         circulation: b('circulation_pump_operation'),
         hc_setpoint: i.hc === 1 ? s('lw_setpoint_main') : undefined,
-        hc_pressure: i.hc === 1 ? s('water_pressure') : undefined,
+        system_pressure: i.hc === 1 ? s('water_pressure') : undefined,
         room: i.hc === 1 ? s('indoor_ambient_temp_r1t') : undefined,
         room_target: i.hc === 1 ? s('rt_setpoint') : undefined,
         starts_today: s('stats_compressor_starts_today'),
@@ -1915,7 +1915,7 @@ const HFC_I18N = {
       eev: 'Expansion valve', superheat: 'Superheat', subcooling: 'Subcooling',
     },
     source_flow: 'Source', target: 'Target', curve_offset: 'curve', curve_shift: 'shift', mixer: 'Mixer', mixer_opening: 'opening', mixer_closing: 'closing', return_short: 'RL', error: 'Error', circulation: 'Circ.', circulation_from: 'from', circulation_until: 'until', valve_dhw: 'DHW', solar: 'Solar',
-    brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', pressure_normal: 'normal', pressure_warning: 'warning', pressure_critical: 'critical',
+    brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', system_pressure: 'System pressure', pressure_normal: 'normal', pressure_warning: 'warning', pressure_critical: 'critical',
     timeline_title: 'Last {h} hours', timeline_gap: 'No data', timeline_aria: 'Operating mode of the last {h} hours. Arrow keys select a period.',
     run_series: 'run {n} since {t}', run_pause: 'pause before {d}', run_partial: 'began before the timeline', run_ongoing: 'still running', run_phase: 'operating period, no compressor data', run_close: 'Close', run_electricity: 'Electricity', run_heat: 'Heat', sec_units: 'Units', unit: 'Unit', units_running: '{n} of {m} units', unit_off: 'off', unit_stale: 'heat not current', run_flow: 'Flow', run_reached: 'reached', run_missed: '{d} K below', run_heater: 'Heater rod', run_on: 'on', run_off: 'off',
     programs: { eco: 'Eco', night: 'Night', party: 'Party', holiday: 'Holiday' },
@@ -1958,7 +1958,7 @@ const HFC_I18N = {
       eev: 'Expansionsventil', superheat: 'Überhitzung', subcooling: 'Unterkühlung',
     },
     source_flow: 'Quelle', target: 'Soll', curve_offset: 'Kurve', curve_shift: 'Verschiebung', mixer: 'Mischer', mixer_opening: 'öffnet', mixer_closing: 'schließt', return_short: 'RL', error: 'Fehler', circulation: 'Zirk.', circulation_from: 'ab', circulation_until: 'bis', valve_dhw: 'WW', solar: 'Solar',
-    brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', pressure_normal: 'normal', pressure_warning: 'Warnung', pressure_critical: 'kritisch',
+    brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', system_pressure: 'Anlagendruck', pressure_normal: 'normal', pressure_warning: 'Warnung', pressure_critical: 'kritisch',
     timeline_title: 'Letzte {h} Stunden', timeline_gap: 'Keine Daten', timeline_aria: 'Betriebsart der letzten {h} Stunden. Mit den Pfeiltasten einen Zeitraum wählen.',
     run_series: '{n}. Lauf seit {t}', run_pause: 'Pause davor {d}', run_partial: 'begann vor der Zeitleiste', run_ongoing: 'läuft noch', run_phase: 'Betriebsphase, ohne Verdichterdaten', run_close: 'Schließen', run_electricity: 'Strom', run_heat: 'Wärme', sec_units: 'Einheiten', unit: 'Einheit', units_running: '{n} von {m} Einheiten', unit_off: 'aus', unit_stale: 'Wärme nicht aktuell', run_flow: 'Vorlauf', run_reached: 'erreicht', run_missed: '{d} K darunter', run_heater: 'Heizstab', run_on: 'an', run_off: 'aus',
     programs: { eco: 'Eco', night: 'Nacht', party: 'Party', holiday: 'Urlaub' },
@@ -2311,7 +2311,7 @@ const HFC_EDITOR = {
     hc_pressure_min: 'Heating pressure warning below', hc_pressure_crit: 'Heating pressure critical below', hc_pressure_max: 'Heating pressure warning above',
     sec_hp: 'Heat pump', sec_boiler: 'Boiler / second heat generator', sec_storage: 'Storage', sec_hc: 'Heating circuit & house', sec_power: 'Power sources', sec_stats: 'Statistics',
     mode: 'Operating mode (state text)', status: 'Status / sub-state (text)', compressor: 'Compressor running (on/off, or frequency / speed above 0)', defrost: 'Defrost active (on/off)', fan_speed: 'Fan speed (rpm, or on/off)', power: 'Electrical power of the heat pump (W or kW)',
-    heat: 'Heat output (kW or W)', flow: 'Heat pump flow temperature (°C)', return: 'Heat pump return temperature (°C)', volume: 'Flow rate of the heat pump loop (l/h or l/min, primary pump)', primary_pump_state: 'Primary pump running (on/off; default: from the flow rate)',
+    heat: 'Heat output (kW or W)', system_pressure: 'Pressure of the heating system (bar), drawn at the heat pump return', flow: 'Heat pump flow temperature (°C)', return: 'Heat pump return temperature (°C)', volume: 'Flow rate of the heat pump loop (l/h or l/min, primary pump)', primary_pump_state: 'Primary pump running (on/off; default: from the flow rate)',
     boiler_state: 'Boiler running (on/off, or a power above 0)', boiler_power: 'Boiler output (W or kW)', boiler_flow: 'Boiler flow temperature (°C)',
     source_volume: 'Flow rate of the brine or well loop (l/h or l/min, not for air)', source_in: 'Source inlet temperature (°C: air, brine or well water in)', outdoor: 'Outdoor temperature (°C)',
     valve: 'Diverter valve towards hot water (on/off, or a state like Tank/Room)', bypass_valve: 'Series buffer bypass valve (on = bypass; default: defrost)',
@@ -2415,7 +2415,7 @@ const HFC_EDITOR = {
     hc_pressure_min: 'Heizungsdruck Warnung unter', hc_pressure_crit: 'Heizungsdruck kritisch unter', hc_pressure_max: 'Heizungsdruck Warnung über',
     sec_hp: 'Wärmepumpe', sec_boiler: 'Heizkessel / zweiter Wärmeerzeuger', sec_storage: 'Speicher', sec_hc: 'Heizkreis & Haus', sec_power: 'Stromquellen', sec_stats: 'Kennzahlen',
     mode: 'Betriebsart (Statustext)', status: 'Status / Unterzustand (Text)', compressor: 'Verdichter läuft (ein/aus, oder Frequenz / Drehzahl über 0)', defrost: 'Abtauen aktiv (ein/aus)', fan_speed: 'Lüfterdrehzahl (U/min, oder ein/aus)', power: 'Elektrische Leistungsaufnahme der Wärmepumpe (W oder kW)',
-    heat: 'Wärmeleistung (kW oder W)', flow: 'Vorlauftemperatur der Wärmepumpe (°C)', return: 'Rücklauftemperatur der Wärmepumpe (°C)', volume: 'Volumenstrom Wärmepumpenkreis (l/h oder l/min, Primärpumpe)', primary_pump_state: 'Primärpumpe läuft (ein/aus; Standard: aus dem Volumenstrom)',
+    heat: 'Wärmeleistung (kW oder W)', system_pressure: 'Anlagendruck der Heizung (bar), am Rücklauf der Wärmepumpe gezeichnet', flow: 'Vorlauftemperatur der Wärmepumpe (°C)', return: 'Rücklauftemperatur der Wärmepumpe (°C)', volume: 'Volumenstrom Wärmepumpenkreis (l/h oder l/min, Primärpumpe)', primary_pump_state: 'Primärpumpe läuft (ein/aus; Standard: aus dem Volumenstrom)',
     boiler_state: 'Heizkessel läuft (ein/aus, oder Leistung über 0)', boiler_power: 'Kesselleistung (W oder kW)', boiler_flow: 'Kessel-Vorlauftemperatur (°C)',
     source_volume: 'Volumenstrom Sole- oder Brunnenkreis (l/h oder l/min, nicht bei Luft)', source_in: 'Quelle Eintritt (°C: Luft, Sole oder Brunnenwasser rein)', outdoor: 'Außentemperatur (°C)',
     valve: 'Umschaltventil auf Warmwasser (ein/aus, oder Zustand wie Tank/Room)', bypass_valve: 'Bypass-Ventil Reihenpuffer (ein = Bypass; Standard: Abtauen)',
@@ -2950,7 +2950,7 @@ const hfcMeanKey = (key) => /^(hc[2-6]_)?room(_humidity)?$/.test(key);
 const hfcCompressorOn = (s) => ['on', 'true', 'open', 'ein', 'running', 'starting'].includes(String(s ?? '').trim().toLowerCase()) || parseFloat(s) > 0;
 
 const HFC_ENTITY_GROUPS = {
-  sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'primary_pump_state', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost', 'sg_ready'],
+  sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'primary_pump_state', 'system_pressure', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost', 'sg_ready'],
   sec_boiler: ['boiler_state', 'boiler_power', 'boiler_flow'],
   sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'circulation_start', 'circulation_end', 'circulation_schedule', 'dhw_loss_sensor', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
   sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_mixer', 'hc_mixer_opening', 'hc_mixer_closing', 'hc_pressure', 'room', 'room_target', 'room_humidity', 'dew_point', 'program'],
@@ -3011,7 +3011,7 @@ const HFC_KEY_KINDS = Object.fromEntries(Object.entries({
   offset: ['hc_curve_offset', 'superheat', 'subcooling'],
   power: ['power', 'heat', 'boiler_power', 'pv', 'battery', 'grid'],
   energy: ['energy_total', 'env_energy', 'heat_total', 'energy_today'],
-  pressure: ['brine_pressure', 'hc_pressure', 'low_pressure', 'high_pressure'],
+  pressure: ['brine_pressure', 'hc_pressure', 'system_pressure', 'low_pressure', 'high_pressure'],
   flowrate: ['volume', 'source_volume', 'hc_volume'],
   hours: ['hours', 'aux_hours'],
   percent: ['pv_share_today', 'hc_mixer', 'room_humidity'],
@@ -3796,8 +3796,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (preset) Object.entries(preset.entities(prefix, idx, ctx)).forEach(([k, v]) => take(k, v));
     for (let n = 2; preset && n <= hcCount; n++) {
       const rawN = preset.entities(prefix, { ...idx, hc: idx.hc + n - 1 }, ctx);
-      // hc_pressure is the pressure of the whole heating system, drawn at circuit 1 only.
-      Object.entries(rawN).filter(([k]) => k.startsWith('hc_') && k !== 'hc_pressure').forEach(([k, v]) => take(`hc${n}_${k.slice(3)}`, v));
+      Object.entries(rawN).filter(([k]) => k.startsWith('hc_')).forEach(([k, v]) => take(`hc${n}_${k.slice(3)}`, v));
       // Room keys are not prefixed with hc_ in a preset because circuit 1 uses room/room_target. Carry the circuit-specific
       // result into the numbered public keys so the house overview receives the rooms of circuits 2 to 6.
       if (preset.circuit_rooms) ['room', 'room_target', 'room_humidity'].forEach((k) => take(`hc${n}_${k}`, rawN[k]));
@@ -3814,6 +3813,10 @@ class HeatpumpFlowCard extends HTMLElement {
         if (ids.length > 1) sums[k] = ids; else delete sums[k];
       } else if (v) { e[k] = v; delete sums[k]; }
     });
+    // Presets map the pressure of the heating system as system_pressure. An hc_pressure of the configuration (also null) replaces it, as
+    // it did while presets mapped hc_pressure, unless the configuration sets system_pressure as well.
+    const given = config.entities || {};
+    if (given.hc_pressure !== undefined && given.hc_pressure !== '' && given.system_pressure === undefined) delete e.system_pressure;
     const presetErrors = preset && preset.errors ? preset.errors(prefix, idx, ctx) : [];
     const errors = config.errors !== undefined ? config.errors : presetErrors;
     // Stat tile entities: { tile: { period: entity } }, only entities that exist, those with a value first.
@@ -4228,7 +4231,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._maps.heater = HeatpumpFlowCard._heaterMapOf(this._config, r);
     // An action for a key without an entity does nothing; say so once instead of failing silently.
     if (r.ready && this._config.actions) {
-      const lost = Object.keys(this._config.actions).filter((k) => !this._e[k] && !(this._warned || (this._warned = {}))[k]);
+      const lost = Object.keys(this._config.actions).filter((k) => !this._actionEntity(k) && !(this._warned || (this._warned = {}))[k]);
       lost.forEach((k) => { this._warned[k] = true; console.warn(`heatpump-flow-card: actions.${k} has no entity (check the key or the preset)`); });
     }
     this._needsBuild = !r.ready;
@@ -4522,7 +4525,7 @@ class HeatpumpFlowCard extends HTMLElement {
     return 'normal';
   }
   _pressureText(key) { const v = this._pressure(key); return Number.isFinite(v) ? `${this._fmt(v, 1)} bar` : '–'; }
-  _updatePressure(key, kind, groupId, textId, label) {
+  _updatePressure(key, kind, groupId, textId, label, named = true) {
     const group = this._$(groupId); if (!group) return;
     const value = this._pressure(key); const state = this._pressureState(kind, value);
     group.classList.toggle('warning', state === 'warning'); group.classList.toggle('critical', state === 'critical');
@@ -4531,9 +4534,11 @@ class HeatpumpFlowCard extends HTMLElement {
     const el = this._$(textId); const shown = this._pressureText(key); const k = `${glyph}|${label}|${shown}`;
     if (el && el._k !== k) {
       el._k = k; el.textContent = glyph;
+      if (!named) { el.append(shown); } else {
       const t = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
       t.setAttribute('class', 'fit-pre'); t.textContent = `${label} `;
       el.append(t, shown);
+      }
     }
     group.dataset.a11y = `${label}: ${this._pressureText(key)}, ${this._i[`pressure_${state}`]}`;
   }
@@ -4971,7 +4976,7 @@ class HeatpumpFlowCard extends HTMLElement {
       middle: [this._has('dhw_middle') ? 1 : 0, this._has('buffer_middle') ? 1 : 0].join(''),
       // The gradient of a combined storage has one stop per sensor present: a sensor that appears later rebuilds it.
       combinedSensors: combined ? this._combinedSensors().map(([k]) => k).join() : '',
-      pressure: [this._sourceType === 'brine' && this._has('brine_pressure') ? 1 : 0, this._has('hc_pressure') ? 1 : 0].join(''),
+      pressure: [this._sourceType === 'brine' && this._has('brine_pressure') ? 1 : 0, this._has('hc_pressure') ? 1 : 0, this._has('system_pressure') ? 1 : 0].join(''),
       solar: dhw && !station && (this._has('solar_collector') || this._has('solar_pump')),
       controls: this._controlList().map((c) => c.entity).join(),
       drawer: this._drawerRows().map(([s, r]) => s + r.map((x) => x[0]).join('.')).join('|'),
@@ -5115,6 +5120,7 @@ class HeatpumpFlowCard extends HTMLElement {
           ${P.boiler ? '' : `<g class="tap" ${de('flow')}><text class="pipe-label${nf ? ' nf-big' : ''}" id="t-vl" x="${this._primaryPump() ? 340 : 338}" y="${this._primaryPump() ? 226 : 236}" text-anchor="middle"></text></g>`}
           <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${P.boiler ? 336 : (this._primaryPump() ? 340 : 346)}" y="${P.boiler ? 324 : this._primaryPump() ? 284 : 275}" text-anchor="middle"></text></g>
           <g class="tap" ${de('return')}><text class="pipe-label" id="t-rl" x="335" y="406" text-anchor="middle"></text></g>
+          ${this._gaugeSvg()}
 
           <g class="tap" ${de('mode')}>
             <rect class="unit" id="hp-box" x="50" y="190" width="240" height="235" rx="20"/>
@@ -5346,7 +5352,7 @@ class HeatpumpFlowCard extends HTMLElement {
       });
     });
     // Card values (#481), each named with its component or heating circuit; a value that a catalog tile shows is not offered twice.
-    const inCatalog = (key) => (HFC_VALUE_LIVE[key] ? periodsOf[HFC_VALUE_LIVE[key]]?.length && (key !== 'room' || hfcHcCount(config) === 1)
+    const inCatalog = (key) => (key === 'system_pressure' ? !r.entities.hc_pressure && !!periodsOf.hc_pressure?.length : HFC_VALUE_LIVE[key] ? periodsOf[HFC_VALUE_LIVE[key]]?.length && (key !== 'room' || hfcHcCount(config) === 1)
       : HFC_KINDS[hfcKindOf(key)]?.numeric && shown.has(r.entities[key]));
     probe._valueGroups(I).forEach(([group, keys]) => keys.filter((key) => !inCatalog(key))
       .forEach((key) => options.push({ value: `value:${key}`, label: `${group} › ${probe._valueLabel(key, I, false)}` })));
@@ -5724,7 +5730,7 @@ class HeatpumpFlowCard extends HTMLElement {
       heat_estimated: !h('heat') && h('volume') && h('flow') && h('return'),
       power: h('power'), heat_live: h('heat'), compressor_speed: h('compressor_speed'),
       source_spread: h('source_in') && h('source_out'), outdoor: h('outdoor'), dhw_top: !!this._dhwTankKey(), room: h('room'),
-      brine_pressure: h('brine_pressure'), hc_pressure: h('hc_pressure'),
+      brine_pressure: h('brine_pressure'), hc_pressure: h('hc_pressure') || h('system_pressure'),
       pv_share: h('pv_share_today'),
     }[key];
   }
@@ -5748,7 +5754,7 @@ class HeatpumpFlowCard extends HTMLElement {
       case 'compressor_speed': return [this._fmtState('compressor_speed'), this._e.compressor_speed];
       case 'source_spread': return [f(this._n('source_in') - this._n('source_out'), 1, 'K'), this._e.source_in];
       case 'brine_pressure': return [this._pressureText('brine_pressure'), this._e.brine_pressure];
-      case 'hc_pressure': return [this._pressureText('hc_pressure'), this._e.hc_pressure];
+      case 'hc_pressure': { const k = this._has('hc_pressure') ? key : 'system_pressure'; return [this._pressureText(k), this._e[k]]; }
       case 'pv_share': return [f(this._n('pv_share_today'), 0, '%'), this._e.pv_share_today];
       case 'dhw_top': { const k = this._dhwTankKey() || 'dhw_top'; return [this._t(this._n(k)), this._e[k]]; }
       default: return [this._t(this._n(key)), this._e[key]];
@@ -5759,7 +5765,7 @@ class HeatpumpFlowCard extends HTMLElement {
   // The heating circuit a key belongs to, 0 for the rest of the installation. The pressure and the program are those of the whole
   // heating system; the room keys of circuit 1 carry no number.
   static _valueCircuit(key) {
-    if (['hc_pressure', 'program'].includes(key)) return 0;
+    if (['hc_pressure', 'system_pressure', 'program'].includes(key)) return 0;
     if (['room', 'room_target', 'room_humidity', 'dew_point'].includes(key)) return 1;
     const m = /^hc([2-6])?_/.exec(key);
     return m ? +(m[1] || 1) : 0;
@@ -5861,6 +5867,7 @@ class HeatpumpFlowCard extends HTMLElement {
         const text = this._liveTile(HFC_VALUE_LIVE[base], L)[0];
         return read(key) ? text : '–';
       }
+      case 'system_pressure': return read(key) ? this._pressureText(key) : '–';
       case 'pv': case 'battery': case 'grid': {
         if (this._powerMode() !== 'energy') return f(this._w(key), 0, 'W');
         // Without the heat pump's power there is nothing to split: unknown, not 0.
@@ -5963,7 +5970,8 @@ class HeatpumpFlowCard extends HTMLElement {
       .map((r) => (r && (this._heatingRoles || []).includes(r[0]) ? [...r.slice(0, 3), () => (reversed(r[0]) ? '–' : r[3]())] : r));
     // Cut-out counters are event counts, shown as plain numbers with a times sign, never with a unit of pressure or temperature.
     const cutouts = ['cutout_high_pressure', 'cutout_low_pressure', 'cutout_temperature'].filter(ok).map((key) => [key, D[key], this._e[key], () => this._countText(key)]);
-    const hydraulic = [['brine_pressure', i.brine_pressure], ['hc_pressure', i.hc_pressure]].filter(([key]) => ok(key))
+    // The system pressure carries its own name only beside a pressure of the circuit.
+    const hydraulic = [['brine_pressure', i.brine_pressure], ['system_pressure', ok('hc_pressure') ? i.system_pressure : i.hc_pressure], ['hc_pressure', i.hc_pressure]].filter(([key]) => ok(key))
       .map(([key, label]) => [key, label, this._e[key], () => this._pressureText(key)]);
     // Superheat = suction gas − evaporation, subcooling = condensation − liquid line, unless the integration provides them or the
     // preset's pipe sensors do not allow it (`refrigerant_derived: false`). At standstill the refrigerant temperatures settle to the
@@ -7576,6 +7584,15 @@ class HeatpumpFlowCard extends HTMLElement {
       <path class="heater-case" d="${d}"/><path class="heater-el" d="${d}"/><g class="waves rod-waves">${waves}</g></g>`;
   }
 
+  // Pressure of the heating system: a gauge on the return of the heat pump, the value beside it. The dial says what it is, so the
+  // value needs no name there.
+  _gaugeSvg() {
+    if (!this._e.system_pressure) return '';
+    return `<g class="tap pressure" id="pressure-system" data-entity="${this._esc(this._e.system_pressure)}">
+      <path class="gauge-stem" d="M308 376 V368"/><circle class="gauge" cx="308" cy="359" r="9"/><path class="gauge-hand" d="M308 359 L313 354"/>
+      <text class="pressure-label" id="t-system-pressure" x="322" y="364" text-anchor="start" data-fit="88"></text></g>`;
+  }
+
   // Solar thermal loop into the right side of the DHW tank. Drawn before the tank, so the tank covers the pipe ends; at the
   // collector both pipes run along its axis into the lower end, where the opaque panel covers them.
   _solarPipes() {
@@ -7656,9 +7673,12 @@ class HeatpumpFlowCard extends HTMLElement {
     const el = path.find((n) => n.dataset && n.dataset.entity);
     if (!el) return null;
     const id = el.dataset.entity;
-    const own = Object.entries(this._config.actions || {}).find(([k]) => this._e[k] === id);
+    const own = Object.entries(this._config.actions || {}).find(([k]) => this._actionEntity(k) === id);
     return { entity: id, ...pick(own && own[1]) };
   }
+
+  // The actions of hc_pressure apply to the system pressure where no pressure of the circuit is mapped.
+  _actionEntity(key) { return this._e[key] || (key === 'hc_pressure' ? this._e.system_pressure : undefined); }
 
   _actEvents(box) { this._pointerActions(box, (ev) => this._elementActs(ev)); }
 
@@ -8154,6 +8174,7 @@ class HeatpumpFlowCard extends HTMLElement {
 
     this._txtPre('t-vl', 'VL', this._has('flow') ? this._t(tFlow) : '');
     this._txtPre('t-rl', 'RL', this._has('return') ? this._t(tRet) : '');
+    if (this._has('system_pressure')) this._updatePressure('system_pressure', 'hc', 'pressure-system', 't-system-pressure', this._has('hc_pressure') ? i.system_pressure : i.hc_pressure, false);
     this._txt('t-vol', this._has('volume') && (flowLoop || F.passiveFlow) && Number.isFinite(vol) ? this._flowText(vol) : '');
 
     // heat pump
@@ -8466,6 +8487,9 @@ HeatpumpFlowCard.styles = `
   .vol-label { font-size: 13px; fill: var(--hfc-muted); }
   .curve-part { font-size: calc(13px * var(--kp, 1)); font-weight: 500; }
   .pressure-label { font-size: 13px; font-weight: 600; fill: var(--hfc-muted); paint-order: stroke; stroke: var(--card-background-color, #fff); stroke-width: 4px; }
+  #t-system-pressure { font-size: calc(13px * var(--k2, 1)); }
+  .gauge { fill: var(--card-background-color, #fff); stroke: var(--hfc-muted); stroke-width: 2; } .gauge-stem, .gauge-hand { fill: none; stroke: var(--hfc-muted); stroke-width: 2; stroke-linecap: round; }
+  .pressure.warning .gauge, .pressure.warning .gauge-hand { stroke: ${hfcInk('pv')}; } .pressure.critical .gauge, .pressure.critical .gauge-hand { stroke: ${hfcInk('hot')}; }
   .pressure.warning .pressure-label { fill: ${hfcInk('pv')}; } .pressure.critical .pressure-label { fill: ${hfcInk('hot')}; }
   .unit { fill: var(--secondary-background-color, rgba(127,127,127,.12)); stroke: var(--divider-color, rgba(127,127,127,.35)); stroke-width: 2; transition: stroke .4s; }
   .unit.on.dhw { stroke: ${hfcVar('hot')}; } .unit.on.defrost, .unit.on.cool { stroke: ${hfcVar('cool-strong')}; }

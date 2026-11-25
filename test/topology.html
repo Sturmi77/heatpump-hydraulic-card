@@ -573,6 +573,26 @@
         await probe(`${LONG}: ${name}`, named(config), long, { narrow });
         idx++;
       }
+    // Return of the heat pump: gauge × boiler × primary pump × hot water × pressure of the circuit × focus view, normal and critical.
+    idx = 0;
+    for (const boiler of [false, true]) for (const primary of [false, true]) for (const dhw of ['none', 'tank']) for (const circuit of [false, true])
+      for (const low of [false, true]) for (const view of ['wide', 'narrow', 'values', 'focus']) {
+        const c = { storage: 'parallel', dhw, primary, hcs: 1 };
+        const config = installation(c, 0);
+        placed(config, idx);
+        const narrow = view !== 'wide';
+        config.hc_pressure_min = 1; config.hc_pressure_crit = 0.5;
+        if (view === 'values') config.narrow_values = true;
+        if (view === 'focus') config.narrow_focus = true;
+        Object.assign(config.entities, { system_pressure: 'sensor.t_system' });
+        if (circuit) config.entities.hc_pressure = 'sensor.t_pressure';
+        if (boiler) Object.assign(config.entities, { boiler_state: 'binary_sensor.t_boiler', boiler_power: 'sensor.t_boiler_power', boiler_flow: 'sensor.t_boiler_flow' });
+        const extra = { 'sensor.t_system': [low ? '0.4' : '1.8', 'bar'], 'sensor.t_pressure': ['1.8', 'bar'], 'binary_sensor.t_boiler': 'on', 'sensor.t_boiler_power': ['12', 'kW'], 'sensor.t_boiler_flow': ['55', '°C'] };
+        const name = `zone return${boiler ? ' boiler' : ''}${primary ? ' pp' : ''} ${dhw}${circuit ? ' circuit' : ''}${low ? ' low' : ''} ${view}`;
+        if (!sweep) await probe(name, config, { ...statesOf(c, 'heat'), ...extra }, { narrow, english: true });
+        await probe(`${LONG}: ${name}`, named(config), { ...widen({ ...statesOf(c, idx % 2 ? 'cool' : 'heat'), ...extra }), 'sensor.t_system': [low ? '0.4' : '10.2', 'bar'] }, { narrow });
+        idx++;
+      }
     // Heat source: source type × unit drawing (air only; brine and water draw the loop) × brine pressure × spread × source flow.
     const UNITS = [...HFC_UNIT_STYLES.filter((u) => u !== 'auto').flatMap((u) => (u === 'vaillant' ? HFC_UNIT_SIZES.map((size) => [u, size])
       : ['panasonic', 'bosch', 'buderus', 'bosch_compact', 'buderus_compact'].includes(u) ? [[u, 'medium'], [u, 'large']] : [[u]]))];
