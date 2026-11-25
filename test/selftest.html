@@ -3183,6 +3183,19 @@
     check(JSON.stringify(out.tiles[4]) === '{"entity":"sensor.heatpump_dhw_middle","name":"Middle "}' && ed._form.data.tile_name_4 === 'Middle ', `#481: an entity tile takes a name while typing (${JSON.stringify(out.tiles[4])})`);
     ed._changed({ ...form(), tile_name_1: 'Target', tile_name_3: undefined, tile_name_4: '' });
     check(JSON.stringify(out.tiles.slice(1)) === '[{"value":"hc_setpoint","name":"Target"},"cop_heating","value:hc_flow",{"entity":"sensor.heatpump_dhw_middle"}]', `#481: names set and cleared (${JSON.stringify(out.tiles)})`);
+    // Further values of the details, from the preset or the configuration: offered once, stored as the entity with its own name.
+    const det = { ...s.config, details: [{ entity: 'sensor.heating_curve_flow', name: 'Heating curve flow' }, 'sensor.heatpump_dhw_middle', { entity: 'sensor.living_room_temperature', unit: 'C', decimals: 0 }, 'sensor.nope', 'sensor.heating_curve_flow'], entities: {}, tiles: ['spread'] };
+    const detOf = (c) => C._tileOptions(c, C._resolve(c, hass), hass);
+    const more = detOf(det).options.filter((o) => o.value.startsWith('entity:'));
+    check(more.map((o) => o.label).join() === `More › Heating curve flow,More › ${C.prototype._entityName.call({ _hass: hass }, 'sensor.heatpump_dhw_middle')},More › ${C.prototype._entityName.call({ _hass: hass }, 'sensor.living_room_temperature')}`,
+      `#481: the further values of the details are offered (${more.map((o) => o.label).join()})`);
+    const stored = C._tilesToStore(detOf(det), ['spread', 'entity:sensor.heating_curve_flow', 'entity:sensor.heatpump_dhw_middle', 'entity:sensor.living_room_temperature'], {});
+    check(JSON.stringify(stored) === '["spread",{"entity":"sensor.heating_curve_flow","name":"Heating curve flow"},{"entity":"sensor.heatpump_dhw_middle"},{"entity":"sensor.living_room_temperature","unit":"C","decimals":0}]', `#481: stored as entity tiles (${JSON.stringify(stored)})`);
+    const again = detOf({ ...det, tiles: stored });
+    check(again.value.join() === 'spread,entity:sensor.heating_curve_flow,entity:sensor.heatpump_dhw_middle,yaml:3' && again.options.filter((o) => o.value === 'entity:sensor.heating_curve_flow').map((o) => o.label).join() === 'Heating curve flow'
+      && !again.options.some((o) => o.value === 'entity:sensor.living_room_temperature'), `#481: and read back (${again.value.join()})`);
+    const mappedDet = detOf({ ...det, details: ['sensor.heatpump_dhw_middle'], entities: { dhw_middle: 'sensor.heatpump_dhw_middle' } });
+    check(!mappedDet.options.some((o) => o.value.startsWith('entity:')), '#481: a detail that is a mapped value is not offered twice');
     ed._changed({ ...form(), tiles: [] });
     check(Array.isArray(out.tiles) && !out.tiles.length, '#481: an empty selection hides the row');
     ed._changed({ ...form(), tiles_custom: false });

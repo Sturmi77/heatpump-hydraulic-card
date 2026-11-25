@@ -5328,6 +5328,16 @@ class HeatpumpFlowCard extends HTMLElement {
       : HFC_KINDS[hfcKindOf(key)]?.numeric && shown.has(r.entities[key]));
     probe._valueGroups(I).forEach(([group, keys]) => keys.filter((key) => !inCatalog(key))
       .forEach((key) => options.push({ value: `value:${key}`, label: `${group} › ${probe._valueLabel(key, I, false)}` })));
+    // Further values of the details (`details` of the preset or the configuration), stored as the entity with the details' own name.
+    const used = new Set((Array.isArray(config.tiles) ? config.tiles : []).filter((t) => t?.entity && Object.keys(t).some((k) => !['entity', 'name'].includes(k))).map((t) => t.entity));
+    const mapped = new Set([...Object.values(r.entities).flat(), ...shown]);
+    const extra = new Map();
+    (r.details || []).map((d) => (typeof d === 'string' ? { entity: d } : d)).filter((d) => d && hass.states[d.entity] && !mapped.has(d.entity) && !used.has(d.entity)).forEach((d) => {
+      const v = `entity:${d.entity}`;
+      if (extra.has(v)) return;
+      extra.set(v, Object.fromEntries(['entity', 'name', 'unit', 'decimals'].filter((k) => d[k] !== undefined).map((k) => [k, d[k]])));
+      options.push({ value: v, label: `${I.sec_more} › ${d.name || probe._entityName(d.entity)}` });
+    });
     // Tiles with a single period are stored without it; others with the period, so the select can show them.
     const valueOf = (key, period) => {
       const periods = periodsOf[key] || [];
@@ -5364,7 +5374,7 @@ class HeatpumpFlowCard extends HTMLElement {
       const option = options.find((o) => o.value === v);
       // A named card value is listed under its name, so two chips of the same kind can be told apart.
       if (!option) options.push({ value: v, label: label ?? (base || v) });
-      else if (hfcValueSpec(s) && s.name) option.label = s.name;
+      else if ((hfcValueSpec(s) || s.entity) && s.name) option.label = s.name;
       return v;
     });
     // Switching the own selection on starts from the preset's default tiles (#413), else from the default row.
@@ -5372,7 +5382,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const defaults = Array.isArray(presetDefaults)
       ? presetDefaults.map((t) => HeatpumpFlowCard._tileSpec(t)).filter((s) => s?.key && periodsOf[s.key]?.length).map((s) => valueOf(s.key, s.period))
       : ['cop_heating', 'cop_dhw', 'energy', 'starts', 'spread', 'volume', 'heat_estimated'].filter((k) => periodsOf[k].length).map((k) => valueOf(k));
-    return { options, value, raw, names, yaml, defaults };
+    return { options, value, raw, names, yaml, defaults, extra };
   }
 
   // Editor: the tile list to store for the selected option values. A tile that stays is kept as it stands in the configuration, with
@@ -5380,7 +5390,7 @@ class HeatpumpFlowCard extends HTMLElement {
   static _tilesToStore(tiles, selected, fields, entity) {
     const named = new Map(tiles.names.map((t) => [t.value, t]));
     const list = selected.map((v) => {
-      if (!tiles.raw.has(v)) return v;
+      if (!tiles.raw.has(v)) return tiles.extra.has(v) ? { ...tiles.extra.get(v) } : v;
       const t = named.get(v);
       const text = t ? String(fields[t.field] ?? '') : '';
       if (!t || text === t.name) return tiles.raw.get(v);
