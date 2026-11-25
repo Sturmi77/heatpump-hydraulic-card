@@ -19,7 +19,7 @@ One file per preset, `upstream/<preset>.json`:
 }
 ```
 
-- `reviewed.date`: the day the preset was last checked against the sources. Commits and releases after that day are reported. `version` is the release that was checked (or `null`).
+- `reviewed.date`: the day the preset was last checked against the sources. `reviewed.at` (optional, written by `upstream:ack`) is the time of that check in UTC: commits and releases after it are reported. Without `at`, the watch reports what came after the end of that day. `version` is the release that was checked (or `null`). `note` (optional) says what the review found.
 - `sources[].paths`: only the files that define entities, translation keys, state texts or units. Fewer files mean fewer false alarms.
 - `sources[].releases: false`: do not report releases, for repositories where a release is not specific to the integration (Home Assistant core).
 - `unmapped` (optional): fields of the card the preset does not map because the integration does not offer them, or not in a form that fits, each with a short reason, for example `"hc_return": "The integration reports no return temperature per circuit."`. They leave the coverage percentage in [docs/COVERAGE.md](../docs/COVERAGE.md); `npm run syntax` rejects a field the preset does map.
@@ -32,7 +32,7 @@ The workflow `Upstream watch` runs every Monday (and on demand) and calls `node 
 
 1. Read the listed commits. Do entity ids, translation keys, state texts or units that the preset uses change?
 2. Fix the preset if needed (with evidence, see CONTRIBUTING).
-3. `npm run upstream:ack -- <preset>` sets the review date to today and the version to the newest release. Commit the file and close the issue.
+3. `npm run upstream:ack -- <preset>` sets the review date and time to now and the version to the newest release (`--keep-note` keeps the note). Commit the file and close the issue.
 
 ## Commands
 

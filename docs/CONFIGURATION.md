@@ -45,6 +45,7 @@ Everything on this page can also be set in the card editor, except where it says
 | `badges` | `[{entity, label}]` chips shown while the entity is on; each can carry `tap_action`, `hold_action` and `double_tap_action`. |
 | `program_map` | Raw state of the program entity → `eco`, `night`, `party`, `holiday` or `none`, merged over the preset. Without an entry the card recognises common words (eco, reduced, setback, absenk…, party, holiday, urlaub …). |
 | `sg_ready_map` | Raw state of `sg_ready` → `normal`, `blocked`, `boost` or `forced`, merged over the preset. Standard SG-Ready numbers work without a map: 1 = blocked, 2 = normal, 3 = raised targets, 4 = forced operation. Text or binary entities need an explicit map unless they already report one of the four normalized names or the states of the OpenEMS / FEMS heat pump controller. |
+| `heater_map` | Number of the `heater` entity → heater stage `0` (off), `1`, `2` or `3`, for a stage field that also counts other heat sources; a number that is not in the map is off. Merged over the preset's map (`thz`), which applies only to the heater entity the preset found, not to one of your own. Example: `heater_map: {3: 1, 4: 2, 5: 3}`. |
 | `compressor_speed_max` | Hz or rpm that count as full speed when `compressor_speed` is not a percentage (default: 100 Hz, 6000 rpm). Sets the pace of the animation. |
 | `animations` | `auto` (default, respects reduced motion), `always` or `off`. |
 | `flow_speed` | Multiplier for all animation speeds, from `0.2` to `3` (default `1`). |
@@ -65,7 +66,7 @@ Everything on this page can also be set in the card editor, except where it says
 | `controls` | Quick controls: list of entity ids or `{entity, name}`. Supported: `switch`, `input_boolean`, `light`, `fan`, `automation` (toggle), `button`, `input_button`, `script`, `scene` (press), `select`, `input_select`, `water_heater`, `climate` (dropdown), `number`, `input_number` (input). |
 | `details` | Extra rows in the details drawer: list of entity ids or `{entity, name, unit, decimals}`. Without a `name`, an entity is named without the device name in front. |
 | `details_open` | Open the details drawer by default (default `false`). |
-| `tiles` | Your own tile selection, in this order: catalog keys with an optional period (`cop_heating`, `cop_heating:month`, `{key, period, name, decimals, unit}`) and free entities (`{entity, name, unit, decimals}`). Every tile can carry `tap_action`, `hold_action` and `double_tap_action`. Without `tiles` the default tiles are shown, or the default tiles of the preset (Bosch/Buderus Home Comfort); `tiles: []` hides the row. See [Stat tiles](#stat-tiles). |
+| `tiles` | Your own tile selection, in this order: catalog keys with an optional period (`cop_heating`, `cop_heating:month`, `{key, period, name, decimals, unit}`), card values (`value:hc2_flow`, `{value, name}`) and free entities (`{entity, name, unit, decimals}`). Every tile can carry `tap_action`, `hold_action` and `double_tap_action`. Without `tiles` the default tiles are shown, or the default tiles of the preset (Bosch/Buderus Home Comfort); `tiles: []` hides the row. See [Stat tiles](#stat-tiles). |
 | `tile_sources` | Your own counters for catalog tiles, replacing the preset's for that tile: `{energy_heating: sensor.x}` (a total counter; its periods come from long-term statistics) or `{energy_dhw: {today: sensor.a, total: sensor.b}}`. See [Stat tiles](#stat-tiles). |
 | `price` | Electricity price per kWh for the `cost` tile: a number or an entity (e.g. a dynamic tariff; ct/kWh and per-MWh prices are converted). `currency` overrides the currency from the HA settings. |
 | `stats` | Extra tiles `[{entity, name, unit, decimals}]`, added after the default tiles or after `tiles`; also with `tap_action`, `hold_action`, `double_tap_action`. |
@@ -121,7 +122,7 @@ entities:
 ```
 
 ## Stat tiles
-In the UI editor, switch on **Own tile selection**. The editor then offers only the tiles your installation can fill; drag them to sort. Enter an electricity price (a number or an entity) to get the cost tile. In YAML:
+In the UI editor, switch on **Own tile selection**. The editor then offers only the tiles your installation can fill: the statistics with their periods, then the values of the drawing and the details, listed by component and heating circuit, and the further values of the details (`details` of the preset or your own). **Add a Home Assistant entity as a tile** appends any entity; entity and value tiles can be named in the fields below the list. Drag the tiles to sort. Enter an electricity price (a number or an entity) to get the cost tile. In YAML:
 
 ```yaml
 price: sensor.epex_spot_price   # or a number, e.g. 0.30
@@ -141,9 +142,14 @@ tiles:
       navigation_path: /energy
     hold_action:
       action: more-info
+  - value:buffer_bottom       # a value of the drawing or the details, by its entity key
+  - value: hc2_flow
+    name: Upstairs flow
   - entity: sensor.my_value   # any entity as a tile
     name: My value
 ```
+
+**Card values:** `value:<entity key>` shows what the drawing or the details show for that key (see "Entity keys"), with the same source, unit and calculation: the split of the Energy dashboard for `pv`, `battery` and `grid`, the calculated `dew_point`, `superheat` and `subcooling`, the state names of modes. `value:unit1`, `value:unit2` … show the units of a cascade (`units`) as in the details. On/off keys show on or off; a heater rod whose entity reports W or kW shows its power. A value of a heating circuit carries the circuit's name or number. An unavailable value shows "–", and a key without an entity has no tile. The editor leaves out values that a catalog tile already shows.
 
 **Cost:** with a fixed price, cost = electricity of the period × price. With a price entity that has long-term statistics (`state_class: measurement`, true for most tariff sensors), the card bills every hour at that hour's mean price, from Home Assistant's long-term statistics. The current hour, which is not yet in the statistics, is billed at the current price. For the year the card uses daily values and for the total monthly values, so these are marked **≈**. A price entity without statistics is applied to the whole period at its current price, also marked **≈**. A tile can have its own `price` and `currency`. If your tariff sensor once changed its unit (for example from ct/kWh to €/kWh), its older statistics keep the old values and the cost for longer periods comes out too high. In that case, fix the statistics under Developer tools > Statistics.
 
@@ -165,7 +171,7 @@ tiles:
 
 Tile keys that take a source: the electricity, environmental energy and heat keys, `cop_heating`, `cop_dhw`, `cop_cooling`, `cop_total`, `spf`, the starts and runtime keys, `pv_production` and `solar_thermal`. Live values (`cop_live`, `spread`, `power` …), `cost`, `load_classes`, `dhw_loss` and `pv_boost_share` are computed and take none.
 
-**Actions:** a tap opens the more-info dialog of the tile's entity. `tap_action`, `hold_action` (500 ms) and `double_tap_action` accept every Home Assistant action (`more-info`, `navigate`, `url`, `toggle`, `perform-action`, `assist`, `none`, with `confirmation`). Tiles with their own name, entity, price or action are edited in YAML.
+**Actions:** a tap opens the more-info dialog of the tile's entity. `tap_action`, `hold_action` (500 ms) and `double_tap_action` accept every Home Assistant action (`more-info`, `navigate`, `url`, `toggle`, `perform-action`, `assist`, `none`, with `confirmation`). Tiles with options the editor does not offer (such as price, unit, period with an own entity or actions) are marked **YAML** there: they can be moved and removed, their options are edited in YAML and stay as they are when the editor saves.
 
 Periods: `now`, `today`, `yesterday`, `week`, `month`, `year`, `total`. A tile is only shown when the installation can fill it. Values come from, in this order:
 1. the preset's own entity for that period (e.g. Lambda `hp1_heating_cop_monthly`)
