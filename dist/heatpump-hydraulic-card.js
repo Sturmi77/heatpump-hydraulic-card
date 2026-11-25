@@ -36,7 +36,8 @@ const HFC_SCRIPT_URL = (() => {
 //   valve_map                  → raw state of the `valve` entity → dhw | heating (default: on, Tank, DHW … mean hot water)
 //   heater_map                 → numeric state of the `heater` entity → heater stage 1 to 3; any other number is off. For
 //                                stage fields that also count other heat sources (THZ: 2 = heat pump, 3 to 5 = booster).
-//                                On-states of a binary fallback still mean stage 1.
+//                                On-states of a binary fallback still mean stage 1. Applies to the preset's own heater entity
+//                                only; `heater_map` in the configuration applies to any heater and is merged over it.
 //   defaults(entities, hass)   → { unit_style, unit_size, buffer, primary_pump } the installation reports; the card configuration wins
 // ctx.key(platform, domain, translation_key) finds entities via the entity registry (language-independent),
 // ctx.match(regex, platform) finds the first entity id matching a pattern, ctx.state(entity_id) reads a current state.
@@ -1667,6 +1668,8 @@ const HFC_PRESETS = {
   // messages become number, switch or select entities instead of sensors.
   ehs_sentinel: {
     name: 'Samsung EHS (EHS Sentinel)',
+    // Confirmed by the reporter of #403 on 0.20.0-beta.1.
+    tested: true,
     unit_style: 'samsung',
     // The primary water pump (0x4089) runs for hot water, too.
     primary_pump: true,
@@ -2243,6 +2246,8 @@ const HFC_EDITOR = {
     tiles_custom: 'Own tile selection', tiles: 'Tiles (drag to sort)',
     tiles_custom_help: 'Off: default tiles. On: pick tiles and periods from what this installation provides; an empty list hides the row.',
     tiles_yaml: 'Some tiles have their own name, entity, price or action: edit them in YAML.',
+    tile_entity: 'Add a Home Assistant entity as a tile', tile_entity_help: 'The tile goes to the end of the list. It can be named below.',
+    tile_names: 'Names of the tiles', tile_name: 'Name: {tile}', tile_preview: 'Shows: {value}',
     price_fixed: 'Electricity price per kWh', price_entity: 'Electricity price entity',
     price_help: 'Enables the cost tile. With an entity that has long-term statistics (e.g. a dynamic tariff), the cost is billed per hour.',
     untested: 'untested',
@@ -2345,6 +2350,8 @@ const HFC_EDITOR = {
     tiles_custom: 'Eigene Kachelauswahl', tiles: 'Kacheln (zum Sortieren ziehen)',
     tiles_custom_help: 'Aus: Standardkacheln. An: Kacheln und Zeiträume aus dem wählen, was diese Anlage liefert; eine leere Liste blendet die Zeile aus.',
     tiles_yaml: 'Einige Kacheln haben einen eigenen Namen, eine eigene Entität, einen Preis oder eine Aktion: im YAML bearbeiten.',
+    tile_entity: 'Home-Assistant-Entität als Kachel hinzufügen', tile_entity_help: 'Die Kachel kommt ans Ende der Liste. Unten lässt sie sich benennen.',
+    tile_names: 'Namen der Kacheln', tile_name: 'Name: {tile}', tile_preview: 'Zeigt: {value}',
     price_fixed: 'Strompreis je kWh', price_entity: 'Strompreis-Entität',
     price_help: 'Schaltet die Kostenkachel frei. Mit einer Entität mit Langzeitstatistik (z. B. dynamischer Tarif) werden die Kosten stundengenau abgerechnet.',
     untested: 'ungetestet',
@@ -3170,6 +3177,14 @@ const HFC_TILES = {
   cost: { kind: 'cost', periods: ['today', 'yesterday', 'week', 'month', 'year', 'total'] },
   dhw_loss: { kind: 'loss', periods: ['now'], noSuffix: true },
 };
+// Card values as tiles (#481): `value:<entity key>`, or `value:unitN` for a unit of a cascade, shows what the drawing or the details
+// show for that key. The keys here have a live catalog tile with the same value, which the editor offers instead.
+const HFC_VALUE_LIVE = { power: 'power', heat: 'heat_live', volume: 'volume', outdoor: 'outdoor', dhw_top: 'dhw_top', room: 'room', compressor_speed: 'compressor_speed',
+  brine_pressure: 'brine_pressure', hc_pressure: 'hc_pressure', pv_share_today: 'pv_share' };
+const HFC_DETAIL_KEYS = ['sec_details', 'sec_refrigerant', 'sec_cutouts'].flatMap((sec) => HFC_ENTITY_GROUPS[sec]);
+const hfcValueKey = (key) => HFC_DIAGNOSTIC_KEYS.includes(key) || /^unit[1-9]\d*$/.test(String(key));
+// A tile that shows a card value: { value, name, actions }, without a catalog key or an entity of its own.
+const hfcValueSpec = (s) => !!s && s.value !== undefined && s.key === undefined && s.entity === undefined;
 // Standby loss of the hot-water tank: history window, minimum standby window, settling time after charging or draw-off,
 // and the temperature changes within 30 minutes that count as draw-off or as heating the card cannot explain.
 // Room for the valve label between the hot-water flow (x 420) and the tank (x 520), in drawing units.
@@ -3405,8 +3420,12 @@ class HeatpumpFlowCard extends HTMLElement {
         },
         // Tile selection (editor only): a sortable list of the tiles this installation can fill.
         ...(tiles ? [{ name: 'tiles_custom', selector: { boolean: {} } }] : []),
-        ...(tiles && tiles.editable && Array.isArray(config.tiles)
-          ? [{ name: 'tiles', selector: { select: { multiple: true, reorder: true, mode: 'dropdown', options: tiles.options } } }] : []),
+        ...(tiles && Array.isArray(config.tiles)
+          ? [{ name: 'tiles', selector: { select: { multiple: true, reorder: true, mode: 'dropdown', options: tiles.options } } },
+            { name: 'tile_entity', selector: { entity: {} } },
+            // Names of the tiles that show an entity or a card value (#481).
+            ...(tiles.names.length ? [{ type: 'expandable', name: 'tile_names', flatten: true, title: L.tile_names,
+              schema: tiles.names.map((t) => ({ name: t.field, selector: { text: {} } })) }] : [])] : []),
         // Price for the cost tile: a fixed number or an entity (both write `price`).
         ...(tiles && Array.isArray(config.tiles) ? [{
           type: 'grid', name: '', schema: [
@@ -3532,6 +3551,7 @@ class HeatpumpFlowCard extends HTMLElement {
       if (!Array.isArray(config.tiles)) throw new Error('tiles must be a list');
       config.tiles.forEach((t) => {
         const s = HeatpumpFlowCard._tileSpec(t);
+        if (hfcValueSpec(s) && !hfcValueKey(s.value)) throw new Error(`Unknown tile value "${s.value}". Use value:<entity key>, for example value:hc_flow`);
         if (s && s.key !== undefined && !HFC_TILES[s.key]) throw new Error(`Unknown tile "${s.key}". Available: ${Object.keys(HFC_TILES).join(', ')}`);
         if (s && s.period !== undefined && !HFC_PERIODS.includes(s.period)) throw new Error(`Unknown tile period "${s.period}". Available: ${HFC_PERIODS.join(', ')}`);
       });
@@ -3672,6 +3692,10 @@ class HeatpumpFlowCard extends HTMLElement {
         throw new Error(`sg_ready_map must map raw states to ${HFC_SG_READY_STATES.join(', ')}`);
       }
     }
+    if (config.heater_map !== undefined && config.heater_map !== null && (typeof config.heater_map !== 'object' || Array.isArray(config.heater_map)
+      || Object.entries(config.heater_map).some(([k, v]) => !/^-?\d+$/.test(k.trim()) || ![0, 1, 2, 3].includes(v === '' || v === null ? NaN : +v)))) {
+      throw new Error('heater_map must map whole numbers of the heater entity to a stage: 0 (off), 1, 2 or 3');
+    }
     if (config.errors !== undefined && (!Array.isArray(config.errors) || config.errors.some((id) => typeof id !== 'string'))) {
       throw new Error('errors must be a list of entity ids');
     }
@@ -3707,7 +3731,8 @@ class HeatpumpFlowCard extends HTMLElement {
       sg: { ...HFC_SG_READY_MAP, ...(preset?.sg_ready_map || {}), ...(config.sg_ready_map || {}) },
       // The keys are lower case, so a state matches whatever case the key was written in; the values are dhw or heating.
       valve: Object.fromEntries(Object.entries({ ...(preset?.valve_map || {}), ...(config.valve_map || {}) }).map(([k, v]) => [String(k).toLowerCase(), hfcValveSide(v)])),
-      heater: preset?.heater_map || null,
+      // Set in _build: the preset's map belongs to the preset's heater entity, which is known once the entities are resolved.
+      heater: null,
     };
     this._runningStates = config.running_states || preset?.running_states || [];
     this._statusLabels = preset?.status_labels || {};
@@ -4057,7 +4082,8 @@ class HeatpumpFlowCard extends HTMLElement {
     const isMap = (m) => !!m && typeof m === 'object' && !Array.isArray(m) && Object.keys(m).length > 0;
     const mapText = (m) => { const list = Object.entries(m); return list.length > 8 ? `${list.length} entries` : list.map(([k, v]) => `${clean(k)}=${clean(v)}`).join(', '); };
     const mapLines = HFC_MAP_KEYS.flatMap((name) => [[r.preset?.[name], 'preset'], [config[name], 'configuration']]
-      .filter(([m]) => isMap(m)).map(([m, from]) => `- ${name}: ${mapText(m)} (${from})`));
+      .filter(([m]) => isMap(m)).map(([m, from]) => `- ${name}: ${mapText(m)} (${from}${name === 'heater_map' && from === 'preset'
+        && !HeatpumpFlowCard._presetHeaterMap(r) ? `, not used: ${r.entities.heater ? 'own heater entity' : 'no heater entity'}` : ''})`));
     const misplaced = HFC_MAP_KEYS.filter((name) => config.entities && typeof config.entities === 'object' && name in config.entities)
       .map((name) => `- ${name} under entities: ignored, it belongs at the top level of the card configuration`);
     // Shared pump (#344): the same rule as the card's _sharedPump, from the configuration and the resolved entities.
@@ -4178,6 +4204,17 @@ class HeatpumpFlowCard extends HTMLElement {
     return lines.join('\n');
   }
 
+  // The heater stages by number: the preset's map only for the heater entity the preset found (a power sensor of one's own in W would
+  // read as off, #459), the configuration's map for any heater entity. null = no map.
+  static _presetHeaterMap(r) {
+    return r.preset?.heater_map && r.entities.heater && r.entities.heater === r.fromPreset.heater ? r.preset.heater_map : null;
+  }
+  static _heaterMapOf(config, r) {
+    const map = { ...(HeatpumpFlowCard._presetHeaterMap(r) || {}) };
+    Object.entries(config.heater_map || {}).forEach(([k, v]) => { map[String(+k)] = +v; });
+    return Object.keys(map).length ? map : null;
+  }
+
   _build() {
     const r = HeatpumpFlowCard._resolve(this._config, this._hass);
     this._e = r.entities;
@@ -4188,6 +4225,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._details = r.details;
     // Preset sensors whose refrigerant role holds only in heating; an entity set in the config keeps its role.
     this._heatingRoles = (r.preset?.heating_roles || []).filter((k) => this._e[k] && this._e[k] === r.fromPreset[k] && !(this._config.entities || {})[k]);
+    this._maps.heater = HeatpumpFlowCard._heaterMapOf(this._config, r);
     // An action for a key without an entity does nothing; say so once instead of failing silently.
     if (r.ready && this._config.actions) {
       const lost = Object.keys(this._config.actions).filter((k) => !this._e[k] && !(this._warned || (this._warned = {}))[k]);
@@ -4571,12 +4609,13 @@ class HeatpumpFlowCard extends HTMLElement {
     if (key === 'heater' && this._heaterOff.length && !Number.isFinite(parseFloat(s)) && !['unknown', 'unavailable', 'none', ''].includes(s)) {
       return this._heaterOff.includes(s) ? 0 : 1;
     }
+    // A heater_map decides for every number, also 0 and below, as in the run details.
+    if (key === 'heater') { const lv = this._heaterMapped(s); if (lv !== undefined) return lv; }
     const v = parseFloat(s);
     if (!Number.isFinite(v) || v <= 0) return 0;
-    if (key === 'heater') { const lv = this._heaterMapped(s); if (lv !== undefined) return lv; }
     return ['w', 'kw', '%'].includes(this._unit(key)) ? 1 : Math.min(Math.round(v), 3);
   }
-  // A preset's heater_map turns a numeric state of the heater into a stage 0 to 3; numbers not in it (off, other heat sources)
+  // The heater_map turns a numeric state of the heater into a stage 0 to 3; numbers not in it (off, other heat sources)
   // are 0. undefined without a map or for a state that is not a number (an on-state of a binary fallback).
   _heaterMapped(state) {
     const v = parseFloat(state);
@@ -5344,24 +5383,56 @@ class HeatpumpFlowCard extends HTMLElement {
   }
 
   /* ---------- stat tiles ---------- */
-  // Config entry → { key, period, … } or { entity, … }. Strings may carry the period: "cop_heating:month".
+  // Config entry → { key, period, … }, { value, … } or { entity, … }. Strings may carry the period: "cop_heating:month", or name a
+  // card value: "value:hc2_flow".
   static _tileSpec(t) {
-    if (typeof t === 'string') { const [key, period] = t.split(':').map((x) => x.trim()); return { key, ...(period ? { period } : {}) }; }
+    if (typeof t === 'string') {
+      const [key, period] = t.split(':').map((x) => x.trim());
+      return key === 'value' ? { value: period || '' } : { key, ...(period ? { period } : {}) };
+    }
     return t && typeof t === 'object' ? t : null;
   }
 
   // Editor: the tiles this installation can fill as select options, the current selection as option values and the default set.
+  // `raw` leads from an option value back to the tile as it stands in the configuration, so a tile that stays is written back
+  // unchanged. Tiles with options the editor does not know (price, actions …) are chips of their own that can be moved and removed.
   static _tileOptions(config, r, hass) {
     const I = HeatpumpFlowCard._texts(config, hass);
     const probe = Object.assign(Object.create(HeatpumpFlowCard.prototype), { _hass: hass, _e: r.entities, _sums: r.sums, _tileMap: r.tiles, _config: config });
+    // The power split of the Energy dashboard, as far as the editor has loaded it.
+    if (config.power_sources !== 'manual' && HeatpumpFlowCard._energyPrefsValue) {
+      const { energy, configured } = HeatpumpFlowCard._energyInfo(HeatpumpFlowCard._energyPrefsValue, hass);
+      probe._energy = energy.solar.length || energy.battery.length || energy.grid.length ? energy : null;
+      probe._energyConfigured = configured;
+    }
     const options = [];
     const periodsOf = {};
+    const shown = new Set();
     // The cost tile needs a price (global `price`).
     const hasPrice = config.price !== undefined && config.price !== null && config.price !== '';
     Object.keys(HFC_TILES).filter((k) => k !== 'cost' || hasPrice).forEach((key) => {
       const periods = probe._tilePeriods(key);
       periodsOf[key] = periods;
-      periods.forEach((p) => options.push({ value: periods.length === 1 ? key : `${key}:${p}`, label: probe._tileLabel(key, p, I) }));
+      periods.forEach((p) => {
+        options.push({ value: periods.length === 1 ? key : `${key}:${p}`, label: probe._tileLabel(key, p, I) });
+        const id = probe._tileSource(key, p)?.id;
+        if (id) shown.add(id);
+      });
+    });
+    // Card values (#481), each named with its component or heating circuit; a value that a catalog tile shows is not offered twice.
+    const inCatalog = (key) => (HFC_VALUE_LIVE[key] ? periodsOf[HFC_VALUE_LIVE[key]]?.length && (key !== 'room' || hfcHcCount(config) === 1)
+      : HFC_KINDS[hfcKindOf(key)]?.numeric && shown.has(r.entities[key]));
+    probe._valueGroups(I).forEach(([group, keys]) => keys.filter((key) => !inCatalog(key))
+      .forEach((key) => options.push({ value: `value:${key}`, label: `${group} › ${probe._valueLabel(key, I, false)}` })));
+    // Further values of the details (`details` of the preset or the configuration), stored as the entity with the details' own name.
+    const used = new Set((Array.isArray(config.tiles) ? config.tiles : []).filter((t) => t?.entity && Object.keys(t).some((k) => !['entity', 'name'].includes(k))).map((t) => t.entity));
+    const mapped = new Set([...Object.values(r.entities).flat(), ...shown]);
+    const extra = new Map();
+    (r.details || []).map((d) => (typeof d === 'string' ? { entity: d } : d)).filter((d) => d && hass.states[d.entity] && !mapped.has(d.entity) && !used.has(d.entity)).forEach((d) => {
+      const v = `entity:${d.entity}`;
+      if (extra.has(v)) return;
+      extra.set(v, Object.fromEntries(['entity', 'name', 'unit', 'decimals'].filter((k) => d[k] !== undefined).map((k) => [k, d[k]])));
+      options.push({ value: v, label: `${I.sec_more} › ${d.name || probe._entityName(d.entity)}` });
     });
     // Tiles with a single period are stored without it; others with the period, so the select can show them.
     const valueOf = (key, period) => {
@@ -5370,34 +5441,77 @@ class HeatpumpFlowCard extends HTMLElement {
       const p = period || probe._tileDefault(key);
       return p ? `${key}:${p}` : key;
     };
-    let editable = true;
-    const value = (Array.isArray(config.tiles) ? config.tiles : []).map((t) => {
+    const raw = new Map();
+    const names = [];
+    let yaml = false;
+    const value = (Array.isArray(config.tiles) ? config.tiles : []).map((t, n) => {
       const s = HeatpumpFlowCard._tileSpec(t);
-      if (!s) return null;
-      if (!s.key || Object.keys(s).some((k) => !['key', 'period'].includes(k))) { editable = false; return null; }
-      return valueOf(s.key, s.period);
-    }).filter(Boolean);
-    value.forEach((v) => { if (!options.some((o) => o.value === v)) options.push({ value: v, label: v }); });
+      const only = (...keys) => Object.keys(s).every((k) => keys.includes(k));
+      let v = null; let label = null; let base = '';
+      if (s?.key && only('key', 'period')) v = valueOf(s.key, s.period);
+      else if (hfcValueSpec(s) && only('value', 'name')) {
+        v = `value:${s.value}`;
+        base = hfcValueKey(s.value) ? probe._valueLabel(s.value, I) : String(s.value);
+      } else if (s?.entity && s.key === undefined && only('entity', 'name')) {
+        v = `entity:${s.entity}`;
+        base = probe._entityName(s.entity);
+        label = s.name || base;
+      }
+      if (!v || raw.has(v)) {
+        yaml = true;
+        v = `yaml:${n}`;
+        label = `${s?.name || (s?.key ? (HFC_TILES[s.key] ? probe._tileLabel(s.key, s.period, I) : s.key) : s?.entity ? probe._entityName(s.entity)
+          : hfcValueSpec(s) && hfcValueKey(s.value) ? probe._valueLabel(s.value, I) : `${n + 1}`)} · YAML`;
+      } else if (base) {
+        const preview = s.entity ? (hass.states[s.entity] ? probe._fmtState(null, { entity: s.entity }) : '–') : '';
+        names.push({ field: `tile_name_${n}`, value: v, base, name: s.name || '', preview });
+      }
+      raw.set(v, t);
+      const option = options.find((o) => o.value === v);
+      // A named card value is listed under its name, so two chips of the same kind can be told apart.
+      if (!option) options.push({ value: v, label: label ?? (base || v) });
+      else if ((hfcValueSpec(s) || s.entity) && s.name) option.label = s.name;
+      return v;
+    });
     // Switching the own selection on starts from the preset's default tiles (#413), else from the default row.
     const presetDefaults = HFC_PRESETS[config.preset]?.default_tiles;
     const defaults = Array.isArray(presetDefaults)
       ? presetDefaults.map((t) => HeatpumpFlowCard._tileSpec(t)).filter((s) => s?.key && periodsOf[s.key]?.length).map((s) => valueOf(s.key, s.period))
       : ['cop_heating', 'cop_dhw', 'energy', 'starts', 'spread', 'volume', 'heat_estimated'].filter((k) => periodsOf[k].length).map((k) => valueOf(k));
-    return { options, value, editable, defaults };
+    return { options, value, raw, names, yaml, defaults, extra };
+  }
+
+  // Editor: the tile list to store for the selected option values. A tile that stays is kept as it stands in the configuration, with
+  // the name from its field; `entity` adds a tile for that entity.
+  static _tilesToStore(tiles, selected, fields, entity) {
+    const named = new Map(tiles.names.map((t) => [t.value, t]));
+    const list = selected.map((v) => {
+      if (!tiles.raw.has(v)) return tiles.extra.has(v) ? { ...tiles.extra.get(v) } : v;
+      const t = named.get(v);
+      const text = t ? String(fields[t.field] ?? '') : '';
+      if (!t || text === t.name) return tiles.raw.get(v);
+      const name = text.trim() ? { name: text } : {};
+      const s = HeatpumpFlowCard._tileSpec(tiles.raw.get(v));
+      return s.entity ? { entity: s.entity, ...name } : name.name ? { value: s.value, ...name } : `value:${s.value}`;
+    });
+    if (entity && !selected.includes(`entity:${entity}`)) list.push({ entity });
+    return list;
   }
 
   _tileLabel(key, period, I = this._i) {
     const def = HFC_TILES[key];
     // A circuit spread is named after its circuit: the configured name, else the number from circuit 2 on.
     const hc = HeatpumpFlowCard._hcSpreadCircuit(key);
-    if (hc) {
-      const own = this._config?.[this._hk(hc, 'name')];
-      return own ? `${I.tiles.hc_spread} · ${own}` : hc > 1 ? `${I.tiles.hc_spread} ${hc}` : String(I.tiles.hc_spread);
-    }
+    if (hc) return this._circuitLabel(String(I.tiles.hc_spread), hc);
     const name = String(I.tiles[key]);
     const word = def.live || def.noSuffix || !period ? '' : String(I.periods[period]);
     // A name that already ends in the period word does not repeat it: "COP gesamt" for the total, not "COP gesamt · gesamt" (#288).
     return word && !name.toLowerCase().endsWith(` ${word.toLowerCase()}`) ? `${name} · ${word}` : name;
+  }
+
+  _circuitLabel(text, hc) {
+    const own = this._config?.[this._hk(hc, 'name')];
+    return own ? `${text} · ${own}` : hc > 1 ? `${text} ${hc}` : text;
   }
 
   // Where a tile's value comes from for a period: an entity, the long-term statistics of a total counter,
@@ -5715,6 +5829,146 @@ class HeatpumpFlowCard extends HTMLElement {
     }
   }
 
+  /* ---------- card values as tiles (#481) ---------- */
+  // The heating circuit a key belongs to, 0 for the rest of the installation. The pressure and the program are those of the whole
+  // heating system; the room keys of circuit 1 carry no number.
+  static _valueCircuit(key) {
+    if (['hc_pressure', 'program'].includes(key)) return 0;
+    if (['room', 'room_target', 'room_humidity', 'dew_point'].includes(key)) return 1;
+    const m = /^hc([2-6])?_/.exec(key);
+    return m ? +(m[1] || 1) : 0;
+  }
+
+  // Can this installation show the value? A mapped entity is enough, also while it is unavailable (the tile shows "–" then).
+  _valueAvail(key) {
+    const unit = /^unit(\d+)$/.exec(key);
+    if (unit) return +unit[1] <= (this._config.units || []).length;
+    const hc = HeatpumpFlowCard._valueCircuit(key);
+    if (hc > (this._hcCount ?? hfcHcCount(this._config))) return false;
+    if (this._has(key)) return true;
+    const derive = (this._preset ?? HFC_PRESETS[this._config.preset])?.refrigerant_derived !== false;
+    if (key === 'superheat') return derive && this._has('suction_temp') && this._has('evap_temp');
+    if (key === 'subcooling') return derive && this._has('cond_temp') && this._has('liquid_temp');
+    if (/(^|_)dew_point$/.test(key)) return this._has(this._roomKey(hc)) && this._has(this._roomKey(hc, 'room_humidity'));
+    if (['pv', 'battery', 'grid'].includes(key)) return this._powerMode() === 'energy' && this._srcKeys().includes(key);
+    return false;
+  }
+
+  // The values this installation has, by component and heating circuit: [group title, keys]. A named circuit stands under its name.
+  _valueGroups(I = this._i) {
+    const L = HeatpumpFlowCard._editorTexts(this._lang);
+    const count = this._hcCount ?? hfcHcCount(this._config);
+    const title = (sec) => {
+      const m = /^sec_hc([2-6])?$/.exec(sec);
+      if (!m) return L[sec];
+      const n = +(m[1] || 1);
+      return this._config[this._hk(n, 'name')] || (count > 1 ? `${I.heating_circuit} ${n}` : L.sec_hc);
+    };
+    const groups = Object.entries(HFC_ENTITY_GROUPS).map(([sec, keys]) => [title(sec), keys.filter((key) => this._valueAvail(key))]);
+    groups.push([I.sec_units, (this._config.units || []).map((u, n) => `unit${n + 1}`)]);
+    return groups.filter(([, keys]) => keys.length);
+  }
+
+  // Editor texts in a language, for the names of the entity keys.
+  static _editorTexts(lang) {
+    const key = lang in HFC_EDITOR ? lang : String(lang).split('-')[0];
+    this._editorTextCache = this._editorTextCache || {};
+    return (this._editorTextCache[key] = this._editorTextCache[key] || hfcBuiltin(HFC_EDITOR, key));
+  }
+
+  // The name of a value: as in the details or the live tile, else the editor's field without the hint in brackets. A value of a
+  // heating circuit carries the circuit (its name, or the number from circuit 2 on); the editor leaves that to its group.
+  _valueLabel(key, I = this._i, circuit = true) {
+    const unit = /^unit(\d+)$/.exec(key);
+    if (unit) return String(this._config.units?.[+unit[1] - 1]?.name || `${I.unit} ${unit[1]}`);
+    const base = key.replace(/^hc[2-6]_(?=room|dew_point)/, '').replace(/^hc[2-6]_/, 'hc_');
+    const L = HeatpumpFlowCard._editorTexts(this._lang);
+    const text = String(I.det[base] || I.tiles[HFC_VALUE_LIVE[base]] || (base === 'heater' && I.run_heater) || L[base] || base).replace(/\s*\(.*\)\s*$/, '');
+    const hc = circuit ? HeatpumpFlowCard._valueCircuit(key) : 0;
+    // The only circuit of an installation needs no name on room values: the house stands for it.
+    return hc && (base.startsWith('hc_') || (this._hcCount ?? hfcHcCount(this._config)) > 1) ? this._circuitLabel(text, hc) : text;
+  }
+
+  // [text, entity] of a value, from the same readings as the drawing and the details. "–" without a reading, never 0.
+  _valueTile(key, L) {
+    const unit = /^unit(\d+)$/.exec(key);
+    if (unit) {
+      const row = this._drawerRows().flatMap(([, rows]) => rows).find(([id]) => id === key);
+      return [row ? row[3]() : '–', this._units()?.[+unit[1] - 1]?.entity || ''];
+    }
+    const id = this._e[key] || { superheat: this._e.suction_temp, subcooling: this._e.liquid_temp }[key]
+      || (/(^|_)dew_point$/.test(key) ? this._e[this._roomKey(HeatpumpFlowCard._valueCircuit(key))] : '') || (['pv', 'battery', 'grid'].includes(key) ? this._e.power : '') || '';
+    return [this._valueText(key, L), id];
+  }
+
+  _valueText(key, L) {
+    const i = this._i; const F = L.flow;
+    const f = (v, d, u) => (Number.isFinite(v) ? `${this._fmt(v, d)} ${u}`.trim() : '–');
+    const isKnown = (k) => this._has(k) && !['unknown', 'unavailable', 'none', ''].includes(String(this._s(k) ?? '').trim().toLowerCase());
+    const known = isKnown(key);
+    // An unavailable climate or water heater entity can keep its temperature attributes: no reading then. A list counts its members itself.
+    const read = (k) => isKnown(k) || !!this._sums?.[k];
+    const onOff = (on) => (known ? (on ? i.run_on : i.run_off) : '–');
+    const watts = ['w', 'kw', 'mw', 'gw', 'btu/h'].includes(this._unit(key));
+    const power = (w) => (w >= 1000 && this._unit(key) !== 'w' ? f(w / 1000, 1, 'kW') : f(w, 0, 'W'));
+    const base = key.replace(/^hc[2-6]_(?=room|dew_point)/, '').replace(/^hc[2-6]_/, 'hc_');
+    const hc = HeatpumpFlowCard._valueCircuit(key);
+    // Values of the details drawer, with their rules (superheat only while running, heating-only roles, counts).
+    if (HFC_DETAIL_KEYS.includes(key)) {
+      const row = this._drawerRows().flatMap(([, rows]) => rows).find(([rowId]) => rowId === key);
+      return row ? row[3]() : '–';
+    }
+    switch (base) {
+      case 'mode': return known ? L.mode : '–';
+      case 'status': return known ? (this._statusLabels[this._lang] || this._statusLabels.en || {})[this._s(key)] || this._stateText(this._st(key), this._s(key)) : '–';
+      case 'dhw_mode': return known ? this._modeLabel(F.dhwMode, this._s(key)) : '–';
+      case 'buffer_mode': return known ? this._modeLabel(F.bufMode, this._s(key)) : '–';
+      case 'hc_mode': return known ? this._modeLabel(this._norm(this._maps.hc, this._s(key)), this._s(key)) : '–';
+      case 'program': { const p = this._program(); return !known ? '–' : p && p.kind !== 'none' ? i.programs[p.kind] : this._stateText(this._st(key), this._s(key)); }
+      case 'sg_ready': { const sg = this._sgReadyState(); return sg ? i.sg_ready[sg] : '–'; }
+      case 'valve': return known ? (F.valveDhw ? i.valve_dhw : i.valve_heating) : '–';
+      case 'defrost': return onOff(F.defrost);
+      case 'boiler_state': return onOff(this._boilerOn());
+      case 'boiler_power': return f(this._w(key) >= 1000 ? this._w(key) / 1000 : this._w(key), this._w(key) >= 1000 ? 1 : 0, this._w(key) >= 1000 ? 'kW' : 'W');
+      case 'heat': return Number.isFinite(L.heat) ? `${L.heatEstimated ? '≈' : ''}${f(L.heat, 1, 'kW')}` : '–';
+      case 'power': case 'volume': case 'outdoor': case 'brine_pressure': case 'hc_pressure': case 'pv_share_today': {
+        const text = this._liveTile(HFC_VALUE_LIVE[base], L)[0];
+        return read(key) ? text : '–';
+      }
+      case 'pv': case 'battery': case 'grid': {
+        if (this._powerMode() !== 'energy') return f(this._w(key), 0, 'W');
+        // Without the heat pump's power there is nothing to split: unknown, not 0.
+        const w = Number.isFinite(this._w('power')) ? this._energySplit()?.[key] : NaN;
+        return Number.isFinite(w) ? `≈${f(w, 0, 'W')}` : '–';
+      }
+      case 'hc_volume': case 'source_volume': return this._flowText(this._lh(key)) || '–';
+      case 'energy_today': return this._st(key).attributes?.unit_of_measurement ? this._fmtState(key) : f(this._n(key), 1, 'kWh');
+      case 'hc_mixer': return f(this._n(key), 0, '%');
+      case 'hc_mixer_opening': return onOff(this._on(key) || parseFloat(this._s(key)) > 0);
+      case 'room_humidity': return f(this._roomHumidity(hc), 0, '%');
+      case 'dew_point': return known || read(this._roomKey(hc)) ? f(this._dewPoint(hc), 1, '°C') : '–';
+      case 'hc_curve_offset': return known ? `${this._n(key) > 0 ? '+' : ''}${f(this._n(key), Number.isInteger(this._n(key)) ? 0 : 1, ['', '°c', 'k'].includes(this._unit(key)) ? 'K' : this._st(key).attributes.unit_of_measurement)}` : '–';
+      case 'circulation_start': case 'circulation_end': return this._timeText(this._s(key)) || '–';
+      case 'circulation_schedule': return known ? this._circulationProgram() || (this._on(key) ? i.run_on : i.run_off) : '–';
+      case 'compressor': case 'fan_speed': return known && Number.isFinite(this._n(key)) ? this._fmtState(key) : onOff(hfcCompressorOn(this._s(key)));
+      case 'pv_boost': return watts ? power(this._w(key)) : onOff(this._pvBoost());
+      case 'hc_pump': case 'primary_pump_state': case 'solar_pump': case 'circulation': return onOff(this._pumpOn(key));
+      default:
+    }
+    const kind = hfcKindOf(key);
+    if (kind === 'temperature') return read(key) ? f(this._n(key), 1, '°C') : '–';
+    // Heater rods: the measured power where the entity reports one, else on/off with the stage.
+    if (kind === 'onoff_power') {
+      if (watts) return power(this._w(key));
+      const level = this._level(key);
+      return onOff(level > 0) + (known && level > 1 ? ` (${level})` : '');
+    }
+    if (kind === 'onoff') return onOff(this._on(key));
+    if (kind === 'ratio') return f(this._n(key), 2, '');
+    if (kind === 'counter') return f(this._n(key), 0, '');
+    return this._fmtState(key);
+  }
+
   // The tile list: `tiles` of the configuration, else the preset's `default_tiles` (#413), else null for the default row.
   _tileList() {
     if (Array.isArray(this._config.tiles)) return this._config.tiles;
@@ -5727,6 +5981,12 @@ class HeatpumpFlowCard extends HTMLElement {
     this._tileList().forEach((raw) => {
       const spec = HeatpumpFlowCard._tileSpec(raw);
       if (!spec) return;
+      if (hfcValueSpec(spec)) {
+        if (!this._valueAvail(spec.value)) return;
+        const [text, entity] = this._valueTile(spec.value, L);
+        out.push([spec.name || this._valueLabel(spec.value), text, entity, spec]);
+        return;
+      }
       const def = HFC_TILES[spec.key];
       if (!def) {
         const st = spec.entity && this._hass.states[spec.entity];
@@ -8167,7 +8427,7 @@ class HeatpumpFlowCard extends HTMLElement {
     // statistics: the tile catalog when `tiles` is set or the preset has default tiles, otherwise the default row
     const share = this._n('pv_share_today');
     const custom = !!this._tileList();
-    const tiles = custom ? this._catalogTiles({ loop, flowLoop, spread, vol, heat, heatEstimated, power: hpPower, cop, circuits: F.circuits }) : [];
+    const tiles = custom ? this._catalogTiles({ loop, flowLoop, spread, vol, heat, heatEstimated, power: hpPower, cop, circuits: F.circuits, flow: F, mode: modeTxt }) : [];
     const add = (key, label, value) => { if (!custom && this._has(key)) tiles.push([this._statLabel(key, label), value, this._e[key]]); };
     add('cop_heating_today', i.stat_cop_heating, this._fmt(this._n('cop_heating_today'), 2));
     add('cop_dhw_today', i.stat_cop_dhw, this._fmt(this._n('cop_dhw_today'), 2));
@@ -8901,7 +9161,10 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     this._renderLayout(HeatpumpFlowCard._layoutQuestions(this._config, this._hass, r), L);
     this._form.hass = this._hass;
     this._form.schema = schema;
-    this._form.computeLabel = computeLabel;
+    this._form.computeLabel = (s) => {
+      const named = tiles.names.find((t) => t.field === s.name);
+      return named ? L.tile_name.replace('{tile}', named.base) : computeLabel(s);
+    };
     this._form.computeHelper = (s) => {
       if (s.name === 'preset') {
         // Further detected presets: another integration for the same heat pump may suit better (#145).
@@ -8911,7 +9174,11 @@ class HeatpumpFlowCardEditor extends HTMLElement {
         const status = r.ready ? `${L.detected}${r.prefix ? ` · ${r.prefix}` : ''} · ${found} ${L.entities_found}. ${L.preset_help}` : L.not_detected;
         return `${r.preset.tested ? status : `${status} ${L.untested_help}`}${also}`;
       }
-      if (s.name === 'tiles_custom') return tiles.editable ? L.tiles_custom_help : L.tiles_yaml;
+      if (s.name === 'tiles_custom') return L.tiles_custom_help;
+      if (s.name === 'tiles') return tiles.yaml ? L.tiles_yaml : '';
+      if (s.name === 'tile_entity') return L.tile_entity_help;
+      const named = tiles.names.find((t) => t.field === s.name);
+      if (named) return named.preview ? L.tile_preview.replace('{value}', named.preview) : '';
       if (s.name === 'price_entity') return L.price_help;
       if (s.name === 'errors') return L.errors_help;
       if (s.name === 'error_ok_text') return L.error_ok_help;
@@ -8939,7 +9206,11 @@ class HeatpumpFlowCardEditor extends HTMLElement {
       valve_dhw_text: this._valveText.dhw, valve_heating_text: this._valveText.heating, all_entities: !!this._allEntities,
       ...(assistant ? { assistant_device: this._assistantDevice || '' } : {}) };
     if (this._config.controls === undefined && !r.presetControls.length) delete data.controls;
-    if (custom && tiles.editable) data.tiles = tiles.value;
+    if (custom) {
+      data.tiles = tiles.value;
+      data.tile_entity = this._tilePicked || '';
+      tiles.names.forEach((t) => { data[t.field] = t.name; });
+    }
     this._priceShown = custom;
     if (custom) {
       const p = this._config.price;
@@ -9037,7 +9308,9 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     if (JSON.stringify(errors) !== JSON.stringify(this._presetErrors || [])) config.errors = errors; else delete config.errors;
     if (Object.keys(ents).length) config.entities = ents; else delete config.entities;
     // Tiles: off = default tiles; switched on = start from the default set; tiles with own options stay as in YAML.
-    delete config.tiles_custom;
+    const picked = value.tile_entity && value.tile_entity !== this._tilePicked ? value.tile_entity : '';
+    delete config.tiles_custom; delete config.tile_entity;
+    Object.keys(config).filter((k) => /^tile_name_\d+$/.test(k)).forEach((k) => { delete config[k]; });
     delete config.price_fixed; delete config.price_entity;
     if (this._priceShown) {
       if (value.price_entity) config.price = value.price_entity;
@@ -9046,7 +9319,12 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     }
     if (!value.tiles_custom) delete config.tiles;
     else if (!Array.isArray(this._config.tiles)) config.tiles = this._tiles.defaults;
-    else if (!this._tiles.editable) config.tiles = this._config.tiles;
+    else config.tiles = Array.isArray(value.tiles) ? HeatpumpFlowCard._tilesToStore(this._tiles, value.tiles, value, picked) : this._config.tiles;
+    // The entity picker keeps showing its choice while the form passes the same empty value: it takes the entity once, then is emptied.
+    if (picked) {
+      this._tilePicked = picked;
+      setTimeout(() => { this._tilePicked = ''; this._render(); });
+    }
     this._config = config;
     this._loadEnergyInfo();
     this._loadRegistry();
