@@ -702,6 +702,25 @@
       .map((s) => s.kind).join();
     check(card._timelineNeedsAttributes(attributeIds) && parsed[heater][0].s === '45' && attributeRoute === 'dhw',
       `ViCare timeline: water-heater current_temperature is preserved and routes hot water (${parsed[heater][0].s} / ${attributeRoute})`);
+    // #489: hot water switched off and the tank colder than the heating flow: the rule does not apply. The DHW operating mode (E3)
+    // decides before the water heater; a one-time charge runs all the same; unknown leaves the rule as it was.
+    const offReg = { ...registry, 'select.v250_dhw_mode': { platform: 'vicare', translation_key: 'dhw_operating_mode' }, 'water_heater.v250': { platform: 'vicare', translation_key: 'domestic_hot_water' },
+      'binary_sensor.v250_once': { platform: 'vicare', translation_key: 'one_time_charge' } };
+    const cold = (select, heater, once = 'off') => model(state('ready', 'on', '48', { ...(select ? { 'select.v250_dhw_mode': select } : {}), ...(heater ? { 'water_heater.v250': heater } : {}), 'binary_sensor.v250_once': once }),
+      Object.fromEntries(Object.entries(offReg).filter(([id]) => (id !== 'select.v250_dhw_mode' || select) && (id !== 'water_heater.v250' || heater))));
+    const gates = [await cold('off', 'on'), await cold('off', 'on', 'on'), await cold('efficient', 'off'), await cold(null, 'off'), await cold(null, 'on'), await cold('unavailable', 'off'), await cold('unavailable', 'unknown'), await cold(null, null)]
+      .map((m) => m.hp).join();
+    check(gates === 'heating,dhw,dhw,heating,dhw,heating,dhw,dhw', `#489: hot water switched off is never a charge (${gates})`);
+    const gateCard = mount({ preset: 'vicare' }, hassOf(state('ready', 'off', '30', { 'select.v250_dhw_mode': 'efficient', 'binary_sensor.v250_once': 'off' }), Object.fromEntries(Object.entries(offReg).filter(([id]) => id !== 'water_heater.v250')))); await wait(20);
+    const gateIds = gateCard._timelineIds();
+    const gateSegs = gateCard._timelineSegments({ 'sensor.v250_phase': [{ t: 0, s: 'ready' }], 'binary_sensor.v250_compressor': [{ t: 0, s: 'on' }], 'sensor.v250_flow': [{ t: 0, s: '48' }], 'sensor.v250_dhw': [{ t: 0, s: '45' }],
+      'select.v250_dhw_mode': [{ t: 0, s: 'efficient' }, { t: 20 * M, s: 'off' }], 'binary_sensor.v250_once': [{ t: 0, s: 'off' }, { t: 50 * M, s: 'on' }, { t: 60 * M, s: 'off' }] }, gateIds, 0, 90 * M).map((x) => `${x.kind}:${x.from / M}-${x.to / M}`).join(' ');
+    check(gateSegs === 'dhw:0-20 heat:20-50 dhw:50-60 heat:60-90' && gateIds.von === 'select.v250_dhw_mode', `#489: the timeline follows the switch and a one-time charge (${gateSegs})`);
+    const bare = gateCard._timelineSegments({ 'sensor.v250_phase': [{ t: 0, s: 'ready' }], 'binary_sensor.v250_compressor': [{ t: 0, s: 'on' }], 'sensor.v250_flow': [{ t: 0, s: '48' }], 'sensor.v250_dhw': [{ t: 0, s: '45' }], 'select.v250_dhw_mode': [], 'binary_sensor.v250_once': [] }, gateIds, 0, 90 * M).map((x) => x.kind).join();
+    check(bare === 'dhw', `#489: without a recorded switch the timeline keeps the rule (${bare})`);
+    gateCard.remove();
+    const gateReport = C._diagnosticReport({ preset: 'vicare' }, hassOf(state('ready', 'on', '48', { 'select.v250_dhw_mode': 'off' }), offReg));
+    check(gateReport.includes('not while dhw_enabled is off') && /- dhw_enabled: select\.v250_dhw_mode = off \[preset\]/.test(gateReport), '#489: the report names the switch');
     const report = C._diagnosticReport({ preset: 'vicare' }, hassOf(state('ready', 'on', '29'), registry));
     check(report.includes('Hot water without a valve entity: while the heat pump runs and flow is above dhw_top'), 'ViCare: the report names the hot-water rule');
     card.remove();

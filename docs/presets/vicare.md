@@ -33,7 +33,7 @@ The compressor phase has no hot-water state, and some units, such as the Vitocal
 Limits:
 
 - At the start of a charge the flow first has to rise above the tank, so the first minutes still show heating.
-- A tank that has cooled below the heating flow reads as hot water for that time.
+- A tank that has cooled below the heating flow reads as hot water for that time, unless hot water is switched off: while the DHW operating mode is "off" (else while the water heater is), the rule does not apply, except during a one-time charge (#489). The preset maps them as `dhw_enabled` and `dhw_once`; an own entity for `dhw_enabled` counts as off only with the state `off`.
 
 A mapped `valve` (for example your own template sensor) or a reported "DHW charging" entity replaces the rule. The diagnostic report says when the rule is in use. Confirmed on a Vitocal 250 by the reporter of #186: the compressor is on while heating and while charging hot water, and the flow rises above the tank during a charge.
 
