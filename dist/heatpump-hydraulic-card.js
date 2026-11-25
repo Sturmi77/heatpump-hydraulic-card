@@ -376,6 +376,7 @@ const HFC_PRESETS = {
         cop_dhw_today: `${hp}_hot_water_cop_daily`,
         starts_today: `${hp}_compressor_start_cycling_daily`,
         starts_total: `${hp}_compressor_start_cycling_total`,
+        aux_hours: `${hp}_heating_rod_runtime_total`,
         energy_total: `${hp}_compressor_power_consumption_accumulated`,
         heat_total: `${hp}_compressor_thermal_energy_output_accumulated`,
         compressor_speed: `${hp}_compressor_unit_rating`,
@@ -392,6 +393,7 @@ const HFC_PRESETS = {
       const per = (base, periods = { today: 'daily', month: 'monthly', year: 'yearly', total: 'total' }) =>
         Object.fromEntries(Object.entries(periods).map(([k, v]) => [k, `${hp}_${base}_${v}`]));
       const cyc = { today: 'daily', yesterday: 'yesterday', total: 'total' };
+      const run = { today: 'daily', total: 'total' };
       return {
         cop_heating: per('heating_cop'), cop_dhw: per('hot_water_cop'), cop_cooling: per('cooling_cop'),
         energy: { total: `${hp}_compressor_power_consumption_accumulated` }, heat: { total: `${hp}_compressor_thermal_energy_output_accumulated` },
@@ -402,6 +404,8 @@ const HFC_PRESETS = {
         starts: per('compressor_start_cycling', { today: 'daily', yesterday: 'yesterday', month: 'monthly', total: 'total' }),
         cycles_heating: per('heating_cycling', cyc), cycles_dhw: per('hot_water_cycling', cyc),
         cycles_cooling: per('cooling_cycling', cyc), defrosts: per('defrost_cycling', cyc),
+        // Running time per mode, in hours; the daily counters start again at midnight.
+        hours_heating: per('heating_runtime', run), hours_dhw: per('hot_water_runtime', run), hours_defrost: per('defrost_runtime', run), aux_hours: per('heating_rod_runtime', run),
       };
     },
     errors: (p, i) => {
@@ -1926,6 +1930,7 @@ const HFC_I18N = {
       energy_defrost: 'Electricity defrost', energy_standby: 'Standby', energy_aux: 'Electricity heater',
       heat: 'Heat', heat_heating: 'Heat heating', heat_dhw: 'Heat DHW', heat_cooling: 'Cooling output', heat_defrost: 'Heat defrost',
       starts: 'Compressor starts', cycles_heating: 'Heating cycles', cycles_dhw: 'DHW cycles', cycles_cooling: 'Cooling cycles', defrosts: 'Defrosts',
+      hours_heating: 'Runtime heating', hours_dhw: 'Runtime DHW', hours_defrost: 'Runtime defrost',
       hours: 'Compressor hours', hours_per_start: 'Runtime per start', load_classes: 'Load classes 1-5', aux_hours: 'Heater hours', aux_starts: 'Heater starts',
       spread: 'Spread', volume: 'Flow rate', heat_estimated: 'Heat output', power: 'Power', heat_live: 'Heat output', compressor_speed: 'Compressor',
       source_spread: 'Source spread', outdoor: 'Outdoor', dhw_top: 'DHW tank', room: 'Room', brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', hc_spread: 'Circuit spread', pv_share: 'PV share today',
@@ -1969,6 +1974,7 @@ const HFC_I18N = {
       energy_defrost: 'Strom Abtauen', energy_standby: 'Standby', energy_aux: 'Strom Heizstab',
       heat: 'Wärme', heat_heating: 'Wärme Heizen', heat_dhw: 'Wärme WW', heat_cooling: 'Kälte', heat_defrost: 'Wärme Abtauen',
       starts: 'Verdichterstarts', cycles_heating: 'Heizzyklen', cycles_dhw: 'WW-Zyklen', cycles_cooling: 'Kühlzyklen', defrosts: 'Abtauungen',
+      hours_heating: 'Laufzeit Heizen', hours_dhw: 'Laufzeit Warmwasser', hours_defrost: 'Laufzeit Abtauen',
       hours: 'Verdichterstunden', hours_per_start: 'Laufzeit pro Start', load_classes: 'Lastklassen 1-5', aux_hours: 'Heizstab-Stunden', aux_starts: 'Heizstab-Starts',
       spread: 'Spreizung', volume: 'Volumenstrom', heat_estimated: 'Wärmeleistung', power: 'Leistung', heat_live: 'Wärmeleistung', compressor_speed: 'Verdichter',
       source_spread: 'Spreizung Quelle', outdoor: 'Außen', dhw_top: 'WW-Speicher', room: 'Raum', brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', hc_spread: 'Spreizung Heizkreis', pv_share: 'PV-Anteil heute',
@@ -3155,6 +3161,7 @@ const HFC_TILES = {
   starts: { kind: 'count', legacy: 'starts_today' },
   cycles_heating: { kind: 'count' }, cycles_dhw: { kind: 'count' }, cycles_cooling: { kind: 'count' }, defrosts: { kind: 'count' },
   hours: { kind: 'hours' },
+  hours_heating: { kind: 'hours' }, hours_dhw: { kind: 'hours' }, hours_defrost: { kind: 'hours' },
   hours_per_start: { kind: 'hours', ratio: ['hours', 'starts'], perStart: true },
   load_classes: { kind: 'classes' },
   aux_hours: { kind: 'hours' }, aux_starts: { kind: 'count' },
