@@ -29,6 +29,7 @@ const HFC_SCRIPT_URL = (() => {
 //                                does, such as the EMS-ESP aux heater status: heating, hot water, defrost …, #224)
 //   tiles(prefix, idx, ctx)    → { tile: { period: entity_id | [candidates…] } } for the stat tile catalog (HFC_TILES);
 //                                a "total" counter with long-term statistics also gives today, yesterday, week, month and year
+//   variant                    → true when entities() follows defaults() (NIBE F470): the card resolves again when they change
 //   dynamic                    → true when entities() or details() map parts by their readings (ctx.state): the card resolves again every
 //                                minute and rebuilds when a mapping appears, so parts that report late are not lost
 //   *_mode_map                 → raw state → normalized mode
@@ -1842,6 +1843,7 @@ const HFC_PRESETS = {
     auto_circuits: false,
     // BT16 sits on the evaporator surface and BT17 on the suction line; neither is a saturation temperature, so no derived superheat.
     refrigerant_derived: false,
+    variant: true,
     defaults: (e, hass) => (hfcNibeTank(Object.values(e || {}).flat().map((id) => hass?.entities?.[id]).filter((x) => x?.platform === 'nibe_heatpump').map((x) => hass.devices?.[x.device_id]))
       ? { condenser: 'tank', dhw_type: 'tank_in_tank', source_type: 'exhaust', primary_pump: false } : {}),
     // The priority and the compressor state together; both are coils of every F model in the library and of no S model.
@@ -4244,6 +4246,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._needsBuild = !r.ready;
     this._lastTry = Date.now();
     this._mapped = HeatpumpFlowCard._mappingSet(r); this._checkedAt = Date.now();
+    this._builtVariant = this._preset?.variant ? JSON.stringify(this._presetDefaults()) : undefined;
   }
 
   // Everything a resolution maps, as "kind:key=entity" strings: compared to find mappings that appeared later.
@@ -4404,6 +4407,9 @@ class HeatpumpFlowCard extends HTMLElement {
       const r = HeatpumpFlowCard._resolve(this._config, this._hass);
       if (r.ready && [...HeatpumpFlowCard._mappingSet(r)].some((m) => !this._mapped.has(m))) { this._needsBuild = true; this._lastTry = 0; }
     }
+    // A preset whose mapping follows the variant it reads from the device (`variant`, NIBE F470) maps again when that changes, for
+    // example when the device model arrives after the states.
+    if (this._preset?.variant && !this._needsBuild && this._rendered && JSON.stringify(this._presetDefaults()) !== this._builtVariant) { this._needsBuild = true; this._lastTry = 0; }
     // Retry detection at most every 30 s while the integration's entities are not there yet.
     if (this._needsBuild && (!this._rendered || Date.now() - this._lastTry > 30000)) { this._build(); this._rendered = false; }
     this._loadEnergy();
@@ -7111,7 +7117,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const i = this._i;
     const dhw = run.kind === 'dhw';
     const tankKey = this._dhwTankKey() || 'dhw_top';
-    const keys = (dhw ? [tankKey, 'dhw_target', 'heater', ...HFC_TANK_HEATERS.filter((k) => k.startsWith('dhw_')), 'defrost']
+    // Rods that heat the hot water: those of its tank; with the condenser in the storage also those of the jacket around it (#253).
+    const rodKeys = ['heater', ...HFC_TANK_HEATERS.filter((k) => this._parts?.condenser || k.startsWith('dhw_'))];
+    const keys = (dhw ? [tankKey, 'dhw_target', ...rodKeys, 'defrost']
       : ['flow', 'return', 'hc_flow', 'hc_return', 'hc_setpoint', 'compressor_speed', 'volume', 'outdoor', 'defrost']).filter((k) => this._has(k));
     // Energy of the run (#327): power and heat with every member of their sums, the units of a cascade (#173), and flow rate,
     // flow and return for a heat estimate.
@@ -7204,7 +7212,7 @@ class HeatpumpFlowCard extends HTMLElement {
       if (Number.isFinite(target) && Number.isFinite(b)) {
         rows.push([`${i.target} ${this._fmt(target)} °C`, this._esc(b >= target - 0.5 ? i.run_reached : i.run_missed.replace('{d}', this._fmt(target - b)))]);
       }
-      const rods = ['heater', ...HFC_TANK_HEATERS.filter((k) => k.startsWith('dhw_'))].filter((k) => keys.includes(k)).map(onTime).filter((r) => r.known);
+      const rods = rodKeys.filter((k) => keys.includes(k)).map(onTime).filter((r) => r.known);
       if (rods.length) {
         const ms = union(rods.flatMap((r) => r.spans));
         rows.push([i.run_heater, this._esc(ms > 0 ? `${i.run_on} · ${this._timelineDuration(ms)}` : i.run_off)]);
@@ -9022,6 +9030,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     // editor hides its field and the card would reject the combination.
     const found = this._storedDefaults || {};
     const storedBefore = HeatpumpFlowCard._storageOf(this._config, found);
+    // Combined storage chosen against a configured buffer: the buffer gives way first, or it would keep separate storages.
+    if (value.storage === 'combined' && storedBefore.storage !== 'combined') { delete config.buffer; delete config.series_buffer; delete config.series_bypass; }
     // A field that shows the resolved value and was not touched is not written; an explicit choice in YAML stays.
     if (!value.storage || (value.storage === storedBefore.storage && this._config.storage === undefined)
       || value.storage === HeatpumpFlowCard._storageOf({}, found).storage) delete config.storage;
@@ -9041,7 +9051,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     // A preset that reads the buffer from the installation (defaults) keeps an explicit false, and so does an answered "no buffer"
     // (#299) while the switch stays off; otherwise off is the default.
     const keepFalse = typeof HFC_PRESETS[config.preset]?.defaults === 'function' || this._config.buffer === false;
-    if (!value.buffer && !(value.buffer === false && keepFalse)) delete config.buffer;
+    if (!value.buffer && !(value.buffer === false && keepFalse && stored.storage !== 'combined')) delete config.buffer;
     // series_bypass only matters as false next to a series buffer; the switch's default (true) is not written.
     if (!config.series_buffer || value.series_bypass !== false) delete config.series_bypass;
     if (!value.dhw_type || value.dhw_type === HeatpumpFlowCard._storageOf({ ...config, dhw_type: undefined }, found).dhw || (value.dhw_type === storedBefore.dhw && this._config.dhw_type === undefined)

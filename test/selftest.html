@@ -1727,6 +1727,18 @@
     tank.hass = of('F470 R 3x400V', undefined, { ...states, ...toStates({ 'sensor.prio_43086': 'OFF', 'sensor.compressor_state_ep14_43427': 'STOPPED' }) }); await wait(10);
     check(!on('p-ref-gas') && !on('coil-cond') && !on('p-src-in') && on('p-hc-vl'), 'NIBE F470: the refrigerant rests with the compressor, GP1 still moves the circuit');
     tank.remove();
+    // The device model arrives after the states, and a later update without it maps back.
+    const later = mount({ preset: 'nibe' }, of(undefined, undefined)); await wait(10);
+    const first = `${later._e.flow}|${later._e.buffer_heater}`;
+    later.hass = of('F470 R 3x400V'); await wait(10);
+    check(/bt2_supply/.test(first) && later._e.flow === undefined && later._e.hc_pump === 'sensor.supply_pump_state_ep14_43431' && later._e.buffer_heater === 'sensor.int_el_add_power_43084' && !!later._parts.condenser,
+      `NIBE F470: the mapping follows a device model that arrives late (${first} / ${later._e.flow} / ${later._e.hc_pump})`);
+    later.remove();
+    // The addition in the jacket stays in the details of a hot-water run.
+    const asked = []; const runCard = mount({ preset: 'nibe' }, { ...f470, callWS: (m) => { if (m.entity_ids) asked.push(...m.entity_ids); return Promise.resolve({}); } }); await wait(10);
+    runCard._runValues({ kind: 'dhw', from: Date.now() - 3600000, to: Date.now() - 600000, phases: [] });
+    check(asked.includes('sensor.int_el_add_power_43084'), `NIBE F470: a hot-water run asks for the electric addition (${asked.join()})`);
+    runCard.remove();
     // The configuration wins: the old drawing, a boiler (which stands on the water loop), and the configuration of the reporter.
     const drawn = (cfg, h = f470) => { const c = mount({ preset: 'nibe', ...cfg }, h); const p = c._parts; const out = [p.combined ? 'combined' : 'separate', p.condenser ? 'tank' : 'water', p.dhwType, p.src].join(); const ok2 = ok(c); c.remove(); return ok2 ? out : 'failed'; };
     const cfgs = [drawn({ storage: 'separate' }), drawn({ condenser: 'water' }), drawn({ buffer: true }), drawn({ source_type: 'air' }), drawn({ dhw_type: 'coil' }), drawn({ entities: { boiler_state: 'sensor.prio_43086' } }),
@@ -1749,6 +1761,9 @@
       && !/No flow or return/.test(ed._warn.textContent), 'NIBE F470: the editor shows what the preset found and misses no water temperatures');
     const steps = [set({ title: 'x' }), set({ storage: 'separate' }), set({ storage: 'combined' }), set({ condenser: 'water' }), set({ title: 'y' }), set({ condenser: 'tank' }), set({ dhw_type: 'coil' }), set({ dhw_type: 'tank_in_tank' })];
     check(steps.join(' | ') === ' | storage=separate |  | storage=combined,condenser=water | storage=combined,condenser=water |  | dhw_type=coil | ', `NIBE F470: the editor writes only what differs from the preset (${steps.join(' | ')})`);
+    // Combined storage chosen against a configured buffer (Codex review of #494).
+    const back = ['buffer', 'series_buffer'].map((k) => { ed.setConfig({ preset: 'nibe', [k]: true }); const before = ed._form.data.storage; const left = set({ storage: 'combined', [k]: true }); return `${before} > ${left || 'nothing'} > ${ed._form.data.storage}${k in out ? ' kept' : ''}`; });
+    check(back.every((x) => x === 'separate > nothing > combined'), `NIBE F470: choosing the combined storage takes back a buffer (${back.join(' | ')})`);
     ed.setConfig({ storage: 'combined', entities: { flow: 'sensor.bt2_supply_temp_s1_40008', mode: 'sensor.prio_43086' } }); await wait(5);
     const plain = [set({ title: 'x' }), set({ condenser: 'tank' }), set({ condenser: 'water' }), set({ storage: 'separate' })];
     check(plain.join(' | ') === 'storage=combined | storage=combined,condenser=tank | storage=combined | ', `the condenser of a combined storage without preset (${plain.join(' | ')})`);
