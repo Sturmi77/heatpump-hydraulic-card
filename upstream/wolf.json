@@ -1,9 +1,10 @@
 {
   "preset": "wolf",
   "reviewed": {
-    "date": "2026-11-22",
+    "date": "2026-11-24",
+    "at": "2026-11-24T05:56:54Z",
     "version": "0.0.53",
-    "note": "wolf_smartset v0.8.1 checked (#475): new binary sensor fault (device class problem, read every 10 minutes) now mapped as the error entity of the wolf_smartset branch; the fault code sensor and the write-result event are not used. wolf-comm 0.0.53 and core unchanged for the preset."
+    "note": "wolf_smartset v0.8.2 checked (#486): the fault read keeps its last result while the token awaits renewal instead of going unavailable, entities and keys unchanged; wolf-comm 0.0.53 and core unchanged. Findings of 2026-11-22 (#475) stand: the binary sensor fault is the error entity of the wolf_smartset branch, the fault code sensor is not used."
   },
   "unmapped": {
     "hc_return": "Both integrations report one return temperature, at the heat pump; no circuit has its own."
