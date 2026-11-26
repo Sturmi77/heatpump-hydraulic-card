@@ -1,0 +1,1 @@
+- Lambda: running time for heating, hot water, defrost and the heater rod as tiles (`hours_heating`, `hours_dhw`, `hours_defrost`, `aux_hours`), today and in total, with week, month and year from the statistics; the rod also in the details. Other presets can fill the new tiles with `tile_sources`.

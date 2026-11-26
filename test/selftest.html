@@ -4510,6 +4510,24 @@
     c.remove();
   }
 
+  // 15b. Lambda running time per mode: hours per day and in total, the other periods from the statistics of the total
+  {
+    const h = (v, cls) => ({ state: v, attributes: { unit_of_measurement: 'h', state_class: cls } });
+    const ids = Object.fromEntries(['heating', 'hot_water', 'defrost', 'heating_rod'].flatMap((m, n) => [[`sensor.eu_hp1_${m}_runtime_total`, h(String(300 + n), 'total_increasing')], [`sensor.eu_hp1_${m}_runtime_daily`, h(String(2.5 + n), 'total')]]));
+    const states = toStates({ 'sensor.eu_hp1_operating_state': 'CH', 'sensor.eu_hp1_compressor_unit_rating': ['40', '%'], ...ids });
+    const hass = { ...hassOf(states), callWS: (m) => (m.type === 'recorder/statistic_during_period' ? Promise.resolve({ change: 120 }) : Promise.reject(new Error('n/a'))) };
+    const card = mount({ preset: 'lambda', power_sources: 'manual', tiles: ['hours_heating', 'hours_dhw:total', 'hours_defrost:today', 'aux_hours', 'hours_heating:month'] }, hass); await wait(40);
+    const t = tileRows(card).map((x) => x.join('=')).join(' | ');
+    check(t === 'Runtime heating · today=2.5 h | Runtime DHW · total=301 h | Runtime defrost · today=4.5 h | Heater hours · today=5.5 h | Runtime heating · month=120 h', `Lambda running time per mode (${t})`);
+    check(card._e.aux_hours === 'sensor.eu_hp1_heating_rod_runtime_total' && card._drawerRows().some(([, rows]) => rows.some(([id]) => id === 'aux_hours')), 'Lambda heater rod hours in the details');
+    card.remove();
+    const old = C._resolve({ preset: 'lambda' }, hassOf(toStates({ 'sensor.eu_hp1_operating_state': 'CH' })));
+    const opts = C._tileOptions({ preset: 'lambda' }, old, hassOf(toStates({ 'sensor.eu_hp1_operating_state': 'CH' }))).options.map((o) => o.value);
+    check(!opts.some((v) => /^(hours_|aux_hours)/.test(v)), 'Lambda without the counters offers no running time');
+    const own = C._resolve({ tile_sources: { hours_heating: 'sensor.x' } }, hassOf(toStates({ 'sensor.x': h('10', 'total_increasing') })));
+    check(own.tiles.hours_heating?.total === 'sensor.x', 'running time from an own counter');
+  }
+
   // 16. heat pump block: frame colour by mode, outdoor temperature at the unit, long status lines wrap
   {
     const s = setups[0];

@@ -53,3 +53,9 @@ template:
 For automatic detection, each configured Energy-dashboard source needs a current-power sensor (`stat_rate`) in W, kW or MW, not only a Wh, kWh or MWh counter. Several grid sources (for example two tariffs on one meter) are covered by one power sensor on any of them; several PV arrays or batteries need one each. The card and editor name sources that are missing one. If exactly one configured source has no usable live power, its displayed share is the remainder between heat-pump power and the known sources.
 
 Only the sources the installation has are drawn: without a battery entity (manual) or a battery in the Energy dashboard, the schematic shows PV and grid only. A configured source whose sensor is unavailable stays visible, dimmed.
+
+## Running time per mode
+
+The tiles `hours_heating`, `hours_dhw`, `hours_defrost` and `aux_hours` read the running-time counters of the integration, per heat pump (`hp1` … from `index.hp`): `sensor.<prefix>_hp1_<mode>_runtime_daily` for `today` and `…_runtime_total` for `total`, with `<mode>` `heating`, `hot_water`, `defrost` and `heating_rod` (the second heating stage, as `aux_hours`). Month and year come from the long-term statistics of the total.
+
+Source: lambda_heat_pumps V3.7 (grexha/lambda_heat_pumps, `const.py` `RUNTIME_MODES`, `sensor.py` `_runtime_description`): device class duration, unit h, state class `total_increasing` for the total and `total` for the daily counter, which starts again at midnight; only the total is enabled by default. Time between two polls more than 300 s apart (`MAX_RUNTIME_GAP_SECONDS`) is not counted. Checked on the reference installation (EU10L, V3.7 diagnostics) on 25 November 2026.
