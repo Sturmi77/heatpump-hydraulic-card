@@ -7648,7 +7648,7 @@
     const vis = (card) => ids.map((id) => (shown(card, id) ? 1 : 0)).join('');
     // On a narrow card the temperature of the tank comes before the power of its rod, which moves outside.
     c = await draw({ dhw_heater_bottom: 'sensor.rod' }, {}, 380);
-    check(shown(c, 't-dhw-bottom') && (!shown(c, 't-heater-dhw-bottom') || q(c, 't-heater-dhw-bottom').classList.contains('outside')) && !ours(c).length, '#449: on a narrow card the tank temperature comes before the rod');
+    check(shown(c, 't-dhw-bottom') && (!shown(c, 't-heater-dhw-bottom') || q(c, 't-heater-dhw-bottom').classList.contains('outside')) && !ours(c).length, `#449: on a narrow card the tank temperature comes before the rod (${shown(c, 't-dhw-bottom')} / ${shown(c, 't-heater-dhw-bottom')} / ${ours(c).join()})`);
     c.remove();
     c = await draw({}, {}, 380); const auto = vis(c); const clean = ours(c); c.remove();
     c = await draw({}, {}, 380, { narrow_values: false }); const none = vis(c); c.remove();
@@ -7680,7 +7680,7 @@
     // #425: with narrow_focus the flow rate stands larger where there is room; without room it is left out, not drawn small.
     c = await draw({}, {}, 380, { narrow_focus: true });
     const fs = parseFloat(getComputedStyle(q(c, 't-vol')).fontSize);
-    check(shown(c, 't-vol') && fs === 22 && !ours(c).length, `#425: narrow_focus draws the flow rate at 22 units (${shown(c, 't-vol')} / ${fs})`);
+    check(shown(c, 't-vol') && fs === 22 && !ours(c).length, `#425: narrow_focus draws the flow rate at 22 units (${shown(c, 't-vol')} / ${fs} / ${ours(c).join()})`);
     c.hass = { ...c._hass, states: { ...c._hass.states, ...toStates({ 'sensor.v': ['123456789012', 'l/h'] }) } }; await wait(20);
     check(!shown(c, 't-vol'), `#425: a flow rate without room is left out (${shown(c, 't-vol')})`);
     c.remove();
