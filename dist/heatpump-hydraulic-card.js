@@ -1954,9 +1954,9 @@ const HFC_I18N = {
       hours: 'Compressor hours', hours_per_start: 'Runtime per start', load_classes: 'Load classes 1-5', aux_hours: 'Heater hours', aux_starts: 'Heater starts',
       spread: 'Spread', volume: 'Flow rate', heat_estimated: 'Heat output', power: 'Power', heat_live: 'Heat output', compressor_speed: 'Compressor',
       source_spread: 'Source spread', outdoor: 'Outdoor', dhw_top: 'DHW tank', room: 'Room', brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', hc_spread: 'Circuit spread', pv_share: 'PV share today',
-      pv_boost_share: 'PV surplus share of heating', pv_production: 'PV yield', solar_thermal: 'Solar thermal', cost: 'Cost', dhw_loss: 'DHW standby loss',
+      pv_boost_share: 'PV surplus share of heating', pv_production: 'PV yield', solar_thermal: 'Solar thermal', cost: 'Cost', dhw_loss: 'DHW standby loss', last_heating_run: 'Last heating run',
     },
-    periods: { now: 'now', today: 'today', yesterday: 'yesterday', week: 'week', month: 'month', year: 'year', total: 'total' },
+    periods: { now: 'now', today: 'today', yesterday: 'yesterday', week: 'week', month: 'month', last_month: 'last month', year: 'year', total: 'total' },
     modes: {
       idle: 'Standby', heating: 'Heating', dhw: 'Hot water', cooling: 'Cooling', defrost: 'Defrost', blocked: 'Blocked',
       frost: 'Frost protection', circulate: 'Circulating', off: 'Off', legionella: 'Legionella', trailing: 'Run-on',
@@ -1997,9 +1997,9 @@ const HFC_I18N = {
       hours: 'Verdichterstunden', hours_per_start: 'Laufzeit pro Start', load_classes: 'Lastklassen 1-5', aux_hours: 'Heizstab-Stunden', aux_starts: 'Heizstab-Starts',
       spread: 'Spreizung', volume: 'Volumenstrom', heat_estimated: 'Wärmeleistung', power: 'Leistung', heat_live: 'Wärmeleistung', compressor_speed: 'Verdichter',
       source_spread: 'Spreizung Quelle', outdoor: 'Außen', dhw_top: 'WW-Speicher', room: 'Raum', brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', hc_spread: 'Spreizung Heizkreis', pv_share: 'PV-Anteil heute',
-      pv_boost_share: 'PV-Überschuss-Anteil am Heizen', pv_production: 'PV-Ertrag', solar_thermal: 'Solarthermie', cost: 'Kosten', dhw_loss: 'WW-Standbyverlust',
+      pv_boost_share: 'PV-Überschuss-Anteil am Heizen', pv_production: 'PV-Ertrag', solar_thermal: 'Solarthermie', cost: 'Kosten', dhw_loss: 'WW-Standbyverlust', last_heating_run: 'Letzter Heizlauf',
     },
-    periods: { now: 'aktuell', today: 'heute', yesterday: 'gestern', week: 'Woche', month: 'Monat', year: 'Jahr', total: 'gesamt' },
+    periods: { now: 'aktuell', today: 'heute', yesterday: 'gestern', week: 'Woche', month: 'Monat', last_month: 'Vormonat', year: 'Jahr', total: 'gesamt' },
     modes: {
       idle: 'Bereit', heating: 'Heizen', dhw: 'Warmwasser', cooling: 'Kühlen', defrost: 'Abtauen', blocked: 'Sperrzeit',
       frost: 'Frostschutz', circulate: 'Umwälzen', off: 'Aus', legionella: 'Legionellenschutz', trailing: 'Nachlauf',
@@ -3082,11 +3082,12 @@ const hfcTempAttr = (id, key) => (['climate', 'water_heater'].includes(String(id
 // Stat tile catalog for the `tiles` option. kind: cop | energy (kWh, or W for period "now") | count | hours | classes | cost.
 // legacy: entity key of the default tiles that serves as "today"; ratio: computed from two other tiles when the integration
 // has no own entity (COP = heat ÷ electricity); live: current value from the schematic entities; periods: allowed periods.
-const HFC_PERIODS = ['now', 'today', 'yesterday', 'week', 'month', 'year', 'total'];
-// Tiles that `tile_sources` can feed: live values and computed tiles (load classes, cost, standby loss, PV share) have no entity.
-const hfcTileSourceKey = (key) => !!HFC_TILES[key] && !HFC_TILES[key].live && !['classes', 'cost', 'loss', 'share'].includes(HFC_TILES[key].kind);
+const HFC_PERIODS = ['now', 'today', 'yesterday', 'week', 'month', 'last_month', 'year', 'total'];
+// Tiles that `tile_sources` can feed: live values and computed tiles (load classes, cost, standby loss, PV share, last run) have no
+// entity.
+const hfcTileSourceKey = (key) => !!HFC_TILES[key] && !HFC_TILES[key].live && !['classes', 'cost', 'loss', 'share', 'run'].includes(HFC_TILES[key].kind);
 // Periods that can be taken from the long-term statistics of a total counter: [calendar period, offset].
-const HFC_STAT_PERIODS = { today: ['day', 0], yesterday: ['day', -1], week: ['week', 0], month: ['month', 0], year: ['year', 0] };
+const HFC_STAT_PERIODS = { today: ['day', 0], yesterday: ['day', -1], week: ['week', 0], month: ['month', 0], last_month: ['month', -1], year: ['year', 0] };
 // Home Assistant actions a tile can carry (more-info, navigate, url, toggle, perform-action …).
 const HFC_ACTIONS = ['tap_action', 'hold_action', 'double_tap_action'];
 const HFC_LAYOUTS = ['default', 'compact', 'wide', 'wall'];
@@ -3202,8 +3203,10 @@ const HFC_TILES = {
   // Share of the heating time in PV surplus mode, from the recorder history of the mode and the `pv_boost` entity.
   pv_boost_share: { kind: 'share', periods: ['today', 'yesterday', 'week'] },
   pv_production: { kind: 'energy' }, solar_thermal: { kind: 'energy' },
-  cost: { kind: 'cost', periods: ['today', 'yesterday', 'week', 'month', 'year', 'total'] },
+  cost: { kind: 'cost', periods: ['today', 'yesterday', 'week', 'month', 'last_month', 'year', 'total'] },
   dhw_loss: { kind: 'loss', periods: ['now'], noSuffix: true },
+  // The last complete heating run of the timeline (#481): duration, electricity → heat and COP, with the bounds of the run panel.
+  last_heating_run: { kind: 'run', periods: ['now'], noSuffix: true },
 };
 // Card values as tiles (#481): `value:<entity key>`, or `value:unitN` for a unit of a cascade, shows what the drawing or the details
 // show for that key. The keys here have a live catalog tile with the same value, which the editor offers instead.
@@ -5511,6 +5514,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (def.kind === 'cost') return this._tileSource('energy', period) ? { cost: true } : null;
     if (def.kind === 'loss') return period === 'now' && this._lossIds() ? { loss: true } : null;
     if (def.kind === 'share') return this._timelineIds()?.pv ? { share: true } : null;
+    if (def.kind === 'run') return period === 'now' && this._timelineIds() ? { run: true } : null;
     const map = this._tileMap[key] || {};
     // The entities of the default tiles (cop_heating_today …) count as "today", unless the preset maps them to another period.
     const legacy = def.legacy && this._has(def.legacy) ? this._e[def.legacy] : null;
@@ -5550,7 +5554,7 @@ class HeatpumpFlowCard extends HTMLElement {
   // Without a period: today if possible, else the current value, the total, then the longest period.
   _tileDefault(key) {
     const periods = this._tilePeriods(key);
-    return ['today', 'now', 'total', 'year', 'month', 'week', 'yesterday'].find((p) => periods.includes(p));
+    return ['today', 'now', 'total', 'year', 'month', 'week', 'yesterday', 'last_month'].find((p) => periods.includes(p));
   }
 
   // Base units: kWh for energy (W for period "now"), h for hours.
@@ -5669,6 +5673,7 @@ class HeatpumpFlowCard extends HTMLElement {
       yesterday: [midnight(y, m, d - 1), midnight(y, m, d), 'hour'],
       week: [midnight(y, m, d - weekday), null, 'hour'],
       month: [midnight(y, m, 1), null, 'hour'],
+      last_month: [midnight(y, m - 1, 1), midnight(y, m, 1), 'hour'],
       year: [midnight(y, 0, 1), null, 'day'],
       total: [new Date(0).toISOString(), null, 'month'],
     }[period] || null;
@@ -5688,6 +5693,8 @@ class HeatpumpFlowCard extends HTMLElement {
       let cost = 0; let kwh = 0; let last = NaN;
       (res?.[energy] || []).forEach((r) => {
         const p = means.get(new Date(r.start).getTime());
+        // The last month leaves out the hours without a price of their own; _cost counts them at the mean of the others.
+        if (period === 'last_month' && !Number.isFinite(p)) return;
         if (Number.isFinite(p)) last = p;
         if (Number.isFinite(r.change) && Number.isFinite(last)) { cost += r.change * last; kwh += r.change; }
       });
@@ -5707,6 +5714,8 @@ class HeatpumpFlowCard extends HTMLElement {
     if (b === undefined) return [NaN];
     if (!b) return [kwh * price.v, true];
     const rest = kwh - b.kwh;
+    // A month that is over has nothing to bill at the price of now: hours without a price count at the mean of the others, marked ≈.
+    if (period === 'last_month') return b.kwh > 0 ? [(b.cost + Math.max(rest, 0) * (b.cost / b.kwh)) * price.f, rest > kwh * 0.01] : [NaN];
     return [b.cost * price.f + (rest > 0.0005 ? rest * price.v : 0), b.coarse];
   }
 
@@ -5731,6 +5740,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (src.envCop) return this._tileEntity(src.envCop[0], period);
     if (src.classes) return this._tileMap.load_class1;
     if (src.share) return this._e.pv_boost;
+    if (src.run) { const ids = this._timelineIds(); return ids?.cycle || ids?.comp || ids?.mode || ids?.sig?.[0] || ''; }
     if (src.cost) return this._tileEntity(this._tileSource('energy', period), period);
     if (src.loss) return this._lossIds()?.temps[0] || '';
     return '';
@@ -5746,6 +5756,7 @@ class HeatpumpFlowCard extends HTMLElement {
       return sum > 0 ? `${hrs.map((h) => this._fmt(Number.isFinite(h) ? (h / sum) * 100 : NaN, 0)).join(' · ')} %` : '–';
     }
     if (src.share) return out(this._pvShare(period), 0, '%');
+    if (src.run) return this._lastRunText();
     if (src.cost) {
       // Currency from the tile, the card or the Home Assistant settings.
       const [v, approx] = this._cost(period, spec);
@@ -5993,7 +6004,14 @@ class HeatpumpFlowCard extends HTMLElement {
       let text = this._tileText(spec.key, period, src, spec);
       const share = this._n('pv_share_today');
       if (spec.key === 'energy' && period === 'today' && Number.isFinite(share)) text += ` · ${this._fmt(share, 0)} % ${i.pv_share}`;
-      out.push([spec.name || this._tileLabel(spec.key, spec.entity && !spec.period ? '' : period), text, this._tileEntity(src, period), spec]);
+      const label = spec.name || this._tileLabel(spec.key, spec.entity && !spec.period ? '' : period);
+      if (src.run) {
+        // The time of the run stands in the label; a tap selects the run in the timeline.
+        const run = this._lastHeatingRun();
+        out.push([run && !spec.name ? `${label} · ${this._runWhen(run)}` : label, text, this._tileEntity(src, period), spec, run ? { run: this._runId(run) } : null]);
+        return;
+      }
+      out.push([label, text, this._tileEntity(src, period), spec]);
     });
     return out;
   }
@@ -7285,20 +7303,79 @@ class HeatpumpFlowCard extends HTMLElement {
     return `${this._timelineLabel(seg)} · ${this._timelineTime(seg.from)}–${this._timelineTime(seg.to)} · ${this._timelineDuration(seg.to - seg.from)}`;
   }
 
-  _updateTimeline() {
-    const box = this._$('timeline');
-    if (!box) return;
+  // The history behind the timeline and the tile of the last heating run: one query for both, with the marks only where a timeline
+  // shows them. hist is undefined while it loads.
+  _timelineQuery() {
     const ids = this._timelineIds();
     const hours = Math.min(Math.max(+this._config.timeline_hours || 24, 3), 72);
-    const idList = ids ? [...new Set(Object.values(ids).flat().filter(Boolean))] : [];
-    if (!idList.length) { box.hidden = true; return; }
     const now = Date.now(); const start = now - hours * 3600000;
-    const marks = this._timelineMarks();
+    const idList = ids ? [...new Set(Object.values(ids).flat().filter(Boolean))] : [];
+    if (!idList.length) return { ids, hours, now, start, marks: [] };
+    const marks = this._config.timeline ? this._timelineMarks() : [];
     const allIds = [...new Set([...idList, ...marks.map((m) => m.entity)])];
     const hist = this._wsCached(`timeline|${allIds.join(',')}|${hours}`, {
       type: 'history/history_during_period', start_time: new Date(start).toISOString(), entity_ids: allIds,
       minimal_response: true, ...(!this._timelineNeedsAttributes(ids) ? { no_attributes: true } : {}), significant_changes_only: false,
     }, (res) => this._timelineHistory(res, allIds));
+    return { ids, hours, now, start, marks, hist };
+  }
+
+  // The last complete heating run in the timeline window (#481), with the bounds of the run panel: a run that still goes or that the
+  // window cuts does not count, nor one that begins or ends at a stretch without data, because its bounds are not known there.
+  // null when there is none, undefined while the history loads.
+  _lastHeatingRun() {
+    const { ids, hours, now, start, hist } = this._timelineQuery();
+    if (!hist) return undefined;
+    const memo = `${Math.floor(now / 60000)}|${hours}`;
+    if (this._lastRunMemo?.hist === hist && this._lastRunMemo.key === memo) return this._lastRunMemo.run;
+    const segs = this._timelineSegments(hist, ids, start, now);
+    const noData = (s) => ['unknown', 'unavailable'].includes(String(s ?? '').trim().toLowerCase());
+    // Times at which data end or begin again: of the compressor (short gaps inside a run are bridged there) and of the mode.
+    const signal = this._runSignalSeries(hist, ids);
+    const list = this._bridgeDataGaps(signal.length ? signal : (ids.cycle || ids.comp) ? hist[ids.cycle || ids.comp] || [] : []);
+    const edges = new Set([...list.flatMap((e, n) => (noData(e.s) ? [e.t, list[n + 1]?.t] : [])), ...segs.flatMap((s) => (s.kind === 'gap' ? [s.from, s.to] : []))]);
+    const run = this._timelineRuns(hist, ids, segs, start, now).filter((r) => r.kind === 'heat' && !r.partial && !r.ongoing
+      && r.to - r.from >= HFC_RUN_SIGNAL.min * 60000 && !edges.has(r.from) && !edges.has(r.to)).pop() || null;
+    this._lastRunMemo = { hist, key: memo, run };
+    return run;
+  }
+
+  // "2 h 05 min · 1.40 → 5.80 kWh · COP 4.1": electricity → heat, as the heat pump block shows power → heat; a value without data is
+  // left out, "–" while nothing is known.
+  _lastRunText() {
+    const run = this._lastHeatingRun();
+    if (!run) return '–';
+    const energy = this._runFigures(run)?.energy || {};
+    const num = (v) => this._fmt(v, v < 10 ? 2 : 1);
+    const about = energy.estimated ? '≈' : '';
+    const heat = Number.isFinite(energy.heat) ? `${about}${num(energy.heat)}` : '';
+    const parts = [Number.isFinite(energy.elec) ? num(energy.elec) : '', heat ? `→ ${heat}` : ''].filter(Boolean);
+    return [this._timelineDuration(run.to - run.from), parts.length ? `${parts.join(' ')} kWh` : '', Number.isFinite(energy.cop) ? `COP ${about}${this._fmt(energy.cop, 1)}` : ''].filter(Boolean).join(' · ');
+  }
+
+  // "14:05–16:10", with the weekday when the run did not end today, in the Home Assistant time zone.
+  _runWhen(run) {
+    let tz; try { tz = this._hass.config?.time_zone; new Intl.DateTimeFormat('en', { timeZone: tz }); } catch (err) { tz = undefined; }
+    const day = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: tz });
+    const weekday = day.format(run.to) === day.format(Date.now()) ? '' : `${new Intl.DateTimeFormat(this._lang, { weekday: 'short', timeZone: tz }).format(run.from)} `;
+    return `${weekday}${this._timelineTime(run.from)}–${this._timelineTime(run.to)}`;
+  }
+
+  // Selects a run in the timeline, as a tap on its period does, and brings the timeline into view. False where no timeline shows it.
+  _selectRun(id) {
+    const box = this._$('timeline');
+    if (!box || box.hidden || !this._tl?.runs?.some((r) => this._runId(r) === id)) return false;
+    this._tlRun = id; this._tlSel = null; this._tlMarkSel = null;
+    box._k = null; this._updateTimeline();
+    box.scrollIntoView?.({ block: 'nearest' });
+    this._$('tl-bar')?.focus({ preventScroll: true });
+    return true;
+  }
+
+  _updateTimeline() {
+    const box = this._$('timeline');
+    if (!box) return;
+    const { ids, hours, now, start, marks, hist } = this._timelineQuery();
     if (!hist) { box.hidden = true; return; }
     // The window is cached for five minutes; the bar always ends at "now".
     const segs = this._timelineSegments(hist, ids, start, now);
@@ -7373,7 +7450,10 @@ class HeatpumpFlowCard extends HTMLElement {
   // other queries. Hot water: tank at start and end, target reached, heater rod, defrosts. Heating and other runs: mean flow
   // against the circuit target, mean spread of the heat pump and of circuit 1, mean compressor modulation, flow rate and outdoor
   // temperature, defrosts. Means are weighted by time. A value without data is left out. Returns [[label, html]], [] while loading.
-  _runValues(run) {
+  _runValues(run) { return this._runFigures(run)?.rows || []; }
+
+  // The rows of a run and the numbers behind its energy rows; null while they load or without any entity to ask.
+  _runFigures(run) {
     const i = this._i;
     const dhw = run.kind === 'dhw';
     const tankKey = this._dhwTankKey() || 'dhw_top';
@@ -7387,7 +7467,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const idsOf = (k) => this._sums?.[k] || [this._e[k]];
     const energyIds = [...['power', 'heat', 'volume', 'flow', 'return'].filter((k) => this._has(k) && !(units && k === 'heat')).flatMap(idsOf),
       ...(units || []).flatMap((u) => [u.power, u.heat].flat())];
-    if (!keys.length && !energyIds.length) return [];
+    if (!keys.length && !energyIds.length) return null;
     const list = [...new Set([...keys.map((k) => this._e[k]), ...energyIds])];
     // Attributes are needed when any requested temperature is read from one, also flow and return of the heat estimate (#327).
     const attrs = [...new Set([...keys, ...['flow', 'return'].filter((k) => this._has(k))])].some((k) => hfcTempAttr(this._e[k], k));
@@ -7398,10 +7478,13 @@ class HeatpumpFlowCard extends HTMLElement {
       type: 'history/history_during_period', start_time: new Date(run.from).toISOString(), ...(run.ongoing ? {} : { end_time: new Date(run.to).toISOString() }),
       entity_ids: list, minimal_response: true, ...(attrs ? {} : { no_attributes: true }), significant_changes_only: false,
     }, (res) => res || {});
-    if (!hist) return [];
+    if (!hist) return null;
     // The rows of a run are computed once per history and minute: _updateTimeline asks on every card update.
     const memo = `${this._runId(run)}|${run.kind}|${Math.floor(run.to / 60000)}|${this._lang}|${this._config.flow_rate_unit || ''}`;
-    if (this._runMemo?.hist === hist && this._runMemo.key === memo) return this._runMemo.rows;
+    // The panel and the tile of the last heating run can show different runs, so the latest few stay.
+    this._runMemo = this._runMemo || [];
+    const known = this._runMemo.find((m) => m.hist === hist && m.key === memo);
+    if (known) return known;
     const time = (e) => { const v = e.lu ?? e.lc ?? e.last_updated ?? e.last_changed; return typeof v === 'number' ? (v > 1e11 ? v : v * 1000) : Date.parse(v); };
     const states = (key) => {
       const id = this._e[key]; const attr = hfcTempAttr(id, key);
@@ -7494,10 +7577,12 @@ class HeatpumpFlowCard extends HTMLElement {
       const out = mean(nums('outdoor'));
       if (Number.isFinite(out)) rows.push([`${i.outdoor} Ø`, this._esc(this._t(out))]);
     }
-    rows.push(...this._runEnergy(run, hist, { time, nums, combine, units, idsOf }));
+    const energy = this._runEnergy(run, hist, { time, nums, combine, units, idsOf });
+    rows.push(...energy.rows);
     if (defrosts > 0 || thaw?.known) rows.push([i.tiles.defrosts, String(defrosts)]);
-    this._runMemo = { hist, key: memo, rows };
-    return rows;
+    const figures = { hist, key: memo, rows, energy };
+    this._runMemo = [figures, ...this._runMemo.filter((m) => m.key !== memo)].slice(0, 4);
+    return figures;
   }
 
   // Electricity, heat and COP of a run (#327), integrated from the recorder history of the run window. A value is shown only
@@ -7510,7 +7595,7 @@ class HeatpumpFlowCard extends HTMLElement {
   _runEnergy(run, hist, { time, nums, combine, units, idsOf }) {
     const i = this._i;
     const span = run.to - run.from;
-    if (!(span > 0)) return [];
+    if (!(span > 0)) return { rows: [] };
     const watts = (id, factor) => {
       const attributes = this._hass?.states[id]?.attributes;
       return (hist[id] || []).map((e) => ({ t: time(e), v: hfcPowerW({ state: String(e.s ?? e.state), attributes }, factor) }))
@@ -7544,8 +7629,9 @@ class HeatpumpFlowCard extends HTMLElement {
     const rows = [];
     if (Number.isFinite(elec)) rows.push([i.run_electricity, this._esc(kwh(elec))]);
     if (Number.isFinite(heat)) rows.push([i.run_heat, this._esc(kwh(heat, estimated))]);
-    if (elec > 0.005 && heat > 0) rows.push(['COP', this._esc(`${estimated ? '≈' : ''}${this._fmt(heat / elec, 1)}`)]);
-    return rows;
+    const cop = elec > 0.005 && heat > 0 ? heat / elec : NaN;
+    if (Number.isFinite(cop)) rows.push(['COP', this._esc(`${estimated ? '≈' : ''}${this._fmt(cop, 1)}`)]);
+    return { rows, elec, heat, cop, estimated };
   }
 
   // Detail panel of the selected run under the timeline (#325): head, notes, the phases when the run had more than one kind,
@@ -7876,7 +7962,7 @@ class HeatpumpFlowCard extends HTMLElement {
   // Configured actions go to Home Assistant's action handler (hass-action), so all standard actions and confirmations work.
   _tileAction(a, action) {
     const cfg = a[`${action}_action`];
-    if (!cfg) { if (action === 'tap' && a.entity) this._moreInfo(a.entity); return; }
+    if (!cfg) { if (action === 'tap' && !(a.run && this._selectRun(a.run)) && a.entity) this._moreInfo(a.entity); return; }
     if (cfg.action === 'none') return;
     const e = new Event('hass-action', { bubbles: true, composed: true });
     e.detail = { config: a, action };
@@ -8450,7 +8536,7 @@ class HeatpumpFlowCard extends HTMLElement {
       tiles.push([s.name || this._entityName(s.entity), Number.isFinite(v) ? `${this._fmt(v, s.decimals ?? 1)} ${unit}`.trim() : st.state, s.entity, s]);
     });
     // Actions per tile (default: more-info of the tile's entity).
-    this._tileActs = tiles.map(([, , id, s]) => ({ entity: id, ...Object.fromEntries(HFC_ACTIONS.filter((a) => s && s[a]).map((a) => [a, s[a]])) }));
+    this._tileActs = tiles.map(([, , id, s, extra]) => ({ entity: id, ...(extra || {}), ...Object.fromEntries(HFC_ACTIONS.filter((a) => s && s[a]).map((a) => [a, s[a]])) }));
     const html = tiles.map(([l, v, id], n) => `<div class="stat" data-tile="${n}" data-entity="${this._esc(id)}"><div class="sv">${this._esc(v)}</div><div class="sl">${this._esc(l)}</div></div>`).join('');
     const box = this._$('stats');
     if (box._html !== html) {

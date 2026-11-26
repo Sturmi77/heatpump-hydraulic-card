@@ -127,15 +127,15 @@ const emsStates = (s) => ({
   'sensor.ems_esp_boiler_uptimecontrol': { state: '312450', attributes: { unit_of_measurement: 'min', state_class: 'total_increasing' } },
 });
 const emsStatistics = {
-  'sensor.ems_esp_boiler_nrgconscompheating': { today: 9.6, yesterday: 12.1, week: 58.3, month: 210.4, year: 1890.7 },
-  'sensor.ems_esp_boiler_nrgsuppheating': { today: 38.9, yesterday: 47.2, week: 231.0, month: 812.0, year: 7610.3 },
-  'sensor.ems_esp_boiler_totalcompstarts': { today: 4, yesterday: 6, week: 31, month: 118, year: 1102 },
-  'sensor.ems_esp_boiler_uptimecontrol': { today: 610, yesterday: 790, week: 3950, month: 14200, year: 131000 },
+  'sensor.ems_esp_boiler_nrgconscompheating': { today: 9.6, yesterday: 12.1, week: 58.3, month: 210.4, last_month: 305.8, year: 1890.7 },
+  'sensor.ems_esp_boiler_nrgsuppheating': { today: 38.9, yesterday: 47.2, week: 231.0, month: 812.0, last_month: 1204.5, year: 7610.3 },
+  'sensor.ems_esp_boiler_totalcompstarts': { today: 4, yesterday: 6, week: 31, month: 118, last_month: 164, year: 1102 },
+  'sensor.ems_esp_boiler_uptimecontrol': { today: 610, yesterday: 790, week: 3950, month: 14200, last_month: 19800, year: 131000 },
 };
 // Simulated long-term statistics: change of a total counter per calendar period (recorder/statistic_during_period).
 const statChange = (setup, msg) => {
   const c = msg.calendar || {};
-  const v = setup.statistics?.[msg.statistic_id]?.[c.period === 'day' ? (c.offset ? 'yesterday' : 'today') : c.period];
+  const v = setup.statistics?.[msg.statistic_id]?.[c.period === 'day' ? (c.offset ? 'yesterday' : 'today') : c.period === 'month' && c.offset ? 'last_month' : c.period];
   return v === undefined ? Promise.reject(new Error('no statistics')) : Promise.resolve({ change: v });
 };
 // Simulated history (compact format of the history API, seconds): one day of operating modes, ending in heating.
