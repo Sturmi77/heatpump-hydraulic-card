@@ -7352,6 +7352,109 @@
     c.remove();
   }
 
+  // 22b. the previous calendar month and the last complete heating run as tiles (#481)
+  {
+    const tc = { total: (v, unit = 'kWh') => ({ state: v, attributes: { unit_of_measurement: unit, state_class: 'total_increasing' } }),
+      measured: (v, unit) => ({ state: v, attributes: { ...(unit ? { unit_of_measurement: unit } : {}), state_class: 'measurement' } }) };
+    const asked = [];
+    const months = { 'sensor.el': 300, 'sensor.ht': 1200, 'sensor.elh': 200, 'sensor.hth': 900 };
+    const monthHass = (states, extra = {}) => ({ ...hassOf(toStates(states)), config: { time_zone: 'Pacific/Auckland', currency: 'EUR' }, callWS: (m) => {
+      if (m.type !== 'recorder/statistic_during_period') return extra.ws ? extra.ws(m) : Promise.reject(new Error('n/a'));
+      asked.push(m);
+      if (m.types[0] === 'max') return Promise.resolve(m.calendar.offset ? { max: 840, min: 700 } : { max: 900, min: 840 });
+      const v = months[m.statistic_id];
+      return Promise.resolve({ change: v === undefined ? null : m.calendar.offset ? v : v / 10 });
+    } });
+    const states = { 'sensor.el': tc.total('5000'), 'sensor.ht': tc.total('20000'), 'sensor.elh': tc.total('3000'), 'sensor.hth': tc.total('12000'), 'sensor.hours': tc.measured('900', 'h'), 'sensor.now': tc.measured('12', 'kWh'), 'sensor.empty': tc.total('1') };
+    const cfg = { power_sources: 'manual', entities: { energy_total: 'sensor.el', heat_total: 'sensor.ht' }, tile_sources: { energy_heating: 'sensor.elh', heat_heating: 'sensor.hth', hours: 'sensor.hours', energy_dhw: 'sensor.now', heat_dhw: 'sensor.hth', heat_cooling: 'sensor.empty' } };
+    const tilesOf = async (extra, hass, ms = 40) => { const card = mount({ ...cfg, ...extra }, hass); await wait(ms); const t = Object.fromEntries(tileRows(card)); card.remove(); return t; };
+    const m = await tilesOf({ price: 0.2, tiles: ['energy:last_month', 'energy:month', 'cop_total:last_month', 'cop_heating:last_month', 'hours:last_month', 'cost:last_month', 'heat_cooling:last_month'] }, monthHass(states));
+    check(m['Electricity · last month'] === '300 kWh' && m['Electricity · month'] === '30.0 kWh', `#481: the month before from the statistics (${JSON.stringify(m)})`);
+    check(m['COP total · last month'] === '≈4.00' && m['COP heating · last month'] === '≈4.50', `#481: COP from the heat and the electricity of the same month (${m['COP total · last month']} / ${m['COP heating · last month']})`);
+    check(m['Compressor hours · last month'] === '140 h' && m['Cost · last month'] === '€60.00' && m['Cooling output · last month'] === '–', `#481: measured counter from its maximum and minimum, cost, and a counter without statistics (${JSON.stringify(m)})`);
+    const q = asked.find((x) => x.statistic_id === 'sensor.el' && x.calendar.offset);
+    check(JSON.stringify(q?.calendar) === '{"period":"month","offset":-1}', `#481: Home Assistant decides the calendar month (${JSON.stringify(q?.calendar)})`);
+    // Offered only where the counters exist: no COP without one of them, no energy from a measured value.
+    const offered = (c, st = states) => { const h = monthHass(st); return C._tileOptions(c, C._resolve(c, h), h).options.map((o) => o.value); };
+    const all = offered(cfg); const noHeat = offered({ ...cfg, entities: { energy_total: 'sensor.el' }, tile_sources: { energy_heating: 'sensor.elh', heat_dhw: 'sensor.hth', energy_dhw: 'sensor.now' } });
+    check(['energy:last_month', 'cop_total:last_month', 'cop_heating:last_month', 'hours:last_month'].every((v) => all.includes(v)) && !all.includes('energy_dhw:last_month') && !all.includes('cop_dhw:last_month')
+      && noHeat.includes('energy:last_month') && !['cop_total:last_month', 'cop_heating:last_month', 'cop_dhw:last_month', 'spf:last_month'].some((v) => noHeat.includes(v)), `#481: last month only with suitable counters (${noHeat.filter((v) => /last_month/.test(v)).join()})`);
+    // Month boundaries in the Home Assistant time zone, also over the turn of the year and a change of the clocks.
+    const RealDate = Date;
+    const monthAt = (iso, tz) => {
+      const fixed = RealDate.parse(iso);
+      window.Date = class extends RealDate { constructor(...a) { if (a.length) super(...a); else super(fixed); } static now() { return fixed; } };
+      try { return Object.assign(Object.create(C.prototype), { _hass: { config: { time_zone: tz } } })._periodRange('last_month').slice(0, 2).join(' '); } finally { window.Date = RealDate; }
+    };
+    const ranges = [monthAt('2026-11-30T23:30:00Z', 'Pacific/Auckland'), monthAt('2026-11-30T23:30:00Z', 'Europe/Vienna'), monthAt('2026-11-30T23:30:00Z', 'America/New_York'), monthAt('2027-01-10T12:00:00Z', 'Europe/Vienna'), monthAt('2026-04-05T12:00:00Z', 'Europe/Vienna')];
+    check(ranges.join(' | ') === '2026-10-31T11:00:00.000Z 2026-11-30T11:00:00.000Z | 2026-10-31T23:00:00.000Z 2026-11-30T23:00:00.000Z | 2026-10-01T04:00:00.000Z 2026-11-01T04:00:00.000Z | 2026-11-30T23:00:00.000Z 2026-12-31T23:00:00.000Z | 2026-02-28T23:00:00.000Z 2026-03-31T22:00:00.000Z',
+      `#481: last month in the Home Assistant time zone (${ranges.join(' | ')})`);
+    // A dynamic price: every hour at its price; hours without one at the mean of the others, not at the price of now.
+    const H = 3600000; let costQuery = null;
+    const dyn = (rows) => monthHass({ ...states, 'sensor.price': { state: '9.99', attributes: { unit_of_measurement: 'EUR/kWh', state_class: 'measurement' } } }, { ws: (x) => { costQuery = x; return Promise.resolve(rows); } });
+    const full = await tilesOf({ price: 'sensor.price', tiles: ['cost:last_month'] }, dyn({ 'sensor.el': [{ start: 0, change: 100 }, { start: H, change: 200 }], 'sensor.price': [{ start: 0, mean: 0.1 }, { start: H, mean: 0.2 }] }));
+    const part = await tilesOf({ price: 'sensor.price', tiles: ['cost:last_month'] }, dyn({ 'sensor.el': [{ start: 0, change: 200 }, { start: H, change: 100 }], 'sensor.price': [{ start: H, mean: 0.2 }] }));
+    const gap = await tilesOf({ price: 'sensor.price', tiles: ['cost:last_month'] }, dyn({ 'sensor.el': [{ start: 0, change: 100 }, { start: H, change: 100 }, { start: 2 * H, change: 100 }], 'sensor.price': [{ start: 0, mean: 0.1 }, { start: 2 * H, mean: 0.3 }] }));
+    check(gap['Cost · last month'] === '≈€60.00', `#481: an hour without a price after one with a price (${gap['Cost · last month']})`);
+    check(full['Cost · last month'] === '€50.00' && part['Cost · last month'] === '≈€60.00' && !!costQuery.end_time && costQuery.period === 'hour', `#481: cost of the last month (${full['Cost · last month']} / ${part['Cost · last month']})`);
+
+    // The last complete heating run. Minutes before now; the history API gives the state at the start of the window first.
+    const M = 60000;
+    const at = (now, list) => list.map(([min, s]) => ({ s: String(s), lu: (now - min * M) / 1000 }));
+    const runHass = (hist, extra = {}) => { const queries = []; const h = { ...hassOf(toStates({ 'binary_sensor.c': 'off', 'binary_sensor.v': 'off', 'sensor.p': ['0', 'W'], 'sensor.h': ['0', 'kW'], ...extra })), config: { time_zone: 'UTC' }, queries, callWS: (msg) => {
+      if (msg.type !== 'history/history_during_period') return Promise.reject(new Error('n/a'));
+      queries.push(msg); const now = Date.now();
+      return Promise.resolve(Object.fromEntries(msg.entity_ids.map((id) => [id, at(now, hist[id] || [])])));
+    } }; return h; };
+    const ents = { compressor: 'binary_sensor.c', valve: 'binary_sensor.v', power: 'sensor.p', heat: 'sensor.h' };
+    // Heating 10:00 before to 9:00 before (2 h window parts below), a hot-water charge, then the compressor runs again now.
+    const comp = [[2000, 'off'], [600, 'on'], [480, 'off'], [300, 'on'], [240, 'off'], [60, 'on']];
+    const hist = { 'binary_sensor.c': comp, 'binary_sensor.v': [[2000, 'off'], [305, 'on'], [235, 'off']], 'sensor.p': [[2000, 0], [600, 1000], [480, 0], [300, 1500], [240, 0], [60, 1200]], 'sensor.h': [[2000, 0], [600, 4], [480, 0], [300, 5], [240, 0], [60, 5]] };
+    const runTile = async (hist2, conf = {}, extra = {}) => { const h = runHass(hist2, extra); const card = mount({ power_sources: 'manual', entities: ents, tiles: ['last_heating_run'], ...conf }, h); await wait(60); const row = tileRows(card)[0] || []; return { card, h, label: row[0], text: row[1] }; };
+    let o = await runTile(hist, { timeline: true });
+    check(o.text === '2 h 00 min · 2.00 → 8.00 kWh · COP 4.0' && /^Last heating run · (\w{3} )?\d\d:\d\d–\d\d:\d\d$/.test(o.label), `#481: the last complete heating run, not the charge after it nor the run that goes on (${o.label}: ${o.text})`);
+    const panelRun = o.card._tl.runs.find((r) => r.kind === 'heat' && !r.ongoing && !r.partial);
+    check(panelRun && o.label.endsWith(`${o.card._timelineTime(panelRun.from)}–${o.card._timelineTime(panelRun.to)}`) && o.h.queries.filter((x) => !x.end_time).length === 1, `#481: the bounds of the run panel, from one history query (${o.h.queries.length})`);
+    const info = []; o.card.addEventListener('hass-more-info', (ev) => info.push(ev.detail.entityId));
+    o.card.shadowRoot.querySelector('#stats .stat').click(); await wait(20);
+    check(!info.length && o.card._tlRun === o.card._runId(panelRun) && !!o.card.shadowRoot.getElementById('tl-run') && /Heat/.test(o.card.shadowRoot.getElementById('tl-run').textContent), `#481: a tap selects the run in the timeline (${o.card._tlRun} ${info.join()})`);
+    const otherRun = o.card._tl.runs.find((r) => r.kind === 'dhw'); o.card._tlRun = o.card._runId(otherRun); o.card.hass = { ...o.card._hass }; await wait(40);
+    const f1 = o.card._runFigures(panelRun); const f2 = o.card._runFigures(otherRun);
+    check(f1 && f2 && f1 === o.card._runFigures(panelRun) && f2 === o.card._runFigures(otherRun), '#481: the panel and the tile keep the values of two runs side by side');
+    o.card.remove();
+    // Without a timeline: the tile loads the history itself, limited to timeline_hours, and a tap opens the compressor.
+    o = await runTile(hist, { timeline_hours: 11 });
+    const win = (Date.now() - Date.parse(o.h.queries[0].start_time)) / 3600000; const info2 = []; o.card.addEventListener('hass-more-info', (ev) => info2.push(ev.detail.entityId));
+    o.card.shadowRoot.querySelector('#stats .stat').click();
+    check(/^2 h 00 min/.test(o.text) && Math.abs(win - 11) < 0.1 && info2.join() === 'binary_sensor.c', `#481: without a timeline (${o.text}, ${win.toFixed(2)} h, ${info2.join()})`);
+    o.card.remove();
+    const run = async (c, v = hist['binary_sensor.v'], conf = {}) => { const x = await runTile({ ...hist, 'binary_sensor.c': c, 'binary_sensor.v': v }, { timeline_hours: 11, ...conf }); const t = x.text; x.card.remove(); return t.split(' · ')[0]; };
+    const off = [[2000, 'off']];
+    const bounds = [await run([[2000, 'on'], [500, 'off']], off), await run([[2000, 'off'], [100, 'on']], off), await run([[2000, 'off']], off), await run([[2000, 'off'], [400, 'on'], [300, 'unavailable'], [200, 'off']], off),
+      await run([[2000, 'off'], [500, 'unavailable'], [400, 'on'], [300, 'off']], off), await run([[2000, 'off'], [400, 'on'], [350, 'unavailable'], [349, 'on'], [300, 'off']], off), await run([[2000, 'off'], [500, 'on'], [450, 'off'], [400, 'on'], [399.5, 'off']], off)];
+    check(bounds.join(' ') === '– – – – – 1 h 40 min 50 min', `#481: cut by the window, still running, none, cut by missing data at the end and the start, a short gap inside, a blip under a minute (${bounds.join(' ')})`);
+    // A run over midnight or the turn of the month is one run; its label names the weekday it began on once it is not from today.
+    const probe = Object.assign(Object.create(C.prototype), { _hass: { config: { time_zone: 'Europe/Vienna' }, locale: { language: 'en' } }, _config: {} });
+    const over = { from: Date.parse('2026-10-31T21:30:00Z'), to: Date.parse('2026-11-01T00:30:00Z') };
+    check(probe._runWhen(over) === 'Sat 22:30–01:30', `#481: a run over the turn of the month (${probe._runWhen(over)})`);
+    // Values: only what the data hold; an estimate is marked; a run from the operating mode alone counts too.
+    const only = async (entities, h2 = hist) => { const x = await runTile(h2, { entities }, { 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.vol': ['900', 'l/h'], 'sensor.mode': 'idle' }); const t = x.text; x.card.remove(); return t; };
+    const noHeat2 = await only({ compressor: 'binary_sensor.c', valve: 'binary_sensor.v', power: 'sensor.p' });
+    const bare = await only({ compressor: 'binary_sensor.c', valve: 'binary_sensor.v' });
+    const est = await only({ compressor: 'binary_sensor.c', valve: 'binary_sensor.v', power: 'sensor.p', flow: 'sensor.f', return: 'sensor.r', volume: 'sensor.vol' }, { ...hist, 'sensor.f': [[2000, 35]], 'sensor.r': [[2000, 30]], 'sensor.vol': [[2000, 900]] });
+    const mode = await only({ mode: 'sensor.mode', power: 'sensor.p' }, { ...hist, 'sensor.mode': [[2000, 'idle'], [600, 'heating'], [480, 'idle']] });
+    check(noHeat2 === '2 h 00 min · 2.00 kWh' && bare === '2 h 00 min' && est === '2 h 00 min · 2.00 → ≈10.5 kWh · COP ≈5.2' && mode === '2 h 00 min · 2.00 kWh', `#481: values of the run (${[noHeat2, bare, est, mode].join(' | ')})`);
+    const opts = (c, h) => C._tileOptions(c, C._resolve(c, h), h).options.map((x) => x.value);
+    const rh = runHass(hist);
+    check(opts({ entities: ents }, rh).includes('last_heating_run') && !opts({ entities: { power: 'sensor.p' } }, rh).includes('last_heating_run'), '#481: the tile is offered where a compressor or an operating mode tells the runs');
+    let refused = ''; try { document.createElement('heatpump-flow-card').setConfig({ tile_sources: { last_heating_run: 'sensor.x' } }); } catch (err) { refused = err.message; }
+    check(/cannot take an entity/.test(refused), '#481: the last heating run takes no source');
+    const named = await runTile(hist, { tiles: [{ key: 'last_heating_run', name: 'My run', tap_action: { action: 'none' } }], timeline: true });
+    named.card.shadowRoot.querySelector('#stats .stat').click();
+    check(named.label === 'My run' && !named.card._tlRun, `#481: an own name and an own action stay (${named.label})`);
+    named.card.remove();
+  }
+
   // 22e. pressure of the heating system at the heat pump's return (forum, system_pressure)
   {
     const q = (c, id) => c.shadowRoot.getElementById(id);

@@ -134,6 +134,8 @@ tiles:
   - env_energy:month          # environmental energy from a total counter's long-term statistics
   - starts
   - defrosts:yesterday
+  - cop_heating:last_month    # the calendar month before
+  - last_heating_run          # duration, electricity, heat and COP of the last complete heating run
   - cost:month                # electricity × price, currency from the HA settings
   - key: energy_heating
     period: month
@@ -169,14 +171,18 @@ tiles:
   - heat_dhw:today
 ```
 
-Tile keys that take a source: the electricity, environmental energy and heat keys, `cop_heating`, `cop_dhw`, `cop_cooling`, `cop_total`, `spf`, the starts and runtime keys, `pv_production` and `solar_thermal`. Live values (`cop_live`, `spread`, `power` …), `cost`, `load_classes`, `dhw_loss` and `pv_boost_share` are computed and take none.
+Tile keys that take a source: the electricity, environmental energy and heat keys, `cop_heating`, `cop_dhw`, `cop_cooling`, `cop_total`, `spf`, the starts and runtime keys, `pv_production` and `solar_thermal`. Live values (`cop_live`, `spread`, `power` …), `cost`, `load_classes`, `dhw_loss`, `pv_boost_share` and `last_heating_run` are computed and take none.
 
 **Actions:** a tap opens the more-info dialog of the tile's entity. `tap_action`, `hold_action` (500 ms) and `double_tap_action` accept every Home Assistant action (`more-info`, `navigate`, `url`, `toggle`, `perform-action`, `assist`, `none`, with `confirmation`). Tiles with options the editor does not offer (such as price, unit, period with an own entity or actions) are marked **YAML** there: they can be moved and removed, their options are edited in YAML and stay as they are when the editor saves.
 
-Periods: `now`, `today`, `yesterday`, `week`, `month`, `year`, `total`. A tile is only shown when the installation can fill it. Values come from, in this order:
+**Last month:** `last_month` is the calendar month before the current one, in the time zone of Home Assistant. It needs a total counter (`state_class: total` or `total_increasing`), or for starts and hours a counter kept as a measurement, with long-term statistics over that month; a COP needs the heat and the electricity counter, and counters that started within the month give values from there on. With a dynamic price the cost bills every hour at its price; hours without a price count at the mean of the others, marked **≈**.
+
+**Last heating run:** `last_heating_run` shows the last complete heating run in the window of `timeline_hours`, with the same bounds as the run panel of the timeline: `2 h 05 min · 1.40 → 5.80 kWh · COP 4.1` (electricity → heat). A run that still goes, that the window cuts or that begins or ends where data are missing does not count, nor does hot water. Values without recorded data are left out, an estimated heat is marked **≈**. The label carries the time of the run. With `timeline: true` a tap selects the run there; without a timeline the tile loads the history itself and a tap opens the entity that delimits the runs.
+
+Periods: `now`, `today`, `yesterday`, `week`, `month`, `last_month`, `year`, `total`. A tile is only shown when the installation can fill it. Values come from, in this order:
 1. the preset's own entity for that period (e.g. Lambda `hp1_heating_cop_monthly`)
 2. for the default tiles' entities (`cop_heating_today` …): "today"
-3. the change over the period from Home Assistant's **long-term statistics** of a total counter (needs `state_class: total_increasing`, true for most energy counters). This gives EMS-ESP and others "today", "this month" and so on, although they only report totals. Start and hour counters with `state_class: measurement` give their periods from the highest and lowest value of the period.
+3. the change over the period from Home Assistant's **long-term statistics** of a total counter (needs `state_class: total_increasing`, true for most energy counters). This gives EMS-ESP and others "today", "this month", "last month" and so on, although they only report totals. Start and hour counters with `state_class: measurement` give their periods from the highest and lowest value of the period.
 4. counted from the **history** for today, yesterday and the week: `defrosts` from the defrost entity switching on, where no defrost counter exists. For HeishaMon the starts of these periods leave out the two restarts of every defrost, which its operations counter also counts.
 5. computed from other tiles, marked **≈**: COP = heat ÷ electricity, or without heat = (environmental energy + electricity) ÷ electricity; runtime per start = hours ÷ starts.
 
@@ -188,7 +194,7 @@ Periods: `now`, `today`, `yesterday`, `week`, `month`, `year`, `total`. A tile i
 | Heat | `heat`, `heat_heating`, `heat_dhw`, `heat_cooling`, `heat_defrost` |
 | Starts and runtime | `starts`, `cycles_heating`, `cycles_dhw`, `cycles_cooling`, `defrosts`, `hours`, `hours_per_start`, `load_classes`, `aux_hours`, `aux_starts` |
 | Live | `spread`, `volume`, `heat_estimated`, `power`, `heat_live`, `compressor_speed`, `source_spread`, `outdoor`, `dhw_top`, `room`, `brine_pressure`, `hc_pressure`, `hc_spread` … `hc6_spread`, `pv_share` |
-| Other | `pv_production`, `solar_thermal` (ViCare), `cost`, `dhw_loss` (hot-water standby loss, K/h) |
+| Other | `pv_production`, `solar_thermal` (ViCare), `cost`, `dhw_loss` (hot-water standby loss, K/h), `last_heating_run` |
 | PV surplus | `pv_boost_share` (needs `pv_boost`; periods `today`, `yesterday`, `week`) |
 
 `hc_spread` is the spread of heating circuit 1 from its own `hc_flow` and `hc_return`, `hc2_spread` … `hc6_spread` that of the other circuits. Next to `spread` (flow minus return of the heat pump) it shows what the circuit takes behind a buffer or mixer. A circuit spread is offered when both sensors of that circuit are mapped, shows "–" while no water moves through the circuit, and carries the circuit name (`hc2_name` …) or its number.
