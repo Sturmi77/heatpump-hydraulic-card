@@ -2982,6 +2982,8 @@ const HFC_EDITOR = {
     tiles_custom: 'Kendi kutucuk seçimim', tiles: 'Kutucuklar (sıralamak için sürükleyin)',
     tiles_custom_help: 'Kapalı: varsayılan kutucuklar. Açık: bu kurulumun sağladıklarından kutucuk ve dönem seçin; boş liste satırı gizler.',
     tiles_yaml: 'Bazı kutucukların kendi adı, varlığı, fiyatı veya eylemi var: bunları YAML ile düzenleyin.',
+    tile_entity: 'Bir Home Assistant varlığını kutucuk olarak ekle', tile_entity_help: 'Kutucuk listenin sonuna eklenir. Aşağıda adlandırılabilir.',
+    tile_names: 'Kutucukların adları', tile_name: 'Ad: {tile}', tile_preview: 'Gösterir: {value}',
     price_fixed: 'kWh başına elektrik fiyatı', price_entity: 'Elektrik fiyatı varlığı',
     price_help: 'Maliyet kutucuğunu açar. Uzun süreli istatistiği olan bir varlıkla (ör. dinamik tarife) maliyet saat saat hesaplanır.',
     untested: 'test edilmedi',
