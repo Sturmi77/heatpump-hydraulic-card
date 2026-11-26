@@ -2969,6 +2969,33 @@
     check(set === 'l/min' && !('flow_rate_unit' in out), `#289: the editor stores l/min and leaves the default l/h out (${set} / ${out.flow_rate_unit})`);
   }
   {
+    // Forum, 26 November: spread_unit shows the spreads in °C; K stays the default, the refrigerant differences stay in K.
+    const ents = { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r', hc_flow: 'sensor.hf', hc_return: 'sensor.hr', hc_pump: 'binary_sensor.p',
+      source_in: 'sensor.si', source_out: 'sensor.so', suction_temp: 'sensor.st', evap_temp: 'sensor.et' };
+    const st = toStates({ 'sensor.m': 'heating', 'binary_sensor.c': 'on', 'sensor.f': ['35', '°C'], 'sensor.r': ['30', '°C'], 'sensor.hf': ['33', '°C'], 'sensor.hr': ['29', '°C'],
+      'binary_sensor.p': 'on', 'sensor.si': ['8', '°C'], 'sensor.so': ['5', '°C'], 'sensor.st': ['4', '°C'], 'sensor.et': ['-2', '°C'] });
+    const units = async (cfg) => {
+      const card = mount({ source_type: 'brine', entities: ents, tiles: ['spread', 'hc_spread', 'source_spread'], details_open: true, ...cfg }, hassOf(st)); await wait(30);
+      const tiles = tileRows(card).map((r) => r[1]).join(' | ');
+      const src = card.shadowRoot.getElementById('t-src-spread')?.textContent || '';
+      const superheat = [...card.shadowRoot.querySelectorAll('#drawer-body .drow')].map((r) => r.textContent).find((x) => /superheat/i.test(x)) || '';
+      card.remove(); return { tiles, src, superheat };
+    };
+    const k = await units({}); const c = await units({ spread_unit: '°C' });
+    check(k.tiles === '5.0 K | 4.0 K | 3.0 K' && c.tiles === '5.0 °C | 4.0 °C | 3.0 °C' && /K$/.test(k.src) && /°C$/.test(c.src) && /6\.0 K/.test(c.superheat),
+      `spread_unit: the spreads in °C, superheat stays in K (${JSON.stringify(k)} / ${JSON.stringify(c)})`);
+    let err = '';
+    try { C.prototype.setConfig.call(Object.create(C.prototype), { spread_unit: 'F' }); } catch (e) { err = e.message; }
+    const ed = document.createElement('heatpump-flow-card-editor'); let out;
+    ed.addEventListener('config-changed', (ev) => { out = ev.detail.config; });
+    ed.setConfig({ entities: ents }); ed.hass = hassOf(st);
+    ed._changed({ entities: ents, spread_unit: '°C' }); const set = out.spread_unit;
+    ed._changed({ entities: ents, spread_unit: 'K' });
+    const keys = (n) => (n.schema ? n.schema.flatMap(keys) : [n.name]);
+    check(/spread_unit must be one of: K, °C/.test(err) && set === '°C' && !('spread_unit' in out) && C._formSchema({}).schema.flatMap(keys).includes('spread_unit'),
+      `spread_unit: checked, in the editor, the default K left out (${err} / ${set})`);
+  }
+  {
     // #290: spread of a heating circuit from its own flow and return, one tile per circuit, shown while the circuit flows.
     const ents = { mode: 'sensor.m', compressor: 'binary_sensor.c', flow: 'sensor.f', return: 'sensor.r', hc_flow: 'sensor.hf', hc_return: 'sensor.hr', hc_pump: 'binary_sensor.p1',
       hc2_flow: 'sensor.hf2', hc2_return: 'sensor.hr2', hc2_pump: 'binary_sensor.p2', hc3_flow: 'sensor.hf3', hc3_return: 'sensor.hr3' };
