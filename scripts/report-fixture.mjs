@@ -40,11 +40,14 @@ const parseReport =(text, sets = []) => {
 
   const config = {};
   if (head['Card language']) config.language = head['Card language'];
-  if (head['Source type'] && head['Source type'] !== 'air') config.source_type = head['Source type'];
+  // "brine, read from the installation": the kind without the origin.
+  const source = (head['Source type'] || '').split(',')[0];
+  if (source && source !== 'air') config.source_type = source;
   const hcs = Number(head['Heating circuits']) || 1;
   if (hcs > 1) config.hc_count = hcs;
   const storage = Object.fromEntries((head.Storage || '').split(' · ').map((part, n) => (n === 0 ? ['storage', part] : part.split(': '))));
   if (storage.storage === 'combined') config.storage = 'combined';
+  if (storage.condenser?.startsWith('tank')) config.condenser = 'tank';
   if (['fresh_water', 'tank_in_tank'].includes(storage['hot water'])) config.dhw_type = storage['hot water'];
   if (['yes, configured', 'yes, from the heat generator'].includes(storage['parallel buffer'])) config.buffer = true;
   if (storage['series buffer']?.startsWith('yes')) config.series_buffer = true;
