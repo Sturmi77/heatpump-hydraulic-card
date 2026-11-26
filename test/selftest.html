@@ -702,6 +702,36 @@
       .map((s) => s.kind).join();
     check(card._timelineNeedsAttributes(attributeIds) && parsed[heater][0].s === '45' && attributeRoute === 'dhw',
       `ViCare timeline: water-heater current_temperature is preserved and routes hot water (${parsed[heater][0].s} / ${attributeRoute})`);
+    // #489: hot water switched off and the tank colder than the heating flow: the rule does not apply. The DHW operating mode (E3)
+    // decides before the water heater; a one-time charge runs all the same; unknown leaves the rule as it was.
+    const offReg = { ...registry, 'select.v250_dhw_mode': { platform: 'vicare', translation_key: 'dhw_operating_mode' }, 'water_heater.v250': { platform: 'vicare', translation_key: 'domestic_hot_water' },
+      'binary_sensor.v250_once': { platform: 'vicare', translation_key: 'one_time_charge' } };
+    const cold = (select, heater, once = 'off') => model(state('ready', 'on', '48', { ...(select ? { 'select.v250_dhw_mode': select } : {}), ...(heater ? { 'water_heater.v250': heater } : {}), 'binary_sensor.v250_once': once }),
+      Object.fromEntries(Object.entries(offReg).filter(([id]) => (id !== 'select.v250_dhw_mode' || select) && (id !== 'water_heater.v250' || heater))));
+    const gates = [await cold('off', 'on'), await cold('off', 'on', 'on'), await cold('efficient', 'off'), await cold(null, 'off'), await cold(null, 'on'), await cold('unavailable', 'off'), await cold('unavailable', 'unknown'), await cold(null, null)]
+      .map((m) => m.hp).join();
+    check(gates === 'heating,dhw,dhw,heating,dhw,heating,dhw,dhw', `#489: hot water switched off is never a charge (${gates})`);
+    const gateCard = mount({ preset: 'vicare' }, hassOf(state('ready', 'off', '30', { 'select.v250_dhw_mode': 'efficient', 'binary_sensor.v250_once': 'off' }), Object.fromEntries(Object.entries(offReg).filter(([id]) => id !== 'water_heater.v250')))); await wait(20);
+    const gateIds = gateCard._timelineIds();
+    const gateSegs = gateCard._timelineSegments({ 'sensor.v250_phase': [{ t: 0, s: 'ready' }], 'binary_sensor.v250_compressor': [{ t: 0, s: 'on' }], 'sensor.v250_flow': [{ t: 0, s: '48' }], 'sensor.v250_dhw': [{ t: 0, s: '45' }],
+      'select.v250_dhw_mode': [{ t: 0, s: 'efficient' }, { t: 20 * M, s: 'off' }], 'binary_sensor.v250_once': [{ t: 0, s: 'off' }, { t: 50 * M, s: 'on' }, { t: 60 * M, s: 'off' }] }, gateIds, 0, 90 * M).map((x) => `${x.kind}:${x.from / M}-${x.to / M}`).join(' ');
+    check(gateSegs === 'dhw:0-20 heat:20-50 dhw:50-60 heat:60-90' && gateIds.von === 'select.v250_dhw_mode', `#489: the timeline follows the switch and a one-time charge (${gateSegs})`);
+    const bare = gateCard._timelineSegments({ 'sensor.v250_phase': [{ t: 0, s: 'ready' }], 'binary_sensor.v250_compressor': [{ t: 0, s: 'on' }], 'sensor.v250_flow': [{ t: 0, s: '48' }], 'sensor.v250_dhw': [{ t: 0, s: '45' }], 'select.v250_dhw_mode': [], 'binary_sensor.v250_once': [] }, gateIds, 0, 90 * M).map((x) => x.kind).join();
+    check(bare === 'dhw', `#489: without a recorded switch the timeline keeps the rule (${bare})`);
+    gateCard.remove();
+    // Codex review of #498: the water heater as the tank temperature and as the switch at once; the editor offers both keys.
+    const whCard = mount({ preset: 'vicare', entities: { dhw_top: 'water_heater.v250' } }, hassOf(state('ready', 'on', '48', { 'water_heater.v250': { state: 'off', attributes: { current_temperature: 30 } } }),
+      Object.fromEntries(Object.entries(offReg).filter(([id]) => id !== 'select.v250_dhw_mode' && id !== 'binary_sensor.v250_once')))); await wait(20);
+    const whIds = whCard._timelineIds();
+    const whRaw = { 'sensor.v250_phase': [{ state: 'ready', last_updated: '2030-01-01T00:00:00Z' }], 'binary_sensor.v250_compressor': [{ state: 'on', last_updated: '2030-01-01T00:00:00Z' }],
+      'sensor.v250_flow': [{ state: '48', last_updated: '2030-01-01T00:00:00Z' }], 'water_heater.v250': [{ state: 'off', attributes: { current_temperature: 30 }, last_updated: '2030-01-01T00:00:00Z' }] };
+    const whSegs = whCard._timelineSegments(whCard._timelineHistory(whRaw, [...new Set(Object.values(whIds).filter(Boolean))]), whIds, Date.parse('2030-01-01T00:00:00Z'), Date.parse('2030-01-01T01:00:00Z')).map((x) => x.kind).join();
+    check(whIds.von === 'water_heater.v250' && whIds.vtank === 'water_heater.v250' && whSegs === 'heat', `#489: a water heater that is tank and switch at once keeps its off state in the timeline (${whSegs})`);
+    whCard.remove();
+    const vkeys = (n) => (n.schema ? n.schema.flatMap(vkeys) : [n.name]);
+    check(['dhw_enabled', 'dhw_once'].every((k) => C._formSchema({ preset: 'vicare' }).schema.flatMap(vkeys).includes(k)), '#489: the editor shows dhw_enabled and dhw_once');
+    const gateReport = C._diagnosticReport({ preset: 'vicare' }, hassOf(state('ready', 'on', '48', { 'select.v250_dhw_mode': 'off' }), offReg));
+    check(gateReport.includes('not while dhw_enabled is off') && /- dhw_enabled: select\.v250_dhw_mode = off \[preset\]/.test(gateReport), '#489: the report names the switch');
     const report = C._diagnosticReport({ preset: 'vicare' }, hassOf(state('ready', 'on', '29'), registry));
     check(report.includes('Hot water without a valve entity: while the heat pump runs and flow is above dhw_top'), 'ViCare: the report names the hot-water rule');
     card.remove();
@@ -4481,6 +4511,24 @@
     c.remove();
   }
 
+  // 15b. Lambda running time per mode: hours per day and in total, the other periods from the statistics of the total
+  {
+    const h = (v, cls) => ({ state: v, attributes: { unit_of_measurement: 'h', state_class: cls } });
+    const ids = Object.fromEntries(['heating', 'hot_water', 'defrost', 'heating_rod'].flatMap((m, n) => [[`sensor.eu_hp1_${m}_runtime_total`, h(String(300 + n), 'total_increasing')], [`sensor.eu_hp1_${m}_runtime_daily`, h(String(2.5 + n), 'total')]]));
+    const states = toStates({ 'sensor.eu_hp1_operating_state': 'CH', 'sensor.eu_hp1_compressor_unit_rating': ['40', '%'], ...ids });
+    const hass = { ...hassOf(states), callWS: (m) => (m.type === 'recorder/statistic_during_period' ? Promise.resolve({ change: 120 }) : Promise.reject(new Error('n/a'))) };
+    const card = mount({ preset: 'lambda', power_sources: 'manual', tiles: ['hours_heating', 'hours_dhw:total', 'hours_defrost:today', 'aux_hours', 'hours_heating:month'] }, hass); await wait(40);
+    const t = tileRows(card).map((x) => x.join('=')).join(' | ');
+    check(t === 'Runtime heating · today=2.5 h | Runtime DHW · total=301 h | Runtime defrost · today=4.5 h | Heater hours · today=5.5 h | Runtime heating · month=120 h', `Lambda running time per mode (${t})`);
+    check(card._e.aux_hours === 'sensor.eu_hp1_heating_rod_runtime_total' && card._drawerRows().some(([, rows]) => rows.some(([id]) => id === 'aux_hours')), 'Lambda heater rod hours in the details');
+    card.remove();
+    const old = C._resolve({ preset: 'lambda' }, hassOf(toStates({ 'sensor.eu_hp1_operating_state': 'CH' })));
+    const opts = C._tileOptions({ preset: 'lambda' }, old, hassOf(toStates({ 'sensor.eu_hp1_operating_state': 'CH' }))).options.map((o) => o.value);
+    check(!opts.some((v) => /^(hours_|aux_hours)/.test(v)), 'Lambda without the counters offers no running time');
+    const own = C._resolve({ tile_sources: { hours_heating: 'sensor.x' } }, hassOf(toStates({ 'sensor.x': h('10', 'total_increasing') })));
+    check(own.tiles.hours_heating?.total === 'sensor.x', 'running time from an own counter');
+  }
+
   // 16. heat pump block: frame colour by mode, outdoor temperature at the unit, long status lines wrap
   {
     const s = setups[0];
@@ -7251,6 +7299,108 @@
     check(idle && Math.abs(idle.rate - 0.4) < 0.03, `boiler off: the standby slope is measured (${JSON.stringify(idle)})`);
     check(lc._dhwLoss(lossHist(true), lossIds, start, end) === null, 'boiler running all the time: no window counts as standby');
     lc.remove();
+  }
+
+  // 22c. rolling windows, their trend and the weather-adjusted COP
+  {
+    const tc = (unit, cls = 'total_increasing') => ({ state: '1000', attributes: { unit_of_measurement: unit, state_class: cls } });
+    const ids = { 'sensor.el': tc('kWh'), 'sensor.ht': tc('Wh'), 'sensor.elh': tc('kWh'), 'sensor.hth': tc('kWh'), 'sensor.st': tc(undefined, 'measurement'), 'sensor.hrs': tc('min'), 'sensor.env': tc('kWh'),
+      'sensor.out': { state: '5', attributes: { unit_of_measurement: '°C', state_class: 'measurement' } } };
+    // Midnights of the last complete days in the Home Assistant time zone, as the statistics name them; n = 1 is yesterday.
+    const TZ = 'Pacific/Auckland';
+    const starts = Object.assign(Object.create(C.prototype), { _hass: { config: { time_zone: TZ } } })._dayStarts(61);
+    const day = (n) => starts[starts.length - 1 - n];
+    const asked = [];
+    // data: { id: (n) => value of the day n days ago, undefined = no row }
+    const hassWith = (data, extra = {}) => ({ ...hassOf(toStates({ ...ids, ...extra })), config: { time_zone: TZ }, callWS: (m) => {
+      if (m.type !== 'recorder/statistics_during_period') return Promise.reject(new Error('n/a'));
+      asked.push(m); const id = m.statistic_ids[0]; const type = m.types[0];
+      if (!data[id]) return Promise.resolve({});
+      return Promise.resolve({ [id]: Array.from({ length: 61 }, (_, k) => 61 - k).map((n) => [n, data[id](n)]).filter(([, v]) => v !== undefined).map(([n, v]) => ({ start: day(n), [type]: v })) });
+    } });
+    const cfg = { power_sources: 'manual', entities: { energy_total: 'sensor.el', heat_total: 'sensor.ht', outdoor: 'sensor.out' }, tile_sources: { energy_heating: 'sensor.elh', heat_heating: 'sensor.hth', starts: 'sensor.st', hours: 'sensor.hrs' } };
+    const draw = async (tiles, data, extra, conf = {}) => {
+      const card = mount({ ...cfg, ...conf, tiles }, hassWith(data, extra)); await wait(40);
+      const out = [...card.shadowRoot.querySelectorAll('#stats .stat')].map((t) => {
+        const tr = t.querySelector('.trend'); const sr = t.querySelector('.sv .sr-only');
+        const value = [...t.querySelector('.sv').childNodes].filter((x) => x.nodeType === 3).map((x) => x.textContent).join('');
+        return { label: t.querySelector('.sl').textContent, value, trend: tr ? tr.textContent : '', cls: tr ? tr.className.replace('trend ', '') : '', hidden: tr?.getAttribute('aria-hidden'), text: sr?.textContent.trim() || '' };
+      });
+      card.remove(); return out;
+    };
+    const one = (x) => `${x.value}|${x.trend}|${x.cls}`;
+    // 7 days against the 7 before: the COP is the sum of the heat over the sum of the electricity, not the mean of the daily COPs.
+    const base = { 'sensor.el': (n) => (n === 1 ? 30 : n <= 7 ? 5 : 10), 'sensor.ht': (n) => (n === 1 ? 90000 : n <= 7 ? 30000 : 50000), 'sensor.hrs': () => 600, 'sensor.st': (n) => 1000 - n * 4 };
+    let r = await draw(['cop_total:7d', 'energy:7d', 'heat:7d', 'cop_total:30d', 'hours:7d', 'starts:7d', 'hours_per_start:7d'], base);
+    check(one(r[0]) === '≈4.50|▼ 10 %|down bad' && r[0].label === 'COP total · 7 days' && r[0].text === '10 % less than in the 7 days before' && r[0].hidden === 'true', `trend: 7-day COP from the sums, with its trend (${JSON.stringify(r[0])})`);
+    check(one(r[1]) === '60.0 kWh|▼ 14 %|down' && one(r[2]) === '270 kWh|▼ 23 %|down', `trend: electricity and heat have a direction but no judgement (${one(r[1])} / ${one(r[2])})`);
+    check(/^≈\d\.\d\d$/.test(r[3].value) && r[3].trend === '▶' && r[3].cls === 'steady' && /30 days before/.test(r[3].text), `trend: 30 days, a change under 3 % is steady (${one(r[3])})`);
+    check(one(r[4]) === '70.0 h|▶|steady' && one(r[5]) === '28|▶|steady' && r[6].value === '≈2.5 h', `trend: minutes, a counter kept as a measurement, runtime per start (${one(r[4])} / ${one(r[5])} / ${one(r[6])})`);
+    const q = asked.find((m) => m.statistic_ids[0] === 'sensor.el');
+    check(q.period === 'day' && Date.parse(q.end_time) === day(0) && Date.parse(q.start_time) === day(61) && new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit' }).format(Date.parse(q.end_time)) === '00:00',
+      `trend: complete days in the Home Assistant time zone (${q.start_time} ${q.end_time})`);
+    check(asked.filter((m) => m.statistic_ids[0] === 'sensor.el').length === 1, 'trend: one query per counter for both windows and their trends');
+    r = await draw([{ key: 'cop_total', period: '7d', trend: false }, { key: 'cop_total', period: '7d', name: 'My COP' }], base);
+    check(r[0].trend === '' && r[1].label === 'My COP' && r[1].trend !== '', 'trend: trend: false leaves the arrow out');
+    r = await draw(['cop_total:7d'], { 'sensor.el': () => 10, 'sensor.ht': (n) => (n <= 7 ? 50000 : 40000) });
+    check(one(r[0]) === '≈5.00|▲ 25 %|up good', `trend: a better COP (${one(r[0])})`);
+    // Heat and electricity of the same days; missing, corrected and too few days.
+    const holes = { 'sensor.el': (n) => (n === 3 ? undefined : 10), 'sensor.ht': (n) => (n === 2 ? -354000 : n === 3 ? 999000 : 50000) };
+    r = await draw(['cop_total:7d', 'heat:7d'], holes);
+    check(r[0].value === '–' && r[0].trend === '' && r[1].value !== '–', `trend: two of seven days missing give no COP (${one(r[0])} / ${one(r[1])})`);
+    r = await draw(['cop_total:7d'], { ...holes, 'sensor.el': () => 10, 'sensor.ht': (n) => (n === 2 ? -354000 : 50000) });
+    check(one(r[0]) === '≈5.00|▶|steady', `trend: a corrected day is left out on both sides (${one(r[0])})`);
+    r = await draw(['cop_total:7d', 'energy:7d', 'energy:30d'], { 'sensor.el': (n) => (n <= 10 ? 10 : undefined), 'sensor.ht': (n) => (n <= 10 ? 40000 : undefined) });
+    check(one(r[0]) === '≈4.00||' && one(r[1]) === '70.0 kWh||' && r[2].value === '–', `trend: without the days before no trend, without enough days no value (${r.map(one).join(' / ')})`);
+    r = await draw(['energy:7d'], { 'sensor.el': (n) => (n <= 7 ? 100 : 0.1) });
+    check(one(r[0]) === '700 kWh||', `trend: nothing to compare with at the start of the season (${one(r[0])})`);
+    r = await draw(['cop_total:7d', 'cop_total:week'], {});
+    check(r.every((x) => x.value === '–' && !x.trend), `trend: no statistics (${r.map(one).join(' / ')})`);
+    // Environmental energy instead of heat.
+    r = await draw(['cop_total:7d'], { 'sensor.el': () => 10, 'sensor.env': (n) => (n <= 7 ? 30 : 40) }, {}, { entities: { energy_total: 'sensor.el', env_energy: 'sensor.env' }, tile_sources: {} });
+    check(one(r[0]) === '≈4.00|▼ 20 %|down bad', `trend: COP from environmental energy (${one(r[0])})`);
+
+    // Weather: COP = 3 + 0.15 per °C while it was 2 to 12 °C in the weeks before; the last 7 days are colder.
+    const temp = (n) => (n <= 7 ? 3 : 2 + ((n * 7) % 11));
+    const usual = (n) => 3 + 0.15 * temp(n);
+    const weather = (factor, noise = () => 0, t = temp) => ({ 'sensor.el': () => 10, 'sensor.ht': (n) => (n <= 7 ? factor * (3 + 0.15 * t(n)) : 3 + 0.15 * t(n) + noise(n)) * 10000, 'sensor.out': t,
+      'sensor.elh': () => 8, 'sensor.hth': (n) => (3 + 0.15 * t(n)) * 8 });
+    r = await draw(['cop_weather', 'cop_total:7d', 'cop_heating_weather'], weather(1));
+    check(one(r[0]) === `≈${usual(1).toFixed(2)}|▶ +0.0 %|steady` && r[0].label === 'COP vs. weather · 7 days' && r[0].text === 'as usual for this outdoor temperature' && r[1].cls === 'down bad' && one(r[2]) === one(r[0]),
+      `trend: colder days lower the COP as usual, the plain trend calls it worse (${one(r[0])} / ${one(r[1])} / ${one(r[2])})`);
+    r = await draw(['cop_weather'], weather(0.9));
+    check(one(r[0]) === `≈${(0.9 * usual(1)).toFixed(2)}|▼ −10.0 %|down bad` && r[0].text === '10 % below the usual for this outdoor temperature', `trend: 10 % below the usual (${one(r[0])} ${r[0].text})`);
+    r = await draw(['cop_weather'], weather(1.08));
+    check(/▲ \+8\.0 %/.test(r[0].trend) && r[0].cls === 'up good', `trend: above the usual (${one(r[0])})`);
+    // Scatter: ±20 % from day to day makes 5 % noise.
+    r = await draw(['cop_weather'], weather(0.94, (n) => (n % 2 ? 0.8 : -0.8)));
+    check(/^▶ −[5-7]\./.test(r[0].trend) && r[0].cls === 'steady', `trend: a deviation within the scatter is no trend (${one(r[0])})`);
+    // Colder than anything learned: marked, no judgement.
+    const frost = (n) => (n <= 7 ? -8 : 2 + ((n * 7) % 11));
+    r = await draw(['cop_weather'], weather(0.8, undefined, frost));
+    check(/ \?$/.test(r[0].trend) && r[0].cls === 'down' && /uncertain/.test(r[0].text), `trend: outside the learned temperatures the result is uncertain (${one(r[0])} ${r[0].text})`);
+    // °F reads the same; a COP that falls with warmth is no weather effect.
+    r = await draw(['cop_weather'], { ...weather(0.9), 'sensor.out': (n) => temp(n) * 1.8 + 32 }, { 'sensor.out': { state: '41', attributes: { unit_of_measurement: '°F', state_class: 'measurement' } } });
+    check(r[0].trend === '▼ −10.0 %', `trend: outdoor temperature in °F (${one(r[0])})`);
+    r = await draw(['cop_weather'], { 'sensor.el': () => 10, 'sensor.ht': (n) => (n <= 7 ? 5 : 6 - 0.15 * temp(n)) * 10000, 'sensor.out': temp });
+    check(Math.abs(parseFloat(r[0].trend.replace(/[^\d.−]/g, '').replace('−', '-'))) < 5, `trend: no weather effect against physics (${one(r[0])})`);
+    // Not enough: days, range, window.
+    const none = [await draw(['cop_weather'], { ...weather(1), 'sensor.out': (n) => (n <= 20 ? temp(n) : undefined) }), await draw(['cop_weather'], { ...weather(1), 'sensor.out': () => 5 }),
+      await draw(['cop_weather'], { ...weather(1), 'sensor.el': (n) => (n <= 3 ? 0.1 : 10) }), await draw(['cop_weather'], { ...weather(1), 'sensor.ht': undefined }),
+      await draw(['cop_weather'], { ...weather(1), 'sensor.out': (n) => 5 + (n % 4) }),
+      await draw(['cop_weather'], { ...weather(1), 'sensor.out': (n) => (5 + (n % 4)) * 1.8 + 32 }, { 'sensor.out': { state: '41', attributes: { unit_of_measurement: '°F', state_class: 'measurement' } } })];
+    check(none.every((x) => one(x[0]) === '–||'), `trend: too few days, no range of temperatures, no window or no heat give no result (${none.map((x) => one(x[0])).join(' ')})`);
+    // Offered where the counters and a measured outdoor temperature exist; not for settings or thermostats.
+    const offered = (c, extra = {}) => { const h = hassWith({}, extra); return C._tileOptions(c, C._resolve(c, h), h).options.map((o) => o.value); };
+    const all = offered(cfg); const noOut = offered({ ...cfg, entities: { ...cfg.entities, outdoor: 'climate.x' } }, { 'climate.x': { state: 'heat', attributes: { current_temperature: 5, state_class: 'measurement' } } });
+    const noHeat = offered({ power_sources: 'manual', entities: { energy_total: 'sensor.el', outdoor: 'sensor.out' } });
+    check(['cop_total:7d', 'cop_total:30d', 'energy:7d', 'starts:30d', 'cop_weather', 'cop_heating_weather'].every((v) => all.includes(v)) && !all.some((v) => /^(cost|spf|power|cop_weather:)/.test(v) && /7d|30d/.test(v))
+      && !noOut.includes('cop_weather') && noHeat.includes('energy:7d') && !noHeat.some((v) => /^cop/.test(v)), `trend: the editor offers what the installation can fill (${all.filter((v) => /7d|weather/.test(v)).join()})`);
+    const refused = [{ key: 'cop_total', period: 'month', trend: true }, { key: 'cop_total', period: '7d', trend: 'weather' }, { key: 'spread', trend: true }].map((x) => { try { document.createElement('heatpump-flow-card').setConfig({ tiles: [x] }); return ''; } catch (err) { return err.message; } });
+    let ok2 = ''; try { document.createElement('heatpump-flow-card').setConfig({ tiles: ['cop_weather', { key: 'cop_weather', trend: false }, { key: 'energy', period: '30d', trend: true }] }); } catch (err) { ok2 = err.message; }
+    check(refused.every((x) => /trend must be/.test(x)) && !ok2, `trend: trend is checked (${refused.join(' | ')} ${ok2})`);
+    const days = Object.assign(Object.create(C.prototype), { _hass: { config: { time_zone: 'Europe/Vienna' } } })._dayStarts(61);
+    check(days.length === 62 && days.every((t) => /^(24|00):00/.test(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Vienna', hour: '2-digit', minute: '2-digit' }).format(t))), 'trend: the days start at midnight, also across a change of the clocks');
   }
 
   // 22. narrow_focus (#4): on a narrow schematic the key values grow, secondary values move to one line under it or are hidden

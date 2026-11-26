@@ -379,6 +379,7 @@ const HFC_PRESETS = {
         cop_dhw_today: `${hp}_hot_water_cop_daily`,
         starts_today: `${hp}_compressor_start_cycling_daily`,
         starts_total: `${hp}_compressor_start_cycling_total`,
+        aux_hours: `${hp}_heating_rod_runtime_total`,
         energy_total: `${hp}_compressor_power_consumption_accumulated`,
         heat_total: `${hp}_compressor_thermal_energy_output_accumulated`,
         compressor_speed: `${hp}_compressor_unit_rating`,
@@ -395,6 +396,7 @@ const HFC_PRESETS = {
       const per = (base, periods = { today: 'daily', month: 'monthly', year: 'yearly', total: 'total' }) =>
         Object.fromEntries(Object.entries(periods).map(([k, v]) => [k, `${hp}_${base}_${v}`]));
       const cyc = { today: 'daily', yesterday: 'yesterday', total: 'total' };
+      const run = { today: 'daily', total: 'total' };
       return {
         cop_heating: per('heating_cop'), cop_dhw: per('hot_water_cop'), cop_cooling: per('cooling_cop'),
         energy: { total: `${hp}_compressor_power_consumption_accumulated` }, heat: { total: `${hp}_compressor_thermal_energy_output_accumulated` },
@@ -405,6 +407,8 @@ const HFC_PRESETS = {
         starts: per('compressor_start_cycling', { today: 'daily', yesterday: 'yesterday', month: 'monthly', total: 'total' }),
         cycles_heating: per('heating_cycling', cyc), cycles_dhw: per('hot_water_cycling', cyc),
         cycles_cooling: per('cooling_cycling', cyc), defrosts: per('defrost_cycling', cyc),
+        // Running time per mode, in hours; the daily counters start again at midnight.
+        hours_heating: per('heating_runtime', run), hours_dhw: per('hot_water_runtime', run), hours_defrost: per('defrost_runtime', run), aux_hours: per('heating_rod_runtime', run),
       };
     },
     errors: (p, i) => {
@@ -455,6 +459,10 @@ const HFC_PRESETS = {
         mode: s('compressor_phase'),
         compressor: b('compressor'),
         valve: b('domestic_hot_water_charging'),
+        // Hot water switched off (#489): the DHW operating mode (E3 devices), else the water heater, which reports on or off as the
+        // operating mode, not a charge. A one-time charge runs all the same.
+        dhw_enabled: [ctx.key('vicare', 'select', 'dhw_operating_mode'), ctx.key('vicare', 'water_heater', 'domestic_hot_water')].filter(Boolean),
+        dhw_once: b('one_time_charge'),
         flow: s('secondary_circuit_supply_temperature', 'supply_temperature'),
         return: s('secondary_circuit_return_temperature', 'return_temperature'),
         volume: s('volumetric_flow'),
@@ -1929,6 +1937,10 @@ const HFC_I18N = {
     details: 'Details', sec_operation: 'Operation', sec_hydraulic: 'Hydraulic pressures', sec_refrigerant: 'Refrigerant circuit', sec_cutouts: 'Cut-outs (number of events)', sec_more: 'More',
     diagnostic_copy: 'Copy diagnostic report', diagnostic_copied: 'Diagnostic report copied', diagnostic_failed: 'Could not copy diagnostic report',
     fullscreen_open: 'Open full screen', fullscreen_close: 'Close full screen',
+    rolling: { '7d': '7 days', '30d': '30 days' },
+    trend_up: '{p} % more than in the {n} days before', trend_down: '{p} % less than in the {n} days before', trend_steady: 'about as much as in the {n} days before',
+    weather_up: '{p} % above the usual for this outdoor temperature', weather_down: '{p} % below the usual for this outdoor temperature', weather_steady: 'as usual for this outdoor temperature',
+    weather_unsure: 'uncertain: other outdoor temperatures than in the weeks before',
     det: {
       hours: 'Compressor hours', starts_total: 'Compressor starts total', aux_hours: 'Heater hours', aux_starts: 'Heater starts total', energy_total: 'Electricity total',
       cutout_high_pressure: 'High-pressure cut-outs', cutout_low_pressure: 'Low-pressure cut-outs', cutout_temperature: 'Temperature cut-outs',
@@ -1947,10 +1959,12 @@ const HFC_I18N = {
     stat_starts: 'Starts today', stat_spread: 'Spread', stat_volume: 'Flow rate', stat_heat: 'Heat output', pv_share: 'PV',
     tiles: {
       cop_live: 'COP live', cop_heating: 'COP heating', cop_dhw: 'COP DHW', cop_cooling: 'EER cooling', cop_total: 'COP total', spf: 'SPF (year)',
+      cop_weather: 'COP vs. weather', cop_heating_weather: 'COP heating vs. weather',
       energy: 'Electricity', env_energy: 'Environmental energy', energy_heating: 'Electricity heating', energy_dhw: 'Electricity DHW', energy_cooling: 'Electricity cooling',
       energy_defrost: 'Electricity defrost', energy_standby: 'Standby', energy_aux: 'Electricity heater',
       heat: 'Heat', heat_heating: 'Heat heating', heat_dhw: 'Heat DHW', heat_cooling: 'Cooling output', heat_defrost: 'Heat defrost',
       starts: 'Compressor starts', cycles_heating: 'Heating cycles', cycles_dhw: 'DHW cycles', cycles_cooling: 'Cooling cycles', defrosts: 'Defrosts',
+      hours_heating: 'Runtime heating', hours_dhw: 'Runtime DHW', hours_defrost: 'Runtime defrost',
       hours: 'Compressor hours', hours_per_start: 'Runtime per start', load_classes: 'Load classes 1-5', aux_hours: 'Heater hours', aux_starts: 'Heater starts',
       spread: 'Spread', volume: 'Flow rate', heat_estimated: 'Heat output', power: 'Power', heat_live: 'Heat output', compressor_speed: 'Compressor',
       source_spread: 'Source spread', outdoor: 'Outdoor', dhw_top: 'DHW tank', room: 'Room', brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', hc_spread: 'Circuit spread', pv_share: 'PV share today',
@@ -1972,6 +1986,10 @@ const HFC_I18N = {
     details: 'Details', sec_operation: 'Betrieb', sec_hydraulic: 'Hydraulikdrücke', sec_refrigerant: 'Kältekreis', sec_cutouts: 'Abschaltungen (Anzahl der Ereignisse)', sec_more: 'Weitere',
     diagnostic_copy: 'Diagnosebericht kopieren', diagnostic_copied: 'Diagnosebericht kopiert', diagnostic_failed: 'Diagnosebericht konnte nicht kopiert werden',
     fullscreen_open: 'Vollbild öffnen', fullscreen_close: 'Vollbild schließen',
+    rolling: { '7d': '7 Tage', '30d': '30 Tage' },
+    trend_up: '{p} % mehr als in den {n} Tagen davor', trend_down: '{p} % weniger als in den {n} Tagen davor', trend_steady: 'etwa so viel wie in den {n} Tagen davor',
+    weather_up: '{p} % über dem Üblichen bei dieser Außentemperatur', weather_down: '{p} % unter dem Üblichen bei dieser Außentemperatur', weather_steady: 'wie üblich bei dieser Außentemperatur',
+    weather_unsure: 'unsicher: andere Außentemperaturen als in den Wochen davor',
     det: {
       hours: 'Betriebsstunden Verdichter', starts_total: 'Verdichterstarts gesamt', aux_hours: 'Betriebsstunden Heizstab', aux_starts: 'Heizstab-Starts gesamt', energy_total: 'Strom gesamt',
       cutout_high_pressure: 'Hochdruck-Abschaltungen', cutout_low_pressure: 'Niederdruck-Abschaltungen', cutout_temperature: 'Temperatur-Abschaltungen',
@@ -1990,10 +2008,12 @@ const HFC_I18N = {
     stat_starts: 'Starts heute', stat_spread: 'Spreizung', stat_volume: 'Volumenstrom', stat_heat: 'Wärmeleistung', pv_share: 'PV',
     tiles: {
       cop_live: 'COP live', cop_heating: 'COP Heizen', cop_dhw: 'COP WW', cop_cooling: 'EER Kühlen', cop_total: 'COP gesamt', spf: 'JAZ',
+      cop_weather: 'COP wetterbereinigt', cop_heating_weather: 'COP Heizen wetterbereinigt',
       energy: 'Strom', env_energy: 'Umweltenergie', energy_heating: 'Strom Heizen', energy_dhw: 'Strom WW', energy_cooling: 'Strom Kühlen',
       energy_defrost: 'Strom Abtauen', energy_standby: 'Standby', energy_aux: 'Strom Heizstab',
       heat: 'Wärme', heat_heating: 'Wärme Heizen', heat_dhw: 'Wärme WW', heat_cooling: 'Kälte', heat_defrost: 'Wärme Abtauen',
       starts: 'Verdichterstarts', cycles_heating: 'Heizzyklen', cycles_dhw: 'WW-Zyklen', cycles_cooling: 'Kühlzyklen', defrosts: 'Abtauungen',
+      hours_heating: 'Laufzeit Heizen', hours_dhw: 'Laufzeit Warmwasser', hours_defrost: 'Laufzeit Abtauen',
       hours: 'Verdichterstunden', hours_per_start: 'Laufzeit pro Start', load_classes: 'Lastklassen 1-5', aux_hours: 'Heizstab-Stunden', aux_starts: 'Heizstab-Starts',
       spread: 'Spreizung', volume: 'Volumenstrom', heat_estimated: 'Wärmeleistung', power: 'Leistung', heat_live: 'Wärmeleistung', compressor_speed: 'Verdichter',
       source_spread: 'Spreizung Quelle', outdoor: 'Außen', dhw_top: 'WW-Speicher', room: 'Raum', brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', hc_spread: 'Spreizung Heizkreis', pv_share: 'PV-Anteil heute',
@@ -2340,6 +2360,7 @@ const HFC_EDITOR = {
     valve: 'Diverter valve towards hot water (on/off, or a state like Tank/Room)', bypass_valve: 'Series buffer bypass valve (on = bypass; default: defrost)',
     pv_boost: 'PV surplus mode (on, or a power above 0)',
     sg_ready: 'SG-Ready / utility lock state (1–4 or text)',
+    dhw_enabled: 'Hot water switched on (the state "off" stops the hot-water rule of the preset)', dhw_once: 'One-time hot-water charge (on/off)',
     dhw_top: 'DHW tank top (°C)', dhw_middle: 'DHW tank middle (°C)', dhw_bottom: 'DHW tank bottom (°C)', dhw_target: 'DHW target (°C)', dhw_mode: 'DHW mode (state text)',
     circulation: 'Circulation pump running (on/off)', circulation_start: 'Circulation window starts', circulation_end: 'Circulation window ends', circulation_schedule: 'Circulation schedule (next change)', dhw_loss_sensor: 'DHW standby-loss measurement (°C)', buffer_top: 'Buffer top (°C)', buffer_middle: 'Buffer middle (°C)', buffer_bottom: 'Buffer bottom (°C)', buffer_mode: 'Buffer mode (state text)',
     hc_flow: 'Circuit flow temperature (°C)', hc_return: 'Circuit return temperature (°C)', hc_setpoint: 'Circuit flow target (°C)',
@@ -2445,6 +2466,7 @@ const HFC_EDITOR = {
     valve: 'Umschaltventil auf Warmwasser (ein/aus, oder Zustand wie Tank/Room)', bypass_valve: 'Bypass-Ventil Reihenpuffer (ein = Bypass; Standard: Abtauen)',
     pv_boost: 'PV-Überschussbetrieb (ein, oder Leistung über 0)',
     sg_ready: 'SG-Ready / EVU-Sperre (1–4 oder Text)',
+    dhw_enabled: 'Warmwasser eingeschaltet (Zustand „off“ sperrt die Warmwasser-Regel des Presets)', dhw_once: 'Einmalige Warmwasserladung (ein/aus)',
     dhw_top: 'WW-Speicher oben (°C)', dhw_middle: 'WW-Speicher Mitte (°C)', dhw_bottom: 'WW-Speicher unten (°C)', dhw_target: 'WW-Soll (°C)', dhw_mode: 'WW-Betriebsart (Statustext)',
     circulation: 'Zirkulationspumpe läuft (ein/aus)', circulation_start: 'Zirkulationsfenster beginnt', circulation_end: 'Zirkulationsfenster endet', circulation_schedule: 'Zirkulations-Zeitplan (nächster Wechsel)', dhw_loss_sensor: 'Messsensor WW-Standbyverlust (°C)', buffer_top: 'Puffer oben (°C)', buffer_middle: 'Puffer Mitte (°C)', buffer_bottom: 'Puffer unten (°C)', buffer_mode: 'Puffer-Betriebsart (Statustext)',
     hc_flow: 'Heizkreis-Vorlauf (°C)', hc_return: 'Heizkreis-Rücklauf (°C)', hc_setpoint: 'Heizkreis-Vorlauf-Soll (°C)',
@@ -2976,7 +2998,7 @@ const hfcCompressorOn = (s) => ['on', 'true', 'open', 'ein', 'running', 'startin
 const HFC_ENTITY_GROUPS = {
   sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'primary_pump_state', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost', 'sg_ready'],
   sec_boiler: ['boiler_state', 'boiler_power', 'boiler_flow'],
-  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'circulation_start', 'circulation_end', 'circulation_schedule', 'dhw_loss_sensor', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
+  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'dhw_enabled', 'dhw_once', 'circulation', 'circulation_start', 'circulation_end', 'circulation_schedule', 'dhw_loss_sensor', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
   sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_mixer', 'hc_mixer_opening', 'hc_mixer_closing', 'hc_pressure', 'room', 'room_target', 'room_humidity', 'dew_point', 'program'],
   // The room of circuit 1 uses room/room_target; circuits 2 to 6 use their numbered keys in the shared house overview.
   sec_hc2: ['hc2_flow', 'hc2_return', 'hc2_setpoint', 'hc2_mode', 'hc2_pump', 'hc2_volume', 'hc2_curve_offset', 'hc2_mixer', 'hc2_mixer_opening', 'hc2_mixer_closing', 'hc2_room', 'hc2_room_target', 'hc2_room_humidity', 'hc2_dew_point'],
@@ -3042,10 +3064,10 @@ const HFC_KEY_KINDS = Object.fromEntries(Object.entries({
   counter: ['starts_total', 'starts_today', 'aux_starts', 'cutout_high_pressure', 'cutout_low_pressure', 'cutout_temperature'],
   ratio: ['cop_heating_today', 'cop_dhw_today'],
   speed: ['compressor', 'fan_speed', 'compressor_speed'],
-  onoff: ['defrost', 'circulation', 'hc_pump', 'primary_pump_state', 'hc_mixer_opening', 'hc_mixer_closing', 'solar_pump', 'bypass_valve'],
+  onoff: ['defrost', 'circulation', 'dhw_once', 'hc_pump', 'primary_pump_state', 'hc_mixer_opening', 'hc_mixer_closing', 'solar_pump', 'bypass_valve'],
   onoff_power: ['heater', 'boiler_state', ...HFC_TANK_HEATERS, 'pv_boost'],
   valve: ['valve'],
-  text: ['mode', 'status', 'dhw_mode', 'buffer_mode', 'hc_mode', 'program', 'sg_ready'],
+  text: ['mode', 'status', 'dhw_mode', 'dhw_enabled', 'buffer_mode', 'hc_mode', 'program', 'sg_ready'],
   time: ['circulation_start', 'circulation_end'],
   schedule: ['circulation_schedule'],
 }).flatMap(([kind, keys]) => keys.map((key) => [key, kind])));
@@ -3083,9 +3105,18 @@ const hfcTempAttr = (id, key) => (['climate', 'water_heater'].includes(String(id
 // legacy: entity key of the default tiles that serves as "today"; ratio: computed from two other tiles when the integration
 // has no own entity (COP = heat ÷ electricity); live: current value from the schematic entities; periods: allowed periods.
 const HFC_PERIODS = ['now', 'today', 'yesterday', 'week', 'month', 'last_month', 'year', 'total'];
-// Tiles that `tile_sources` can feed: live values and computed tiles (load classes, cost, standby loss, PV share, last run) have no
-// entity.
-const hfcTileSourceKey = (key) => !!HFC_TILES[key] && !HFC_TILES[key].live && !['classes', 'cost', 'loss', 'share', 'run'].includes(HFC_TILES[key].kind);
+// Rolling windows of complete days, from the daily long-term statistics: the tile compares them with as many days before. A change
+// below `steady` percent is no trend; a window needs `cover` of its days, a compared value at least `least` of what it is compared with.
+const HFC_ROLLING = { '7d': 7, '30d': 30 };
+HFC_PERIODS.push(...Object.keys(HFC_ROLLING));
+const HFC_TREND = { steady: 3, cover: 0.85, least: 0.05 };
+// Weather-adjusted COP: what is usual at an outdoor temperature comes from the `learn` days before the 7 days (a straight line through
+// the daily COPs, weighted by electricity). Needs `days` usable days over a temperature range of `range` kelvin, and `window` days of
+// the 7; a day counts from `kwh` on. Days colder or warmer than the learned ones by `beyond` kelvin make the result uncertain.
+const HFC_WEATHER = { learn: 28, days: 14, window: 5, range: 4, kwh: 0.5, cop: [1, 12], beyond: 1, share: 0.3 };
+// Tiles that `tile_sources` can feed: live values and computed tiles (load classes, cost, standby loss, PV share, last run, weather) have
+// no entity.
+const hfcTileSourceKey = (key) => !!HFC_TILES[key] && !HFC_TILES[key].live && !['classes', 'cost', 'loss', 'share', 'run', 'weather'].includes(HFC_TILES[key].kind);
 // Periods that can be taken from the long-term statistics of a total counter: [calendar period, offset].
 const HFC_STAT_PERIODS = { today: ['day', 0], yesterday: ['day', -1], week: ['week', 0], month: ['month', 0], last_month: ['month', -1], year: ['year', 0] };
 // Home Assistant actions a tile can carry (more-info, navigate, url, toggle, perform-action …).
@@ -3183,6 +3214,8 @@ const HFC_TILES = {
   cop_dhw: { kind: 'cop', legacy: 'cop_dhw_today', ratio: ['heat_dhw', 'energy_dhw'] },
   cop_cooling: { kind: 'cop', ratio: ['heat_cooling', 'energy_cooling'] },
   cop_total: { kind: 'cop', ratio: ['heat', 'energy'] },
+  cop_weather: { kind: 'weather', ratio: ['heat', 'energy'], periods: ['7d'] },
+  cop_heating_weather: { kind: 'weather', ratio: ['heat_heating', 'energy_heating'], periods: ['7d'] },
   spf: { kind: 'cop', ratio: ['heat', 'energy'], periods: ['year'], noSuffix: true },
   energy: { kind: 'energy', legacy: 'energy_today' }, env_energy: { kind: 'energy' },
   energy_heating: { kind: 'energy' }, energy_dhw: { kind: 'energy' }, energy_cooling: { kind: 'energy' },
@@ -3191,6 +3224,7 @@ const HFC_TILES = {
   starts: { kind: 'count', legacy: 'starts_today' },
   cycles_heating: { kind: 'count' }, cycles_dhw: { kind: 'count' }, cycles_cooling: { kind: 'count' }, defrosts: { kind: 'count' },
   hours: { kind: 'hours' },
+  hours_heating: { kind: 'hours' }, hours_dhw: { kind: 'hours' }, hours_defrost: { kind: 'hours' },
   hours_per_start: { kind: 'hours', ratio: ['hours', 'starts'], perStart: true },
   load_classes: { kind: 'classes' },
   aux_hours: { kind: 'hours' }, aux_starts: { kind: 'count' },
@@ -3601,6 +3635,7 @@ class HeatpumpFlowCard extends HTMLElement {
         const s = HeatpumpFlowCard._tileSpec(t);
         if (hfcValueSpec(s) && !hfcValueKey(s.value)) throw new Error(`Unknown tile value "${s.value}". Use value:<entity key>, for example value:hc_flow`);
         if (s && s.key !== undefined && !HFC_TILES[s.key]) throw new Error(`Unknown tile "${s.key}". Available: ${Object.keys(HFC_TILES).join(', ')}`);
+        if (s && s.trend !== undefined && (typeof s.trend !== 'boolean' || !(HFC_ROLLING[s.period] || HFC_TILES[s.key]?.kind === 'weather'))) throw new Error('trend must be true or false, on a tile with the period 7d or 30d');
         if (s && s.period !== undefined && !HFC_PERIODS.includes(s.period)) throw new Error(`Unknown tile period "${s.period}". Available: ${HFC_PERIODS.join(', ')}`);
       });
     }
@@ -4225,7 +4260,7 @@ class HeatpumpFlowCard extends HTMLElement {
       ...(cleared.length ? [`- Cleared on purpose: ${cleared.join(', ')}`] : []),
       `- Not mapped: ${unmapped.length ? unmapped.join(', ') : 'none'} (an empty key is fine when the installation does not have it)`,
       ...(r.preset?.valve_rule === 'flow_above_dhw' && !r.entities.valve && r.entities.flow && r.entities.dhw_top
-        ? ['- Hot water without a valve entity: while the heat pump runs and flow is above dhw_top (preset rule)'] : []),
+        ? [`- Hot water without a valve entity: while the heat pump runs and flow is above dhw_top (preset rule)${r.entities.dhw_enabled ? ', not while dhw_enabled is off' : ''}`] : []),
       '',
       'Power sources (PV, battery, grid):',
       ...energyLines,
@@ -5580,7 +5615,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const hc = HeatpumpFlowCard._hcSpreadCircuit(key);
     if (hc) return this._circuitLabel(String(I.tiles.hc_spread), hc);
     const name = String(I.tiles[key]);
-    const word = def.live || def.noSuffix || !period ? '' : String(I.periods[period]);
+    const word = def.live || def.noSuffix || !period ? '' : String(I.periods[period] ?? I.rolling[period]);
     // A name that already ends in the period word does not repeat it: "COP gesamt" for the total, not "COP gesamt · gesamt" (#288).
     return word && !name.toLowerCase().endsWith(` ${word.toLowerCase()}`) ? `${name} · ${word}` : name;
   }
@@ -5600,6 +5635,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (def.kind === 'cost') return this._tileSource('energy', period) ? { cost: true } : null;
     if (def.kind === 'loss') return period === 'now' && this._lossIds() ? { loss: true } : null;
     if (def.kind === 'share') return this._timelineIds()?.pv ? { share: true } : null;
+    if (def.kind === 'weather') return this._weatherSource(def, period);
     if (def.kind === 'run') return period === 'now' && this._timelineIds() ? { run: true } : null;
     const map = this._tileMap[key] || {};
     // The entities of the default tiles (cop_heating_today …) count as "today", unless the preset maps them to another period.
@@ -5614,6 +5650,10 @@ class HeatpumpFlowCard extends HTMLElement {
     if (recent && key === 'starts' && total && this._preset?.defrost_restarts) return { history: 'starts', counter: total };
     if (recent && key === 'defrosts' && !total) return { history: 'defrosts' };
     const stateClass = this._hass.states[total]?.attributes?.state_class;
+    // Rolling windows of complete days (7d, 30d) from the daily statistics of the same counters.
+    if (total && HFC_ROLLING[period] && (['total', 'total_increasing'].includes(stateClass) || (stateClass === 'measurement' && ['count', 'hours'].includes(def.kind)))) {
+      return { days: total, range: stateClass === 'measurement' };
+    }
     if (total && HFC_STAT_PERIODS[period] && ['total', 'total_increasing'].includes(stateClass)) return { stat: total };
     // A start or hour counter that the integration reports as a measurement (myPyllant On/Off Cycles, #1) has no "change" in the
     // statistics, but its hourly minimum and maximum: since it only counts up, maximum − minimum over the period is its rise.
@@ -5640,6 +5680,7 @@ class HeatpumpFlowCard extends HTMLElement {
   // Without a period: today if possible, else the current value, the total, then the longest period.
   _tileDefault(key) {
     const periods = this._tilePeriods(key);
+    if (periods.length === 1) return periods[0];
     return ['today', 'now', 'total', 'year', 'month', 'week', 'yesterday', 'last_month'].find((p) => periods.includes(p));
   }
 
@@ -5719,6 +5760,123 @@ class HeatpumpFlowCard extends HTMLElement {
     return starts;
   }
 
+  /* ---------- rolling windows and trends ---------- */
+  _rolling(src) { return !!(src.days || (src.ratio && src.ratio.every(([s]) => s.days)) || (src.envCop && src.envCop.every((s) => s.days))); }
+
+  // Midnights of the last `count` complete days and of today, oldest first.
+  _dayStarts(count) {
+    const { y, m, d, midnight } = this._calendar();
+    return Array.from({ length: count + 1 }, (_, n) => Date.parse(midnight(y, m, d - count + n)));
+  }
+
+  // Value per complete day of a statistic as a map of midnight → value: the change of a counter, for a counter kept as a measurement
+  // the rise of its daily maximum, or the daily mean. Undefined while it loads, null without statistics. A day whose change is negative
+  // (a counter that was reset or corrected) has no value.
+  _dayValues(id, kind, type = 'change') {
+    const starts = this._dayStarts(61);
+    const rows = this._wsCached(`days|${id}|${type}|${starts[0]}`, {
+      type: 'recorder/statistics_during_period', start_time: new Date(starts[0]).toISOString(), end_time: new Date(starts[starts.length - 1]).toISOString(),
+      statistic_ids: [id], period: 'day', types: [type],
+    }, (res) => (Array.isArray(res?.[id]) ? res[id] : null));
+    if (!rows) return rows;
+    const unit = this._hass.states[id]?.attributes?.unit_of_measurement;
+    const raw = new Map(rows.map((r) => [new Date(r.start).getTime(), r[type]]).filter(([, v]) => typeof v === 'number' && Number.isFinite(v)));
+    const out = new Map();
+    starts.slice(0, -1).forEach((t, n) => {
+      let v = raw.get(t);
+      if (type === 'max') v = raw.has(t) && raw.has(starts[n - 1]) ? v - raw.get(starts[n - 1]) : undefined;
+      if (v === undefined || (type !== 'mean' && v < 0)) return;
+      out.set(t, type === 'mean' ? v : this._toBase(v, unit, kind));
+    });
+    return out;
+  }
+
+  // Sums of the counters over the window that ended `shift` windows ago, over the days all of them have: [sum, …], null while a part is
+  // missing. Heat and electricity of a COP so always belong to the same days.
+  _rollingSums(parts, length, shift = 0) {
+    const maps = parts.map(([src, kind]) => this._dayValues(src.days, kind, src.range ? 'max' : 'change'));
+    if (maps.some((m) => !m)) return null;
+    const starts = this._dayStarts(61); const end = starts.length - 1 - shift * length;
+    const days = starts.slice(end - length, end).filter((t) => maps.every((m) => m.has(t)));
+    if (days.length < Math.ceil(length * HFC_TREND.cover)) return null;
+    return maps.map((m) => days.reduce((sum, t) => sum + m.get(t), 0));
+  }
+
+  _rollingValue(src, kind, period, shift = 0) {
+    const n = HFC_ROLLING[period];
+    if (src.days) return this._rollingSums([[src, kind]], n, shift)?.[0] ?? NaN;
+    if (src.ratio) { const s = this._rollingSums(src.ratio, n, shift); return s && s[1] > 0 ? s[0] / s[1] : NaN; }
+    const s = this._rollingSums(src.envCop.map((x) => [x, 'energy']), n, shift);
+    return s && s[1] > 0 ? (s[0] + s[1]) / s[1] : NaN;
+  }
+
+  // The trend of a tile: { dir, p, good, text } against the same number of days before, for a weather tile against the usual at the
+  // outdoor temperature; null without one. Only a COP is better or worse; more or less electricity, heat or starts is neither.
+  _tileTrend(def, src, period) {
+    const i = this._i;
+    const fill = (text, p) => String(text).replace('{p}', this._fmt(p, 0)).replace('{n}', HFC_ROLLING[period]);
+    if (src.weather) {
+      const w = this._weatherCop(src);
+      if (!Number.isFinite(w?.delta)) return null;
+      const dir = Math.abs(w.delta) < w.steady ? 'steady' : w.delta > 0 ? 'up' : 'down';
+      return { dir, p: Math.abs(w.delta), sign: w.delta, unsure: w.unsure, good: dir === 'steady' || w.unsure ? null : dir === 'up',
+        text: [fill(i[`weather_${dir}`], Math.abs(w.delta)), w.unsure ? i.weather_unsure : ''].filter(Boolean).join(', ') };
+    }
+    if (!HFC_ROLLING[period] || !this._rolling(src)) return null;
+    const now = this._rollingValue(src, def.kind, period); const before = this._rollingValue(src, def.kind, period, 1);
+    if (!(before > 0) || !Number.isFinite(now) || before < now * HFC_TREND.least) return null;
+    const delta = (now / before - 1) * 100;
+    const dir = Math.abs(delta) < HFC_TREND.steady ? 'steady' : delta > 0 ? 'up' : 'down';
+    return { dir, p: Math.abs(delta), good: def.kind === 'cop' && dir !== 'steady' ? dir === 'up' : null, text: fill(i[`trend_${dir}`], Math.abs(delta)) };
+  }
+
+  // The arrow tells the direction, the colour only adds the judgement; a screen reader gets the sentence.
+  _trendHtml(t) {
+    if (!t) return '';
+    const arrow = { up: '▲', down: '▼', steady: '▶' }[t.dir];
+    const value = t.sign !== undefined ? ` ${t.sign < 0 ? '−' : '+'}${this._fmt(t.p, 1)} %${t.unsure ? ' ?' : ''}` : t.dir === 'steady' ? '' : ` ${this._fmt(t.p, 0)} %`;
+    return `<span class="trend ${t.dir}${t.good === true ? ' good' : t.good === false ? ' bad' : ''}" title="${this._esc(t.text)}" aria-hidden="true">${arrow}${this._esc(value)}</span><span class="sr-only"> ${this._esc(t.text)}</span>`;
+  }
+
+  // Weather tile: heat and electricity counters with daily statistics, and a measured outdoor temperature.
+  _weatherSource(def, period) {
+    const parts = def.ratio.map((k) => [this._tileSource(k, period), HFC_TILES[k].kind]);
+    const outdoor = this._st('outdoor');
+    if (!parts.every(([s]) => s?.days && !s.range) || outdoor?.attributes?.state_class !== 'measurement' || hfcTempAttr(this._e.outdoor, 'outdoor')) return null;
+    return { weather: parts.map(([s]) => s.days), period };
+  }
+
+  // { cop, usual, delta, steady, unsure } of the last 7 days: the COP, the usual COP at the outdoor temperatures of these days (from the
+  // weeks before), the deviation in percent and the deviation that is still noise. null while it loads or without enough days.
+  _weatherCop(src) {
+    const [heat, elec] = src.weather.map((id) => this._dayValues(id, 'energy'));
+    const temp = this._dayValues(this._e.outdoor, '', 'mean');
+    if (!heat || !elec || !temp) return null;
+    const f = /f/i.test(this._unit('outdoor')) ? (v) => (v - 32) / 1.8 : (v) => v;
+    const W = HFC_WEATHER; const n = HFC_ROLLING[src.period];
+    const starts = this._dayStarts(61).slice(0, -1);
+    const usable = (list) => list.map((t) => ({ h: heat.get(t), e: elec.get(t), x: temp.has(t) ? f(temp.get(t)) : NaN }))
+      .filter((p) => p.e >= W.kwh && Number.isFinite(p.h) && Number.isFinite(p.x)).map((p) => ({ ...p, y: p.h / p.e })).filter((p) => p.y >= W.cop[0] && p.y <= W.cop[1]);
+    const now = usable(starts.slice(-n)); const past = usable(starts.slice(-n - W.learn, -n));
+    const sum = (list, fn) => list.reduce((a, p) => a + fn(p), 0);
+    if (now.length < W.window || past.length < W.days) return null;
+    const xs = past.map((p) => p.x); const lo = Math.min(...xs); const hi = Math.max(...xs);
+    const w = sum(past, (p) => p.e); const mx = sum(past, (p) => p.e * p.x) / w; const my = sum(past, (p) => p.e * p.y) / w;
+    const vx = sum(past, (p) => p.e * (p.x - mx) ** 2);
+    if (hi - lo < W.range || !(vx > 0)) return null;
+    // A COP that falls with a warmer outside is no effect of the weather: then the mean is the usual.
+    const slope = Math.max(0, sum(past, (p) => p.e * (p.x - mx) * (p.y - my)) / vx);
+    const usualAt = (x) => my + slope * (x - mx);
+    const e = sum(now, (p) => p.e);
+    const cop = sum(now, (p) => p.h) / e; const usual = sum(now, (p) => p.e * usualAt(p.x)) / e;
+    if (!(usual > 0)) return null;
+    // Scatter of the learned days around the line, for a mean over the days of the window: twice that is still noise.
+    const sd = Math.sqrt(sum(past, (p) => p.e * (p.y - usualAt(p.x)) ** 2) / w);
+    const error = (sd * Math.sqrt(sum(now, (p) => p.e ** 2))) / e;
+    const outside = sum(now, (p) => (p.x < lo - W.beyond || p.x > hi + W.beyond ? p.e : 0)) / e;
+    return { cop, usual, delta: (cop / usual - 1) * 100, steady: Math.max(HFC_TREND.steady, (200 * error) / usual), unsure: outside > W.share };
+  }
+
   // Price per kWh from the tile's or the card's `price`: a number or an entity; ct/kWh and per-MWh prices are converted.
   _price(spec) {
     const p = spec.price ?? this._config.price;
@@ -5740,8 +5898,8 @@ class HeatpumpFlowCard extends HTMLElement {
     return total && counter(total) ? total : null;
   }
 
-  // Start (and end) of a calendar period in the Home Assistant time zone, and the statistics granularity used for costs.
-  _periodRange(period) {
+  // Today in the Home Assistant time zone and the midnight of any day as a timestamp.
+  _calendar() {
     const opts = { hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', weekday: 'short' };
     let fmt;
     try { fmt = new Intl.DateTimeFormat('en-US', { ...opts, timeZone: this._hass.config?.time_zone }); } catch (err) { fmt = new Intl.DateTimeFormat('en-US', opts); }
@@ -5754,6 +5912,12 @@ class HeatpumpFlowCard extends HTMLElement {
     };
     const p = parts(Date.now()); const y = +p.year; const m = +p.month - 1; const d = +p.day;
     const weekday = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(p.weekday);
+    return { y, m, d, weekday, midnight };
+  }
+
+  // Start (and end) of a calendar period in the Home Assistant time zone, and the statistics granularity used for costs.
+  _periodRange(period) {
+    const { y, m, d, weekday, midnight } = HeatpumpFlowCard.prototype._calendar.call(this);
     return {
       today: [midnight(y, m, d), null, 'hour'],
       yesterday: [midnight(y, m, d - 1), midnight(y, m, d), 'hour'],
@@ -5810,6 +5974,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (src.id) return this._tileRead(src.id, kind, period);
     if (src.stat) return this._statChange(src.stat, kind, period, !!src.range);
     if (src.history) return this._historyCount(src, period);
+    if (this._rolling(src)) return this._rollingValue(src, kind, period);
     if (src.ratio) { const [a, b] = src.ratio.map(([s, k]) => this._srcValue(s, k, period)); return b > 0 && a >= 0 ? a / b : NaN; }
     if (src.envCop) {
       const environmental = this._srcValue(src.envCop[0], 'energy', period); const electricity = this._srcValue(src.envCop[1], 'energy', period);
@@ -5820,7 +5985,8 @@ class HeatpumpFlowCard extends HTMLElement {
 
   _tileEntity(src, period) {
     if (!src) return '';
-    if (src.id || src.stat) return src.id || src.stat;
+    if (src.id || src.stat || src.days) return src.id || src.stat || src.days;
+    if (src.weather) return src.weather[0];
     if (src.history) return src.counter || this._e.defrost;
     if (src.ratio) return this._tileEntity(src.ratio[0][0], period);
     if (src.envCop) return this._tileEntity(src.envCop[0], period);
@@ -5842,6 +6008,7 @@ class HeatpumpFlowCard extends HTMLElement {
       return sum > 0 ? `${hrs.map((h) => this._fmt(Number.isFinite(h) ? (h / sum) * 100 : NaN, 0)).join(' · ')} %` : '–';
     }
     if (src.share) return out(this._pvShare(period), 0, '%');
+    if (src.weather) { const w = this._weatherCop(src); return Number.isFinite(w?.cop) ? `≈${this._fmt(w.cop, dec(2))}` : '–'; }
     if (src.run) return this._lastRunText();
     if (src.cost) {
       // Currency from the tile, the card or the Home Assistant settings.
@@ -6097,7 +6264,7 @@ class HeatpumpFlowCard extends HTMLElement {
         out.push([run && !spec.name ? `${label} · ${this._runWhen(run)}` : label, text, this._tileEntity(src, period), spec, run ? { run: this._runId(run) } : null]);
         return;
       }
-      out.push([label, text, this._tileEntity(src, period), spec]);
+      out.push([label, text, this._tileEntity(src, period), spec, { trend: spec.trend === false ? null : this._tileTrend(def, src, period) }]);
     });
     return out;
   }
@@ -6977,7 +7144,8 @@ class HeatpumpFlowCard extends HTMLElement {
   // running compressor win over an idle mode; without a valve, `valve_rule` adds flow and tank temperature.
   _timelineIds() {
     const comp = this._has('compressor') ? { comp: this._e.compressor, valve: this._has('valve') ? this._e.valve : null } : null;
-    const byFlow = this._valveByFlow() ? { vflow: this._e.flow, vtank: this._e.dhw_top } : {};
+    const byFlow = this._valveByFlow() ? { vflow: this._e.flow, vtank: this._e.dhw_top,
+      ...(this._has('dhw_enabled') ? { von: this._e.dhw_enabled } : {}), ...(this._has('dhw_once') ? { vonce: this._e.dhw_once } : {}) } : {};
     const base = this._has('mode') ? { mode: this._e.mode, ...byFlow, ...(comp && this._preset?.compressor_over_idle ? comp : {}) }
       : comp ? { ...comp, ...byFlow } : null;
     // The runs read the compressor even where the segments follow the mode alone; `cycle` only when `comp` is not there already.
@@ -7167,6 +7335,9 @@ class HeatpumpFlowCard extends HTMLElement {
   // Preset rule for units without a valve or hot-water charging entity (`valve_rule: 'flow_above_dhw'`, ViCare #196): hot water
   // while the heat pump runs and its flow is above the tank temperature, since heating keeps the flow below a charged tank.
   // A tank that has cooled below the heating flow reads as hot water for that time.
+  // Switched off, hot water cannot be what the heat pump makes, however cold the tank is (#489); `dhw_enabled` is off only as the text
+  // "off", and a one-time charge (`dhw_once`) runs also then.
+  _dhwOff(enabled, once) { return String(enabled ?? '').trim().toLowerCase() === 'off' && String(once ?? '').trim().toLowerCase() !== 'on'; }
   _valveByFlow() {
     return this._preset?.valve_rule === 'flow_above_dhw' && !this._has('valve') && this._has('flow') && this._has('dhw_top');
   }
@@ -7267,6 +7438,10 @@ class HeatpumpFlowCard extends HTMLElement {
       const attr = hfcTempAttr(id, key);
       out[id] = list.map((e) => ({ t: time(e), s: String((attr ? e.attributes?.[attr] ?? e.a?.[attr] : undefined) ?? e.s ?? e.state) }))
         .filter((e) => Number.isFinite(e.t)).sort((a, b) => a.t - b.t);
+      // A water heater that is the tank temperature and the hot-water switch at once: the switch reads its state (Codex review of #498).
+      if (attr && id === this._e?.dhw_enabled) {
+        out[`${id}#state`] = list.map((e) => ({ t: time(e), s: String(e.s ?? e.state) })).filter((e) => Number.isFinite(e.t)).sort((a, b) => a.t - b.t);
+      }
     });
     return out;
   }
@@ -7311,14 +7486,15 @@ class HeatpumpFlowCard extends HTMLElement {
       const list = (id) => (id ? hist[id] || [] : []);
       const held = (entries) => { let n = -1; return (t) => { while (n + 1 < entries.length && entries[n + 1].t <= t) n++; return entries[n]?.s; }; };
       const mode = held(list(ids.mode)); const comp = held(list(ids.comp)); const valve = held(list(ids.valve));
-      const vflow = held(list(ids.vflow)); const vtank = held(list(ids.vtank));
+      const vflow = held(list(ids.vflow)); const vtank = held(list(ids.vtank)); const von = held(ids.von && hist[`${ids.von}#state`] ? hist[`${ids.von}#state`] : list(ids.von)); const vonce = held(list(ids.vonce));
       // Compressor on: the rule of the live view, so the timeline never shows heating while the heat pump block says off.
       const on = (s) => s !== undefined && hfcCompressorOn(s);
       const dhw = (s) => this._valveDhwState(s);
-      const times = [...new Set([ids.mode, ids.comp, ids.valve, ids.vflow, ids.vtank].flatMap((id) => list(id).map((e) => e.t)))].sort((a, b) => a - b);
+      const times = [...new Set([ids.mode, ids.comp, ids.valve, ids.vflow, ids.vtank, ids.von, ids.vonce].flatMap((id) => list(id).map((e) => e.t)))].sort((a, b) => a - b);
       times.forEach((t) => {
         const ms = mode(t); const cs = comp(t); const vs = valve(t); const fl = parseFloat(vflow(t)); const tk = parseFloat(vtank(t));
-        const toDhw = ids.valve ? dhw(vs) : !!ids.vflow && fl > tk;
+        const off = this._dhwOff(von(t), vonce(t));
+        const toDhw = ids.valve ? dhw(vs) : !!ids.vflow && fl > tk && !off;
         if (ids.mode) {
           if (ms === undefined) return;
           const kind = kindOfMode(ms);
@@ -8088,7 +8264,7 @@ class HeatpumpFlowCard extends HTMLElement {
     // A `valve_map` (raw state → dhw | heating) decides first, for valves that report 1 for heating or other texts.
     const valveMapped = this._has('valve') ? this._valveMapped(this._s('valve')) : undefined;
     const valveDhw = this._has('valve') ? (valveMapped ?? this._valveDhwState(this._s('valve')))
-      : this._valveByFlow() && running && this._n('flow') > this._n('dhw_top');
+      : this._valveByFlow() && running && this._n('flow') > this._n('dhw_top') && !this._dhwOff(this._s('dhw_enabled'), this._s('dhw_once'));
     // Integrations without an operating-mode entity: a running compressor means heating unless the valve says DHW.
     // Defrost wins over a stopped compressor: it pauses for about a minute while the 4-way valve switches (HeishaMon).
     // run_signal (#365): the mode decides only cooling and a lock; the valve decides hot water while the heat pump runs.
@@ -8626,8 +8802,8 @@ class HeatpumpFlowCard extends HTMLElement {
       tiles.push([s.name || this._entityName(s.entity), Number.isFinite(v) ? `${this._fmt(v, s.decimals ?? 1)} ${unit}`.trim() : st.state, s.entity, s]);
     });
     // Actions per tile (default: more-info of the tile's entity).
-    this._tileActs = tiles.map(([, , id, s, extra]) => ({ entity: id, ...(extra || {}), ...Object.fromEntries(HFC_ACTIONS.filter((a) => s && s[a]).map((a) => [a, s[a]])) }));
-    const html = tiles.map(([l, v, id], n) => `<div class="stat" data-tile="${n}" data-entity="${this._esc(id)}"><div class="sv">${this._esc(v)}</div><div class="sl">${this._esc(l)}</div></div>`).join('');
+    this._tileActs = tiles.map(([, , id, s, extra]) => ({ entity: id, ...(extra?.run ? { run: extra.run } : {}), ...Object.fromEntries(HFC_ACTIONS.filter((a) => s && s[a]).map((a) => [a, s[a]])) }));
+    const html = tiles.map(([l, v, id, , extra], n) => `<div class="stat" data-tile="${n}" data-entity="${this._esc(id)}"><div class="sv">${this._esc(v)}${this._trendHtml(extra?.trend)}</div><div class="sl">${this._esc(l)}</div></div>`).join('');
     const box = this._$('stats');
     if (box._html !== html) {
       const had = this.shadowRoot.activeElement?.dataset?.tile;
@@ -8871,6 +9047,8 @@ HeatpumpFlowCard.styles = `
   .stat { cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; background: var(--secondary-background-color, rgba(127,127,127,.1)); border-radius: 10px; padding: 6px 8px; text-align: center; }
   .sv { font-weight: 700; font-size: 1.05em; color: var(--primary-text-color); }
   .sl { font-size: .78em; color: var(--hfc-muted); }
+  .trend { font-size: .8em; font-weight: 600; margin-left: .35em; white-space: nowrap; color: var(--hfc-muted); }
+  .trend.good { color: ${hfcInk('good')}; } .trend.bad { color: ${hfcInk('hot')}; }
   .tap, .chip, .drow { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   /* outdoor unit drawings (unit_style): anthracite and light casings derive from --hfc-anthracite and --hfc-casing */
   .lam-body { fill: ${hfcVar('anthracite')}; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 78%, #000); stroke-width: 1.5; }

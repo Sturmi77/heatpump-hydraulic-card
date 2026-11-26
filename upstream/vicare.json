@@ -20,7 +20,8 @@
         "homeassistant/components/vicare/const.py",
         "homeassistant/components/vicare/strings.json",
         "homeassistant/components/vicare/climate.py",
-        "homeassistant/components/vicare/water_heater.py"
+        "homeassistant/components/vicare/water_heater.py",
+        "homeassistant/components/vicare/select.py"
       ]
     }
   ]
