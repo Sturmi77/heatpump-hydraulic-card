@@ -1,0 +1,2 @@
+- Timeline: drawn again once a minute instead of on every update of Home Assistant, and the time formats are reused. With mark lanes on often switching sensors (a few hundred periods a day) the card kept the browser busy at 75–80 % (forum, 24 November).
+- `timeline_marks`: an entry can carry its own `color`, so two lanes are told apart (forum, 23 November).

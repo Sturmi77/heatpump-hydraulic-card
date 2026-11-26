@@ -188,7 +188,7 @@
     { badges: [{ entity: 'sensor.x', hold_action: 'toggle' }] },
     { program_map: [] }, { program_map: 'eco' }, { sg_ready_map: [] }, { sg_ready_map: { on: 'maybe' } }, { compressor_speed_max: 0 }, { compressor_speed_max: 'fast' },
     { errors: 'sensor.error' }, { error_ok: 'No Error' }, { error_ok: ['No Error', 0] },
-    { timeline: 'yes' }, { timeline_hours: 0 }, { timeline_marks: 'yes' }, { timeline_marks: [{ label: 'x' }] }, { timeline_marks: [7] }, { wall_timeout: -1 }, { wall_timeout: 'soon' }, { unit_style: 'tesla' }, { unit_size: 'huge' },
+    { timeline: 'yes' }, { timeline_hours: 0 }, { timeline_marks: 'yes' }, { timeline_marks: [{ label: 'x' }] }, { timeline_marks: [7] }, { timeline_marks: [{ entity: 'switch.x', color: 7 }] }, { wall_timeout: -1 }, { wall_timeout: 'soon' }, { unit_style: 'tesla' }, { unit_size: 'huge' },
     { animations: 'sometimes' }, { flow_speed: 0 }, { flow_speed: 3.1 }, { source_spread: 'yes' }, { dew_point_margin: -0.1 }, { dew_point_margin: 11 }, { dew_point_margin: 'near' }, { buffer: 'yes' }, { series_buffer: 'yes' }, { primary_pump: 'yes' }, { theme: 'sepia' }, { fullscreen: 'yes' },
     { texts: [] }, { texts: { NL: { title: 'x' } } }, { texts: { nl: { title: 7 } } }, { texts: { nl: { missing_key: 'x' } } },
     { brine_pressure_min: -0.1 }, { hc_pressure_crit: 1.2, hc_pressure_min: 1.0 }, { hc_pressure_min: 3, hc_pressure_max: 2 },
@@ -4840,6 +4840,23 @@
     c.remove();
     c = await tl(s, { timeline_marks: false });
     check(!c.shadowRoot.querySelector('#timeline .tl-mark'), 'timeline_marks: false draws no lane');
+    c.remove();
+    // Forum, 23 and 24 November: a colour per lane; within a minute an update of Home Assistant does not draw the timeline again.
+    c = await tl(s, { timeline_details: false, timeline_marks: [{ entity: 'input_boolean.heatpump_boost', label: 'Boost', color: '#ef4444' }, { entity: 'binary_sensor.heat_pump_utility_lock', color: 'no-colour' }] });
+    {
+      const tbox = c.shadowRoot.getElementById('timeline');
+      const seg = c.shadowRoot.querySelector('#timeline .mseg'); const dot = c.shadowRoot.querySelector('#timeline .tl-legend .k-mark');
+      check(getComputedStyle(seg).backgroundColor === 'rgb(239, 68, 68)' && getComputedStyle(dot).backgroundColor === 'rgb(239, 68, 68)', `a lane takes its own colour in the bar and the legend (${getComputedStyle(seg).backgroundColor})`);
+      const first = tbox.firstElementChild; const realNow = Date.now;
+      const minuteStart = Math.floor(realNow() / 60000) * 60000;
+      try {
+        Date.now = () => minuteStart + 30000; c.hass = { ...c._hass }; await wait(10);
+        Date.now = () => minuteStart + 31000; c.hass = { ...c._hass }; await wait(10);
+        const same = tbox.firstElementChild === first;
+        Date.now = () => minuteStart + 91000; c.hass = { ...c._hass }; await wait(10);
+        check(same && tbox.firstElementChild !== first , `the timeline is drawn again once a minute, not on every update (${same})`);
+      } finally { Date.now = realNow; }
+    }
     c.remove();
     c = await tl(s, { timeline_marks: [{ entity: 'input_boolean.heatpump_boost', label: 'Boost run' }, 'sensor.nothing_here'] });
     check(c.shadowRoot.querySelectorAll('#timeline .tl-mark').length === 1 && /Boost run/.test(c.shadowRoot.querySelector('#timeline .tl-legend').textContent), 'a list of entities with a label; an entity without a period draws no lane');
