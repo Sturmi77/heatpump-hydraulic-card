@@ -301,6 +301,9 @@
   // Sensorless parallel buffers (#266), appended so every older generated case keeps its index, source type and layout.
   for (const dhw of DHW) for (const primary of [false, true]) for (let hcs = 1; hcs <= 6; hcs++) combos.push({ storage: 'parallel-empty', dhw, primary, hcs });
 
+  // Condenser in the combined storage with exhaust air as the source (#253), appended as well.
+  for (let hcs = 1; hcs <= 6; hcs++) combos.push({ storage: 'condenser', dhw: 'tit', primary: false, hcs });
+
   // A synthetic installation without preset: every entity is mapped by hand, so the case shows exactly the parts it names.
   const installation = (c, idx) => {
     const ent = {
@@ -311,9 +314,14 @@
     if (c.dhw !== 'none') Object.assign(ent, { valve: 'binary_sensor.t_valve', dhw_top: 'sensor.t_dhw_top', dhw_bottom: 'sensor.t_dhw_bottom' });
     if (c.dhw !== 'none' && idx % 2) ent.dhw_middle = 'sensor.t_dhw_middle';
     if (c.dhw === 'solar') Object.assign(ent, { solar_collector: 'sensor.t_collector', solar_pump: 'binary_sensor.t_solar_pump' });
-    if (['parallel', 'combined'].includes(c.storage)) Object.assign(ent, { buffer_top: 'sensor.t_buffer_top', buffer_bottom: 'sensor.t_buffer_bottom' });
+    if (['parallel', 'combined', 'condenser'].includes(c.storage)) Object.assign(ent, { buffer_top: 'sensor.t_buffer_top', buffer_bottom: 'sensor.t_buffer_bottom' });
     if (c.storage === 'parallel-empty') config.buffer = true;
     if (c.storage === 'combined') config.storage = 'combined';
+    if (c.storage === 'condenser') {
+      Object.assign(config, { condenser: 'tank', source_type: 'exhaust' });
+      ['flow', 'return', 'volume', 'valve'].forEach((key) => { delete ent[key]; });
+      Object.assign(ent, { source_in: 'sensor.t_src_in', source_out: 'sensor.t_src_out', hot_gas: 'sensor.t_hot_gas' });
+    }
     if (c.dhw === 'fws') config.dhw_type = 'fresh_water';
     if (c.dhw === 'tit') config.dhw_type = 'tank_in_tank';
     if (c.storage.startsWith('series')) config.series_buffer = true;
@@ -322,7 +330,7 @@
     if (c.boiler) Object.assign(ent, { boiler_state: 'binary_sensor.t_boiler', boiler_power: 'sensor.t_boiler_power', boiler_flow: 'sensor.t_boiler_flow' });
     if (idx % 5 === 1) ent.heater = 'sensor.t_heater';
     if (idx % 5 === 2 && c.dhw !== 'none') ent.dhw_heater = 'sensor.t_dhw_heater';
-    if (idx % 5 === 3 && ['parallel', 'parallel-empty', 'combined'].includes(c.storage)) ent.buffer_heater = 'sensor.t_buffer_heater';
+    if (idx % 5 === 3 && ['parallel', 'parallel-empty', 'combined', 'condenser'].includes(c.storage)) ent.buffer_heater = 'sensor.t_buffer_heater';
     if (idx % 4 === 1) Object.assign(ent, { pv: 'sensor.t_pv', battery: 'sensor.t_battery', grid: 'sensor.t_grid' });
     if (idx % 4 === 1) config.power_sources = 'manual';
     for (let n = 1; n <= c.hcs; n++) {
@@ -348,6 +356,7 @@
       'sensor.t_pv': ['2100', 'W'], 'sensor.t_battery': ['0', 'W'], 'sensor.t_grid': [run ? '300' : '0', 'W'],
       'binary_sensor.t_boiler': c.boiler && ['heat', 'idle'].includes(st) ? 'on' : 'off', 'sensor.t_boiler_power': [c.boiler && ['heat', 'idle'].includes(st) ? '8000' : '0', 'W'],
       'sensor.t_boiler_flow': ['52', '°C'],
+      ...(c.storage === 'condenser' ? { 'sensor.t_src_in': ['21.4', '°C'], 'sensor.t_src_out': ['1.8', '°C'], 'sensor.t_hot_gas': ['68', '°C'] } : {}),
     };
     for (let n = 1; n <= c.hcs; n++) {
       out[`sensor.t_hc${n}_flow`] = [String(st === 'cool' ? 18 : 34 - n), '°C'];
@@ -587,7 +596,7 @@
     const UNITS = [...HFC_UNIT_STYLES.filter((u) => u !== 'auto').flatMap((u) => (u === 'vaillant' ? HFC_UNIT_SIZES.map((size) => [u, size])
       : ['panasonic', 'bosch', 'buderus', 'bosch_compact', 'buderus_compact'].includes(u) ? [[u, 'medium'], [u, 'large']] : [[u]]))];
     idx = 0;
-    for (const source of SOURCES) for (const [unit, size] of source === 'air' ? UNITS : [['generic']]) for (const pressure of [false, true])
+    for (const source of [...SOURCES, 'exhaust']) for (const [unit, size] of source === 'air' ? UNITS : [['generic']]) for (const pressure of [false, true])
       for (const spread of [true, false]) for (const volume of [false, true]) {
         const c = { storage: 'parallel', dhw: 'tank', primary: true, hcs: 1 };
         const config = installation(c, 0);

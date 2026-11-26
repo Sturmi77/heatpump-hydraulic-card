@@ -1697,6 +1697,77 @@
     const idle = card._flowModel();
     check(!idle.running && idle.hp === 'idle', `NIBE: prio OFF and STOPPED is idle (${idle.hp})`);
     card.remove();
+    // F470 by its device model: BT2/BT3 and GP1 belong to the circuit, the addition to the tank, the condenser sits in the storage and
+    // the source is the exhaust air. The drawing has refrigerant lines, no water loop, valve or primary pump.
+    const dev = (model, name) => ({ devices: { nd: { model, name } } });
+    const regDev = Object.fromEntries(Object.keys(states).map((id) => [id, { platform: 'nibe_heatpump', device_id: 'nd' }]));
+    const of = (model, name, st = states) => hassOf(st, regDev, null, dev(model, name));
+    const f470 = of('F470 R 3x400V'); const rt = C._resolve({ preset: 'nibe' }, f470).entities;
+    check(['flow', 'return', 'heater', 'primary_pump_state'].every((k) => rt[k] === undefined) && rt.hc_flow === 'sensor.bt2_supply_temp_s1_40008'
+      && rt.hc_return === 'sensor.eb100_ep14_bt3_return_temp_40012' && rt.hc_pump === 'sensor.supply_pump_state_ep14_43431' && rt.buffer_heater === 'sensor.int_el_add_power_43084',
+    `NIBE F470: BT2, BT3 and GP1 belong to the heating circuit, the addition to the tank (${rt.flow} / ${rt.hc_flow} / ${rt.buffer_heater})`);
+    const isTank = (h) => { const c = mount({ preset: 'nibe' }, h); const p = c._parts; const out = !!p.condenser && p.combined && p.dhwType === 'tank_in_tank' && p.src === 'exhaust' && !p.primaryPump; c.remove(); return out; };
+    const variants = { 'F470 R 3x400V': true, F370: true, 'F370 R 1x230V': true, F372: false, 'F730 CU': false, 'F750 R': false, 'F1155-12': false, 'F1255': false, F4700: false };
+    const wrong = Object.entries(variants).filter(([m, yes]) => isTank(of(m)) !== yes).map(([m]) => m);
+    check(!wrong.length && isTank(of(undefined, 'F470')) && !isTank(hass), `NIBE: only the F370 and the F470 have the condenser in the storage; without a model the preset stays as it was (${wrong.join()})`);
+    const f730 = C._resolve({ preset: 'nibe' }, of('F730 CU')).entities;
+    check(JSON.stringify(f730) === JSON.stringify(e), 'NIBE: the mapping of the other models is unchanged');
+    const tank = mount({ preset: 'nibe' }, f470); await wait(20);
+    const has = (id) => !!tank.shadowRoot.getElementById(id);
+    const on = (id) => !!tank.shadowRoot.getElementById(id)?.classList.contains('on');
+    const txt = (id) => tank.shadowRoot.getElementById(id)?.textContent;
+    check(['p-ref-gas', 'p-ref-liquid', 'coil-cond', 'inner-tank', 'cs-tank', 'p-src-in', 'p-src-out'].every(has) && !['p-vl', 'p-rl', 'p-vl-buf', 'p-vl-dhw', 'p-rl-dhw', 'valve-arrow', 'impeller-primary', 't-vl', 't-rl'].some(has),
+      'NIBE F470: refrigerant lines and the coil in the storage instead of the water loop, the valve and the primary pump');
+    check(on('p-ref-gas') && on('coil-cond') && on('p-src-in') && on('impeller') && on('p-hc-vl'), 'NIBE F470: refrigerant and air move with the compressor, the circuit with GP1');
+    check(/Exhaust air.*21\.1/.test(txt('t-src-in')) && /Vented air.*1\.6/.test(txt('t-src-out')) && /ΔT 19\.5 K/.test(txt('t-src-spread')), `NIBE F470: exhaust and vented air (${txt('t-src-in')} / ${txt('t-src-out')} / ${txt('t-src-spread')})`);
+    const report = C._diagnosticReport({ preset: 'nibe' }, f470);
+    check(/Source type: exhaust, read from the installation/.test(report) && /Storage: combined · hot water: tank_in_tank · condenser: tank, read from the installation · .*primary pump: no/.test(report), 'NIBE F470: the report names source, storage and condenser');
+    tank.hass = of('F470 R 3x400V', undefined, { ...states, ...toStates({ 'sensor.prio_43086': 'HOT WATER', 'sensor.int_el_add_power_43084': ['2.0', 'kW'] }) }); await wait(10);
+    check(tank._flowModel().hp === 'dhw' && on('heater-buf') && on('p-ref-gas') && on('p-hc-vl'), 'NIBE F470: a hot-water charge, the circuit keeps running with GP1, the addition lights the rod in the tank');
+    tank.hass = of('F470 R 3x400V', undefined, { ...states, ...toStates({ 'sensor.prio_43086': 'OFF', 'sensor.compressor_state_ep14_43427': 'STOPPED' }) }); await wait(10);
+    check(!on('p-ref-gas') && !on('coil-cond') && !on('p-src-in') && on('p-hc-vl'), 'NIBE F470: the refrigerant rests with the compressor, GP1 still moves the circuit');
+    tank.remove();
+    // The device model arrives after the states, and a later update without it maps back.
+    const later = mount({ preset: 'nibe' }, of(undefined, undefined)); await wait(10);
+    const first = `${later._e.flow}|${later._e.buffer_heater}`;
+    later.hass = of('F470 R 3x400V'); await wait(10);
+    check(/bt2_supply/.test(first) && later._e.flow === undefined && later._e.hc_pump === 'sensor.supply_pump_state_ep14_43431' && later._e.buffer_heater === 'sensor.int_el_add_power_43084' && !!later._parts.condenser,
+      `NIBE F470: the mapping follows a device model that arrives late (${first} / ${later._e.flow} / ${later._e.hc_pump})`);
+    later.remove();
+    // The addition in the jacket stays in the details of a hot-water run.
+    const asked = []; const runCard = mount({ preset: 'nibe' }, { ...f470, callWS: (m) => { if (m.entity_ids) asked.push(...m.entity_ids); return Promise.resolve({}); } }); await wait(10);
+    runCard._runValues({ kind: 'dhw', from: Date.now() - 3600000, to: Date.now() - 600000, phases: [] });
+    check(asked.includes('sensor.int_el_add_power_43084'), `NIBE F470: a hot-water run asks for the electric addition (${asked.join()})`);
+    runCard.remove();
+    // The configuration wins: the old drawing, a boiler (which stands on the water loop), and the configuration of the reporter.
+    const drawn = (cfg, h = f470) => { const c = mount({ preset: 'nibe', ...cfg }, h); const p = c._parts; const out = [p.combined ? 'combined' : 'separate', p.condenser ? 'tank' : 'water', p.dhwType, p.src].join(); const ok2 = ok(c); c.remove(); return ok2 ? out : 'failed'; };
+    const cfgs = [drawn({ storage: 'separate' }), drawn({ condenser: 'water' }), drawn({ buffer: true }), drawn({ source_type: 'air' }), drawn({ dhw_type: 'coil' }), drawn({ entities: { boiler_state: 'sensor.prio_43086' } }),
+      drawn({ storage: 'combined', dhw_type: 'tank_in_tank', primary_pump: true, entities: { flow: null, return: null, heater: null, buffer_heater: 'sensor.int_el_add_power_43084' } })];
+    check(cfgs.join(' ') === 'separate,water,coil,exhaust separate,water,coil,exhaust separate,water,coil,exhaust combined,tank,tank_in_tank,air combined,tank,coil,exhaust combined,water,tank_in_tank,exhaust combined,tank,tank_in_tank,exhaust',
+      `NIBE F470: the configuration wins (${cfgs.join(' ')})`);
+    const sep = mount({ preset: 'nibe', storage: 'separate' }, f470); await wait(5);
+    check(!sep.shadowRoot.getElementById('impeller-primary') && !!sep.shadowRoot.getElementById('impeller'), 'NIBE F470: GP1 stays the pump of the circuit, also with separate storages'); sep.remove();
+    check(drawn({ entities: { mode: 'sensor.own_mode', compressor: 'binary_sensor.own' } }) === 'combined,tank,tank_in_tank,exhaust', 'NIBE F470: own entities for mode and compressor do not hide the model');
+    const refuse = (cfg) => { try { new C().setConfig(cfg); return ''; } catch (err) { return err.message; } };
+    check(/condenser must be one of/.test(refuse({ condenser: 'x' })) && ['separate'].every((storage) => /condenser: tank needs/.test(refuse({ condenser: 'tank', storage }))) && /condenser: tank needs/.test(refuse({ condenser: 'tank', buffer: true }))
+      && refuse({ condenser: 'tank', dhw_type: 'tank_in_tank', source_type: 'exhaust' }) === '' && /"exhaust"/.test(refuse({ source_type: 'lava' })), 'condenser and source_type: exhaust are validated');
+    // Editor: the resolved options are shown, not written; choices against the preset are written and can be taken back.
+    const ed = document.createElement('heatpump-flow-card-editor'); let out;
+    ed.addEventListener('config-changed', (ev) => { out = ev.detail.config; });
+    ed.setConfig({ preset: 'nibe' }); ed.hass = f470; await wait(10);
+    const keysOf = (list) => list.flatMap((n) => (n.schema ? keysOf(n.schema) : [n.name]));
+    const set = (patch) => { ed._changed({ ...ed._form.data, ...patch }); return ['storage', 'condenser', 'dhw_type', 'buffer', 'primary_pump', 'source_type'].filter((k) => k in out).map((k) => `${k}=${out[k]}`).join(); };
+    check(ed._form.data.storage === 'combined' && ed._form.data.condenser === 'tank' && ed._form.data.dhw_type === 'tank_in_tank' && keysOf(ed._form.schema).includes('condenser') && !keysOf(ed._form.schema).includes('buffer')
+      && !/No flow or return/.test(ed._warn.textContent), 'NIBE F470: the editor shows what the preset found and misses no water temperatures');
+    const steps = [set({ title: 'x' }), set({ storage: 'separate' }), set({ storage: 'combined' }), set({ condenser: 'water' }), set({ title: 'y' }), set({ condenser: 'tank' }), set({ dhw_type: 'coil' }), set({ dhw_type: 'tank_in_tank' })];
+    check(steps.join(' | ') === ' | storage=separate |  | storage=combined,condenser=water | storage=combined,condenser=water |  | dhw_type=coil | ', `NIBE F470: the editor writes only what differs from the preset (${steps.join(' | ')})`);
+    // Combined storage chosen against a configured buffer (Codex review of #494).
+    const back = ['buffer', 'series_buffer'].map((k) => { ed.setConfig({ preset: 'nibe', [k]: true }); const before = ed._form.data.storage; const left = set({ storage: 'combined', [k]: true }); return `${before} > ${left || 'nothing'} > ${ed._form.data.storage}${k in out ? ' kept' : ''}`; });
+    check(back.every((x) => x === 'separate > nothing > combined'), `NIBE F470: choosing the combined storage takes back a buffer (${back.join(' | ')})`);
+    ed.setConfig({ storage: 'combined', entities: { flow: 'sensor.bt2_supply_temp_s1_40008', mode: 'sensor.prio_43086' } }); await wait(5);
+    const plain = [set({ title: 'x' }), set({ condenser: 'tank' }), set({ condenser: 'water' }), set({ storage: 'separate' })];
+    check(plain.join(' | ') === 'storage=combined | storage=combined,condenser=tank | storage=combined | ', `the condenser of a combined storage without preset (${plain.join(' | ')})`);
+    ed.remove();
     // Brine models (F1x55) take the brine sensors and the inverter frequency; a room sensor that reports gives the room.
     const brine = { ...states, ...toStates({ 'sensor.eb100_ep14_bt10_brine_in_temp_40015': ['4.1', '°C'], 'sensor.eb100_ep14_bt11_brine_out_temp_40016': ['1.2', '°C'],
       'sensor.compressor_frequency_actual_43136': ['48', 'Hz'], 'sensor.bt50_room_temp_s1_40033': ['21.4', '°C'] }) };

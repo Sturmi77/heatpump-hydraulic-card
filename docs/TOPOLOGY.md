@@ -46,7 +46,7 @@ The SVG is 1000 units wide; height grows by 250 per extra heating circuit.
 | Area | Position | Notes |
 | --- | --- | --- |
 | Power sources | x 40–300, y 10–190 | PV, battery, grid above the heat pump |
-| Heat pump block | x 50–290, y 190–425 | source loop below (air, brine, water) |
+| Heat pump block | x 50–290, y 190–425 | source loop below (air, brine, water, exhaust air ducts) |
 | Flow / return to the valve | y 250 / y 380 | optional primary pump at x 340 |
 | Diverter valve | x 420, y 250 | DHW branch up to y 80, heating branch down to y 360 |
 | Storage column | x 520–640 | DHW tank y 40–240, buffer y 320–520 |
@@ -154,6 +154,7 @@ Prevalence is a qualitative estimate for single-family houses in Central Europe.
 | Combined / layered storage | supported (0.14) | uncommon to medium; typical with solar thermal or a stove | #50, a HeishaMon installation |
 | Fresh-water station on buffer or combined storage | supported (0.14, `dhw_type`) | uncommon to medium | |
 | Tank-in-tank | supported (0.14, `dhw_type`) | rare with heat pumps | |
+| Condenser in the combined storage, exhaust air as the source | planned for 0.21 (`condenser: tank`, `source_type: exhaust`) | regional: exhaust air units, mainly in the Nordic countries | #253 (NIBE F470); refrigerant lines at the ports of the block replace the water loop, the valve and the primary pump |
 | Stratification valve instead of diverter valve | later | rare | |
 | Wood stove with water jacket into the storage | phase 2 | rare; needs a large buffer (typically 800–1,000 l) and is connected as secondary generator | #36 |
 | Boiler in series after the heat pump (hybrid) | supported (0.17, manual entities) | regional: common in retrofit hybrids (for example the Netherlands), less in Germany | #51 (Intergas Xtend) |
@@ -180,6 +181,7 @@ Not every combination exists, and that is intended: a storage strategy is one ch
 | Separate DHW tank | yes | yes | yes | – | combined replaces it |
 | Fresh-water station (`dhw_type`) | – | yes | – | yes | needs a heating-side store to draw from |
 | Tank-in-tank (`dhw_type`) | – | – | – | yes | only inside a combined storage |
+| Condenser in the storage (`condenser: tank`) | – | – | – | yes | implies the combined storage; with a boiler the water loop stays |
 | Solar thermal | into DHW tank | into DHW tank | into DHW tank | into the lower zone | target follows the storage |
 | Wood stove | – | yes | – | yes | needs thermal separation and volume; series buffers are too small |
 | Boiler in series (hybrid) | yes | yes | yes | yes | sits on the flow pipe before the valve |
