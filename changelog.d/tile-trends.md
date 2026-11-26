@@ -1,0 +1,2 @@
+- Rolling windows as tiles: `cop_total:7d`, `energy:30d` and the other statistics over the last 7 or 30 complete days, with an arrow for the trend against as many days before. Green and red only judge a COP.
+- Weather-adjusted COP: `cop_weather` and `cop_heating_weather` compare the COP of the last 7 days with what was usual at the same outdoor temperatures in the four weeks before, so a cold week does not read as a worse heat pump.

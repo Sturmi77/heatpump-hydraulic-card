@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { expect, test } from '@playwright/test';
 
 // Field case from a diagnostic report (scripts/report-fixture.mjs, #395): the configuration's map wins over the preset's, as in the
@@ -26,7 +27,76 @@ test('report fixture keeps configuration maps and thermostat attributes', async 
   expect(fixture.config.valve_map).toEqual({ on: 'dhw', off: 'heating' });
   expect(fixture.config.entities).toEqual({ dhw_top: 'climate.f_dhw_top', dhw_target: 'climate.f_dhw_top' });
   expect(fixture.states['climate.f_dhw_top']).toEqual({ state: 'heat', attributes: { current_temperature: 49.6, temperature: 50 } });
+  // What the preset reads from the installation carries its origin in the report; the case takes the value alone (#253).
+  writeFileSync(report, ['Heat Pump Hydraulic Card diagnostic report', 'Preset: nibe', 'Source type: exhaust, read from the installation',
+    'Storage: combined · hot water: tank_in_tank · condenser: tank, read from the installation · parallel buffer: combined storage · series buffer: no · primary pump: no',
+    '', 'Entity mappings:', '- mode: sensor.prio_43086 = HEAT', ''].join('\n'));
+  expect(run().config).toMatchObject({ source_type: 'exhaust', storage: 'combined', condenser: 'tank', dhw_type: 'tank_in_tank', primary_pump: false });
+  writeFileSync(report, ['Heat Pump Hydraulic Card diagnostic report', 'Preset: kronoterm', '', 'Entity mappings:', '- mode: sensor.m = heat', '',
+    'Maps:', '- valve_map: on=dhw, off=heating (preset)', ''].join('\n'));
   expect(run('--set', 'valve_map=custom').config.valve_map).toBe('custom');
+});
+
+// Upstream watch (scripts/upstream-watch.mjs): what counts as new starts at the time of the review, so the changes the review has just
+// checked are not reported again (#484, #485). GitHub is replaced by a stub that filters commits by `since`, as the API does.
+test('upstream watch counts from the time of the review', async ({}, testInfo) => {
+  const cwd = testInfo.outputPath('watch');
+  mkdirSync(`${cwd}/upstream`, { recursive: true });
+  const stub = testInfo.outputPath('stub.mjs');
+  writeFileSync(stub, `
+    const { commits, release } = JSON.parse(process.env.HFC_WATCH_STUB);
+    globalThis.fetch = async (url) => {
+      const u = new URL(url);
+      const reply = (body) => ({ status: 200, ok: true, json: async () => body, text: async () => '' });
+      if (u.pathname === '/repos/o/r/releases/latest') return reply({ tag_name: 'v2', published_at: release, html_url: 'https://example.test/v2' });
+      if (u.pathname === '/repos/o/r/commits') {
+        const since = Date.parse(u.searchParams.get('since'));
+        return reply(commits.filter((d) => Date.parse(d) >= since)
+          .map((d) => ({ sha: d, html_url: 'https://example.test/c', commit: { message: 'change of ' + d, author: { date: d } } })));
+      }
+      if (u.pathname === '/repos/o/r/contents/a.py') return reply({});
+      throw new Error('unexpected request: ' + url);
+    };
+  `);
+  const file = `${cwd}/upstream/demo.json`;
+  const manifest = (reviewed) => writeFileSync(file, JSON.stringify({ preset: 'demo', reviewed, sources: [{ repo: 'o/r', branch: 'main', paths: ['a.py'] }] }));
+  const script = `${process.cwd()}/scripts/upstream-watch.mjs`;
+  const run = (stubbed, ...args) => {
+    const env = { ...process.env, HFC_WATCH_STUB: JSON.stringify(stubbed) };
+    delete env.GITHUB_TOKEN; delete env.GITHUB_REPOSITORY;
+    return execFileSync(process.execPath, ['--import', pathToFileURL(stub).href, script, ...args], { cwd, env, encoding: 'utf8' });
+  };
+  const commits = ['2026-11-22T09:00:00Z', '2026-11-22T10:30:00Z', '2026-11-23T00:30:00Z'];
+  const seen = (out) => commits.filter((d) => out.includes(`change of ${d}`));
+
+  // With a time: the changes before it are reviewed, later ones of the same day are new.
+  manifest({ date: '2026-11-22', at: '2026-11-22T10:00:00Z', version: 'v1' });
+  const timed = run({ commits, release: '2026-11-22T09:30:00Z' }, '--dry-run');
+  expect(seen(timed)).toEqual(commits.slice(1));
+  expect(timed).not.toContain('New release');
+  expect(run({ commits, release: '2026-11-22T11:00:00Z' }, '--dry-run')).toContain('New release: [v2]');
+  expect(run({ commits: commits.slice(0, 1), release: '2026-11-22T09:30:00Z' }, '--dry-run')).toContain('(no changes)');
+  // With an offset the time is the same moment.
+  manifest({ date: '2026-11-22', at: '2026-11-22T12:00:00+02:00', version: 'v1' });
+  expect(seen(run({ commits, release: '2026-11-22T09:30:00Z' }, '--dry-run'))).toEqual(commits.slice(1));
+
+  // With a date only (older reviews): the whole day counts as reviewed.
+  manifest({ date: '2026-11-22', version: 'v1' });
+  const dated = run({ commits, release: '2026-11-22T11:00:00Z' }, '--dry-run');
+  expect(seen(dated)).toEqual(commits.slice(2));
+  expect(dated).not.toContain('New release');
+  expect(run({ commits, release: '2026-11-23T01:00:00Z' }, '--dry-run')).toContain('New release: [v2]');
+
+  // --ack writes the time of the review; what came before is then no change.
+  const before = Math.floor(Date.now() / 1000) * 1000;
+  run({ commits, release: '2026-11-22T11:00:00Z' }, '--ack', 'demo');
+  const { reviewed } = JSON.parse(readFileSync(file, 'utf8'));
+  expect(reviewed.at.startsWith(reviewed.date)).toBe(true);
+  expect(Date.parse(reviewed.at)).toBeGreaterThanOrEqual(before);
+  expect(Date.parse(reviewed.at)).toBeLessThanOrEqual(Date.now());
+  expect(reviewed.version).toBe('v2');
+  expect(run({ commits, release: '2026-11-22T11:00:00Z' }, '--dry-run')).toContain('(no changes)');
+  expect(run({}, '--check')).toContain('valid');
 });
 
 test('browser self-test passes', async ({ page }, testInfo) => {
