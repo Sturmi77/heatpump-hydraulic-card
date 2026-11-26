@@ -4988,7 +4988,10 @@ class HeatpumpFlowCard extends HTMLElement {
     const all = [...svg.querySelectorAll('text[data-prio="room"]')];
     const narrow = parseFloat(getComputedStyle(svg).getPropertyValue('--k')) >= 1.4;
     const own = this._config.narrow_values;
-    const asked = (el) => el.textContent.trim() && (el.classList.contains('rod-val') || el.classList.contains('heater-val') || (narrow && own !== false && !this._narrowFocus()));
+    // With narrow_focus the flow rates of the heat pump and the circuits stand larger, where there is room for them (#425).
+    const focusFlow = (el) => narrow && this._narrowFocus() && el.classList.contains('vol-label') && !el.closest('.src');
+    const asked = (el) => el.textContent.trim() && (el.classList.contains('rod-val') || el.classList.contains('heater-val') || focusFlow(el)
+      || (narrow && own !== false && !this._narrowFocus()));
     if (!all.some(asked)) { if (this._roomKey0) { all.forEach((el) => el.classList.remove('room')); this._roomKey0 = ''; this._a11y(true); } return; }
     const shown = [...svg.querySelectorAll('text')];
     // The fonts count as well: a theme or card-mod that changes them changes the room (Codex review).
@@ -9067,6 +9070,7 @@ HeatpumpFlowCard.styles = `
     .narrow-focus .nf-two .house-row-value { font-size: 26px; text-anchor: start; transform: translate(-204px, 27px); }
     .narrow-focus #house-row2.nf-two { transform: translateY(24.5px); } .narrow-focus #house-row3.nf-two { transform: translateY(49px); }
     .narrow-focus .focus-line:not(:empty) { display: block; }
+    .narrow-focus .vol-label[data-prio="room"].room { font-size: 22px; font-weight: 600; fill: var(--primary-text-color); }
   }
   @container (max-width: 500px) {
     .src-val { transform: translateY(7px); }

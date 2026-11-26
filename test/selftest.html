@@ -7505,7 +7505,7 @@
     c = await draw({}, {}, 380, { narrow_values: true }); const keep = vis(c); c.remove();
     c = await draw({}, {}, 380, { narrow_focus: true }); const focus = vis(c); c.remove();
     c = await draw({}, {}, 900); const wide = vis(c); c.remove();
-    check(auto[0] === '1' && auto[1] === '1' && !clean.length && none === '000' && keep === '111' && focus === '000' && wide === '111', `#395: priorities of the labels (auto ${auto} false ${none} true ${keep} focus ${focus} wide ${wide}; ${clean.join()})`);
+    check(auto[0] === '1' && auto[1] === '1' && !clean.length && none === '000' && keep === '111' && focus === '001' && wide === '111', `#395: priorities of the labels (auto ${auto} false ${none} true ${keep} focus ${focus} wide ${wide}; ${clean.join()})`);
     // Codex review of #503: the backup heater value has a budget, the keyboard reaches what appears, a new font is measured again,
     // and the target line of a fresh-water station follows the narrow settings as well.
     c = await draw({ heater: 'sensor.inline' }, { 'sensor.inline': ['123456789', 'kW'] });
@@ -7527,6 +7527,13 @@
       check(shown(c, 't-dhw-mode') === want, `#395: the target line of a fresh-water station follows ${JSON.stringify(conf)} (${shown(c, 't-dhw-mode')})`);
       c.remove();
     }
+    // #425: with narrow_focus the flow rate stands larger where there is room; without room it is left out, not drawn small.
+    c = await draw({}, {}, 380, { narrow_focus: true });
+    const fs = parseFloat(getComputedStyle(q(c, 't-vol')).fontSize);
+    check(shown(c, 't-vol') && fs === 22 && !ours(c).length, `#425: narrow_focus draws the flow rate at 22 units (${shown(c, 't-vol')} / ${fs})`);
+    c.hass = { ...c._hass, states: { ...c._hass.states, ...toStates({ 'sensor.v': ['123456789012', 'l/h'] }) } }; await wait(20);
+    check(!shown(c, 't-vol'), `#425: a flow rate without room is left out (${shown(c, 't-vol')})`);
+    c.remove();
     // A value that grows into a neighbour goes; it comes back when there is room again.
     c = await draw({ dhw_heater: 'sensor.rod' });
     const was = shown(c, 't-heater-dhw');
