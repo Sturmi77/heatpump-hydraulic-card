@@ -455,6 +455,10 @@ const HFC_PRESETS = {
         mode: s('compressor_phase'),
         compressor: b('compressor'),
         valve: b('domestic_hot_water_charging'),
+        // Hot water switched off (#489): the DHW operating mode (E3 devices), else the water heater, which reports on or off as the
+        // operating mode, not a charge. A one-time charge runs all the same.
+        dhw_enabled: [ctx.key('vicare', 'select', 'dhw_operating_mode'), ctx.key('vicare', 'water_heater', 'domestic_hot_water')].filter(Boolean),
+        dhw_once: b('one_time_charge'),
         flow: s('secondary_circuit_supply_temperature', 'supply_temperature'),
         return: s('secondary_circuit_return_temperature', 'return_temperature'),
         volume: s('volumetric_flow'),
@@ -2350,6 +2354,7 @@ const HFC_EDITOR = {
     valve: 'Diverter valve towards hot water (on/off, or a state like Tank/Room)', bypass_valve: 'Series buffer bypass valve (on = bypass; default: defrost)',
     pv_boost: 'PV surplus mode (on, or a power above 0)',
     sg_ready: 'SG-Ready / utility lock state (1–4 or text)',
+    dhw_enabled: 'Hot water switched on (the state "off" stops the hot-water rule of the preset)', dhw_once: 'One-time hot-water charge (on/off)',
     dhw_top: 'DHW tank top (°C)', dhw_middle: 'DHW tank middle (°C)', dhw_bottom: 'DHW tank bottom (°C)', dhw_target: 'DHW target (°C)', dhw_mode: 'DHW mode (state text)',
     circulation: 'Circulation pump running (on/off)', circulation_start: 'Circulation window starts', circulation_end: 'Circulation window ends', circulation_schedule: 'Circulation schedule (next change)', dhw_loss_sensor: 'DHW standby-loss measurement (°C)', buffer_top: 'Buffer top (°C)', buffer_middle: 'Buffer middle (°C)', buffer_bottom: 'Buffer bottom (°C)', buffer_mode: 'Buffer mode (state text)',
     hc_flow: 'Circuit flow temperature (°C)', hc_return: 'Circuit return temperature (°C)', hc_setpoint: 'Circuit flow target (°C)',
@@ -2455,6 +2460,7 @@ const HFC_EDITOR = {
     valve: 'Umschaltventil auf Warmwasser (ein/aus, oder Zustand wie Tank/Room)', bypass_valve: 'Bypass-Ventil Reihenpuffer (ein = Bypass; Standard: Abtauen)',
     pv_boost: 'PV-Überschussbetrieb (ein, oder Leistung über 0)',
     sg_ready: 'SG-Ready / EVU-Sperre (1–4 oder Text)',
+    dhw_enabled: 'Warmwasser eingeschaltet (Zustand „off“ sperrt die Warmwasser-Regel des Presets)', dhw_once: 'Einmalige Warmwasserladung (ein/aus)',
     dhw_top: 'WW-Speicher oben (°C)', dhw_middle: 'WW-Speicher Mitte (°C)', dhw_bottom: 'WW-Speicher unten (°C)', dhw_target: 'WW-Soll (°C)', dhw_mode: 'WW-Betriebsart (Statustext)',
     circulation: 'Zirkulationspumpe läuft (ein/aus)', circulation_start: 'Zirkulationsfenster beginnt', circulation_end: 'Zirkulationsfenster endet', circulation_schedule: 'Zirkulations-Zeitplan (nächster Wechsel)', dhw_loss_sensor: 'Messsensor WW-Standbyverlust (°C)', buffer_top: 'Puffer oben (°C)', buffer_middle: 'Puffer Mitte (°C)', buffer_bottom: 'Puffer unten (°C)', buffer_mode: 'Puffer-Betriebsart (Statustext)',
     hc_flow: 'Heizkreis-Vorlauf (°C)', hc_return: 'Heizkreis-Rücklauf (°C)', hc_setpoint: 'Heizkreis-Vorlauf-Soll (°C)',
@@ -2986,7 +2992,7 @@ const hfcCompressorOn = (s) => ['on', 'true', 'open', 'ein', 'running', 'startin
 const HFC_ENTITY_GROUPS = {
   sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'primary_pump_state', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost', 'sg_ready'],
   sec_boiler: ['boiler_state', 'boiler_power', 'boiler_flow'],
-  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'circulation_start', 'circulation_end', 'circulation_schedule', 'dhw_loss_sensor', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
+  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'dhw_enabled', 'dhw_once', 'circulation', 'circulation_start', 'circulation_end', 'circulation_schedule', 'dhw_loss_sensor', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
   sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_mixer', 'hc_mixer_opening', 'hc_mixer_closing', 'hc_pressure', 'room', 'room_target', 'room_humidity', 'dew_point', 'program'],
   // The room of circuit 1 uses room/room_target; circuits 2 to 6 use their numbered keys in the shared house overview.
   sec_hc2: ['hc2_flow', 'hc2_return', 'hc2_setpoint', 'hc2_mode', 'hc2_pump', 'hc2_volume', 'hc2_curve_offset', 'hc2_mixer', 'hc2_mixer_opening', 'hc2_mixer_closing', 'hc2_room', 'hc2_room_target', 'hc2_room_humidity', 'hc2_dew_point'],
@@ -3052,10 +3058,10 @@ const HFC_KEY_KINDS = Object.fromEntries(Object.entries({
   counter: ['starts_total', 'starts_today', 'aux_starts', 'cutout_high_pressure', 'cutout_low_pressure', 'cutout_temperature'],
   ratio: ['cop_heating_today', 'cop_dhw_today'],
   speed: ['compressor', 'fan_speed', 'compressor_speed'],
-  onoff: ['defrost', 'circulation', 'hc_pump', 'primary_pump_state', 'hc_mixer_opening', 'hc_mixer_closing', 'solar_pump', 'bypass_valve'],
+  onoff: ['defrost', 'circulation', 'dhw_once', 'hc_pump', 'primary_pump_state', 'hc_mixer_opening', 'hc_mixer_closing', 'solar_pump', 'bypass_valve'],
   onoff_power: ['heater', 'boiler_state', ...HFC_TANK_HEATERS, 'pv_boost'],
   valve: ['valve'],
-  text: ['mode', 'status', 'dhw_mode', 'buffer_mode', 'hc_mode', 'program', 'sg_ready'],
+  text: ['mode', 'status', 'dhw_mode', 'dhw_enabled', 'buffer_mode', 'hc_mode', 'program', 'sg_ready'],
   time: ['circulation_start', 'circulation_end'],
   schedule: ['circulation_schedule'],
 }).flatMap(([kind, keys]) => keys.map((key) => [key, kind])));
@@ -4247,7 +4253,7 @@ class HeatpumpFlowCard extends HTMLElement {
       ...(cleared.length ? [`- Cleared on purpose: ${cleared.join(', ')}`] : []),
       `- Not mapped: ${unmapped.length ? unmapped.join(', ') : 'none'} (an empty key is fine when the installation does not have it)`,
       ...(r.preset?.valve_rule === 'flow_above_dhw' && !r.entities.valve && r.entities.flow && r.entities.dhw_top
-        ? ['- Hot water without a valve entity: while the heat pump runs and flow is above dhw_top (preset rule)'] : []),
+        ? [`- Hot water without a valve entity: while the heat pump runs and flow is above dhw_top (preset rule)${r.entities.dhw_enabled ? ', not while dhw_enabled is off' : ''}`] : []),
       '',
       'Power sources (PV, battery, grid):',
       ...energyLines,
@@ -7045,7 +7051,8 @@ class HeatpumpFlowCard extends HTMLElement {
   // running compressor win over an idle mode; without a valve, `valve_rule` adds flow and tank temperature.
   _timelineIds() {
     const comp = this._has('compressor') ? { comp: this._e.compressor, valve: this._has('valve') ? this._e.valve : null } : null;
-    const byFlow = this._valveByFlow() ? { vflow: this._e.flow, vtank: this._e.dhw_top } : {};
+    const byFlow = this._valveByFlow() ? { vflow: this._e.flow, vtank: this._e.dhw_top,
+      ...(this._has('dhw_enabled') ? { von: this._e.dhw_enabled } : {}), ...(this._has('dhw_once') ? { vonce: this._e.dhw_once } : {}) } : {};
     const base = this._has('mode') ? { mode: this._e.mode, ...byFlow, ...(comp && this._preset?.compressor_over_idle ? comp : {}) }
       : comp ? { ...comp, ...byFlow } : null;
     // The runs read the compressor even where the segments follow the mode alone; `cycle` only when `comp` is not there already.
@@ -7235,6 +7242,9 @@ class HeatpumpFlowCard extends HTMLElement {
   // Preset rule for units without a valve or hot-water charging entity (`valve_rule: 'flow_above_dhw'`, ViCare #196): hot water
   // while the heat pump runs and its flow is above the tank temperature, since heating keeps the flow below a charged tank.
   // A tank that has cooled below the heating flow reads as hot water for that time.
+  // Switched off, hot water cannot be what the heat pump makes, however cold the tank is (#489); `dhw_enabled` is off only as the text
+  // "off", and a one-time charge (`dhw_once`) runs also then.
+  _dhwOff(enabled, once) { return String(enabled ?? '').trim().toLowerCase() === 'off' && String(once ?? '').trim().toLowerCase() !== 'on'; }
   _valveByFlow() {
     return this._preset?.valve_rule === 'flow_above_dhw' && !this._has('valve') && this._has('flow') && this._has('dhw_top');
   }
@@ -7335,6 +7345,10 @@ class HeatpumpFlowCard extends HTMLElement {
       const attr = hfcTempAttr(id, key);
       out[id] = list.map((e) => ({ t: time(e), s: String((attr ? e.attributes?.[attr] ?? e.a?.[attr] : undefined) ?? e.s ?? e.state) }))
         .filter((e) => Number.isFinite(e.t)).sort((a, b) => a.t - b.t);
+      // A water heater that is the tank temperature and the hot-water switch at once: the switch reads its state (Codex review of #498).
+      if (attr && id === this._e?.dhw_enabled) {
+        out[`${id}#state`] = list.map((e) => ({ t: time(e), s: String(e.s ?? e.state) })).filter((e) => Number.isFinite(e.t)).sort((a, b) => a.t - b.t);
+      }
     });
     return out;
   }
@@ -7379,14 +7393,15 @@ class HeatpumpFlowCard extends HTMLElement {
       const list = (id) => (id ? hist[id] || [] : []);
       const held = (entries) => { let n = -1; return (t) => { while (n + 1 < entries.length && entries[n + 1].t <= t) n++; return entries[n]?.s; }; };
       const mode = held(list(ids.mode)); const comp = held(list(ids.comp)); const valve = held(list(ids.valve));
-      const vflow = held(list(ids.vflow)); const vtank = held(list(ids.vtank));
+      const vflow = held(list(ids.vflow)); const vtank = held(list(ids.vtank)); const von = held(ids.von && hist[`${ids.von}#state`] ? hist[`${ids.von}#state`] : list(ids.von)); const vonce = held(list(ids.vonce));
       // Compressor on: the rule of the live view, so the timeline never shows heating while the heat pump block says off.
       const on = (s) => s !== undefined && hfcCompressorOn(s);
       const dhw = (s) => this._valveDhwState(s);
-      const times = [...new Set([ids.mode, ids.comp, ids.valve, ids.vflow, ids.vtank].flatMap((id) => list(id).map((e) => e.t)))].sort((a, b) => a - b);
+      const times = [...new Set([ids.mode, ids.comp, ids.valve, ids.vflow, ids.vtank, ids.von, ids.vonce].flatMap((id) => list(id).map((e) => e.t)))].sort((a, b) => a - b);
       times.forEach((t) => {
         const ms = mode(t); const cs = comp(t); const vs = valve(t); const fl = parseFloat(vflow(t)); const tk = parseFloat(vtank(t));
-        const toDhw = ids.valve ? dhw(vs) : !!ids.vflow && fl > tk;
+        const off = this._dhwOff(von(t), vonce(t));
+        const toDhw = ids.valve ? dhw(vs) : !!ids.vflow && fl > tk && !off;
         if (ids.mode) {
           if (ms === undefined) return;
           const kind = kindOfMode(ms);
@@ -8155,7 +8170,7 @@ class HeatpumpFlowCard extends HTMLElement {
     // A `valve_map` (raw state → dhw | heating) decides first, for valves that report 1 for heating or other texts.
     const valveMapped = this._has('valve') ? this._valveMapped(this._s('valve')) : undefined;
     const valveDhw = this._has('valve') ? (valveMapped ?? this._valveDhwState(this._s('valve')))
-      : this._valveByFlow() && running && this._n('flow') > this._n('dhw_top');
+      : this._valveByFlow() && running && this._n('flow') > this._n('dhw_top') && !this._dhwOff(this._s('dhw_enabled'), this._s('dhw_once'));
     // Integrations without an operating-mode entity: a running compressor means heating unless the valve says DHW.
     // Defrost wins over a stopped compressor: it pauses for about a minute while the 4-way valve switches (HeishaMon).
     // run_signal (#365): the mode decides only cooling and a lock; the valve decides hot water while the heat pump runs.
