@@ -4847,14 +4847,17 @@
       const tbox = c.shadowRoot.getElementById('timeline');
       const seg = c.shadowRoot.querySelector('#timeline .mseg'); const dot = c.shadowRoot.querySelector('#timeline .tl-legend .k-mark');
       check(getComputedStyle(seg).backgroundColor === 'rgb(239, 68, 68)' && getComputedStyle(dot).backgroundColor === 'rgb(239, 68, 68)', `a lane takes its own colour in the bar and the legend (${getComputedStyle(seg).backgroundColor})`);
-      const first = tbox.firstElementChild; const realNow = Date.now;
+      // The clock is fixed before the baseline is taken, so a minute that turns during the test cannot redraw it (Codex review).
+      const realNow = Date.now;
       const minuteStart = Math.floor(realNow() / 60000) * 60000;
       try {
         Date.now = () => minuteStart + 30000; c.hass = { ...c._hass }; await wait(10);
+        const first = tbox.firstElementChild;
         Date.now = () => minuteStart + 31000; c.hass = { ...c._hass }; await wait(10);
+        Date.now = () => minuteStart + 45000; c.hass = { ...c._hass }; await wait(10);
         const same = tbox.firstElementChild === first;
         Date.now = () => minuteStart + 91000; c.hass = { ...c._hass }; await wait(10);
-        check(same && tbox.firstElementChild !== first , `the timeline is drawn again once a minute, not on every update (${same})`);
+        check(same && tbox.firstElementChild !== first, `the timeline is drawn again once a minute, not on every update (${same})`);
       } finally { Date.now = realNow; }
     }
     c.remove();
