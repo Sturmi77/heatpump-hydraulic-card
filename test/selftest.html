@@ -7332,6 +7332,27 @@
     c = await draw({}, {}, 380, { narrow_focus: true }); const focus = vis(c); c.remove();
     c = await draw({}, {}, 900); const wide = vis(c); c.remove();
     check(auto[0] === '1' && auto[1] === '1' && !clean.length && none === '000' && keep === '111' && focus === '000' && wide === '111', `#395: priorities of the labels (auto ${auto} false ${none} true ${keep} focus ${focus} wide ${wide}; ${clean.join()})`);
+    // Codex review of #503: the backup heater value has a budget, the keyboard reaches what appears, a new font is measured again,
+    // and the target line of a fresh-water station follows the narrow settings as well.
+    c = await draw({ heater: 'sensor.inline' }, { 'sensor.inline': ['123456789', 'kW'] });
+    check(!shown(c, 't-heater-inline') && !ours(c).length, `#449: a backup heater value wider than the heat pump block is left out (${shown(c, 't-heater-inline')})`);
+    c.remove();
+    c = await draw({}, {}, 380);
+    const grp = q(c, 't-dhw-bottom').closest('[data-entity]');
+    // Within the two seconds in which an update does not refresh the keyboard order, as on the first updates of a card.
+    const upd = async () => { c._a11yAt = Date.now(); c.hass = { ...c._hass }; await wait(20); };
+    const huge = document.createElement('style'); huge.textContent = '.tank-sub { font-size: 90px !important; }';
+    c.shadowRoot.append(huge); await upd();
+    const gone = !shown(c, 't-dhw-bottom') && !grp.hasAttribute('tabindex');
+    huge.remove(); await upd();
+    check(gone && shown(c, 't-dhw-bottom') && grp.getAttribute('tabindex') !== null && /: /.test(grp.getAttribute('aria-label') || ''),
+      `#395: a font that changes without a new width or text is measured again, and the keyboard follows what appears and goes (${gone} / ${grp.getAttribute('tabindex')})`);
+    c.remove();
+    for (const [conf, want] of [[{ narrow_values: false }, ''], [{ narrow_focus: true }, '']]) {
+      c = await draw({ dhw_target: 'sensor.t1', hc_flow: 'sensor.f' }, {}, 380, { dhw_type: 'fresh_water', ...conf });
+      check(shown(c, 't-dhw-mode') === want, `#395: the target line of a fresh-water station follows ${JSON.stringify(conf)} (${shown(c, 't-dhw-mode')})`);
+      c.remove();
+    }
     // A value that grows into a neighbour goes; it comes back when there is room again.
     c = await draw({ dhw_heater: 'sensor.rod' });
     const was = shown(c, 't-heater-dhw');

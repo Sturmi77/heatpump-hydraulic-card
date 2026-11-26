@@ -4931,10 +4931,12 @@ class HeatpumpFlowCard extends HTMLElement {
     const all = [...svg.querySelectorAll('text[data-prio="room"]')];
     const narrow = parseFloat(getComputedStyle(svg).getPropertyValue('--k')) >= 1.4;
     const own = this._config.narrow_values;
-    const asked = (el) => el.textContent.trim() && (el.classList.contains('rod-val') || (narrow && own !== false && !this._narrowFocus()));
-    if (!all.some(asked)) { if (this._roomKey0) { all.forEach((el) => el.classList.remove('room')); this._roomKey0 = ''; } return; }
+    const asked = (el) => el.textContent.trim() && (el.classList.contains('rod-val') || el.classList.contains('heater-val') || (narrow && own !== false && !this._narrowFocus()));
+    if (!all.some(asked)) { if (this._roomKey0) { all.forEach((el) => el.classList.remove('room')); this._roomKey0 = ''; this._a11y(true); } return; }
     const shown = [...svg.querySelectorAll('text')];
-    const key = `${svg.clientWidth}|${narrow}|${own}|${shown.map((el) => el.textContent).join('|')}`;
+    // The fonts count as well: a theme or card-mod that changes them changes the room (Codex review).
+    const font = all.map((el) => { const cs = getComputedStyle(el); return `${cs.fontSize} ${cs.fontWeight} ${cs.fontFamily}`; }).join('|');
+    const key = `${svg.clientWidth}|${narrow}|${own}|${font}|${shown.map((el) => el.textContent).join('|')}`;
     if (this._roomKey0 === key && this._roomSvg === svg) return;
     this._roomKey0 = key; this._roomSvg = svg;
     let root; try { root = svg.getScreenCTM().inverse(); } catch (err) { return; }
@@ -4958,6 +4960,7 @@ class HeatpumpFlowCard extends HTMLElement {
       return box;
     };
     const hit = (a, b, gap) => Math.min(a.r, b.r) - Math.max(a.l, b.l) > gap && Math.min(a.b, b.b) - Math.max(a.t, b.t) > gap;
+    const before = all.filter((el) => el.classList.contains('room'));
     all.forEach((el) => el.classList.remove('room'));
     // What narrow_values keeps stands anyway and only takes its room.
     const list = all.filter((el) => asked(el) && !visible(el));
@@ -4991,6 +4994,9 @@ class HeatpumpFlowCard extends HTMLElement {
       if (at < 0) el.classList.remove('room');
       el.classList.toggle('outside', at > 0);
     });
+    // A value that appears or goes changes what the keyboard can reach (Codex review).
+    const after = all.filter((el) => el.classList.contains('room'));
+    if (after.length !== before.length || after.some((el, n) => el !== before[n])) this._a11y(true);
   }
 
   // Label whose tail (for example the humidity after the room target) the narrow focus view hides; a narrow schematic also hides
@@ -6152,7 +6158,7 @@ class HeatpumpFlowCard extends HTMLElement {
         <text class="tank-title" x="580" y="122" text-anchor="middle">${this._esc(i.fresh_water_station)}</text>
         ${this._stationArt(526, 132, 108, 80)}
         <text class="house-temp" id="t-dhw-top" x="580" y="182" text-anchor="middle"></text>
-        <text class="small" id="t-dhw-mode" x="580" y="100" text-anchor="middle"></text>
+        <text class="small" id="t-dhw-mode" x="580" y="100" text-anchor="middle" data-prio="room" data-rank="3"></text>
       </g>
       ${this._parts.circ ? `<g class="tap" ${de(this._circulationKey())}><text class="small circ" id="t-circ" x="650" y="60" data-prio="room" data-rank="5">↻ ${this._esc(i.circulation)}</text></g>` : ''}`;
   }
@@ -7643,7 +7649,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const de = `data-entity="${this._esc(this._e[key])}"`;
     if (id === 'inline') {
       return `<g class="tap heater" id="heater-${id}" ${de}><rect class="heater-box" x="230" y="266" width="46" height="30" rx="6"/>
-        <path class="heater-el" d="M236 281 l4 -8 l6 16 l6 -16 l6 16 l6 -16 l6 16 l4 -8"/><text class="unit-val heater-val" id="t-heater-inline" x="253" y="310" text-anchor="middle"></text></g>`;
+        <path class="heater-el" d="M236 281 l4 -8 l6 16 l6 -16 l6 16 l6 -16 l6 16 l4 -8"/><text class="unit-val heater-val" id="t-heater-inline" x="253" y="310" text-anchor="middle" data-prio="room" data-rank="3"></text></g>`;
     }
     // A running rod is red like the hot-water phase of the timeline, with rising heat waves like the emitters; a dark casing keeps
     // it visible in a tank of a similar colour.
@@ -8635,7 +8641,7 @@ HeatpumpFlowCard.styles = `
   .heater.on .heater-el { stroke: ${hfcVar('heat')}; filter: url(#glow); }
   .heater.on.stage2 .heater-el { stroke: ${hfcVar('hot')}; }
   .rod-val { font-size: calc(13px * var(--k2, 1)); font-weight: 600; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.45); stroke-width: 3px; }
-  .rod-val:not(.room) { display: none; }
+  .rod-val:not(.room), .heater-val:not(.room) { display: none; }
   .rod-val.outside { fill: var(--hfc-muted); stroke: var(--card-background-color, #fff); }
   .heater-val { font-size: 12px; }
   .heater.rod.on .heater-el, .rod-waves .wave { stroke: ${hfcVar('hot')}; } .rod-waves .wave { stroke-width: 2; }
