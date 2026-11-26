@@ -127,15 +127,15 @@ const emsStates = (s) => ({
   'sensor.ems_esp_boiler_uptimecontrol': { state: '312450', attributes: { unit_of_measurement: 'min', state_class: 'total_increasing' } },
 });
 const emsStatistics = {
-  'sensor.ems_esp_boiler_nrgconscompheating': { today: 9.6, yesterday: 12.1, week: 58.3, month: 210.4, year: 1890.7 },
-  'sensor.ems_esp_boiler_nrgsuppheating': { today: 38.9, yesterday: 47.2, week: 231.0, month: 812.0, year: 7610.3 },
-  'sensor.ems_esp_boiler_totalcompstarts': { today: 4, yesterday: 6, week: 31, month: 118, year: 1102 },
-  'sensor.ems_esp_boiler_uptimecontrol': { today: 610, yesterday: 790, week: 3950, month: 14200, year: 131000 },
+  'sensor.ems_esp_boiler_nrgconscompheating': { today: 9.6, yesterday: 12.1, week: 58.3, month: 210.4, last_month: 305.8, year: 1890.7 },
+  'sensor.ems_esp_boiler_nrgsuppheating': { today: 38.9, yesterday: 47.2, week: 231.0, month: 812.0, last_month: 1204.5, year: 7610.3 },
+  'sensor.ems_esp_boiler_totalcompstarts': { today: 4, yesterday: 6, week: 31, month: 118, last_month: 164, year: 1102 },
+  'sensor.ems_esp_boiler_uptimecontrol': { today: 610, yesterday: 790, week: 3950, month: 14200, last_month: 19800, year: 131000 },
 };
 // Simulated long-term statistics: change of a total counter per calendar period (recorder/statistic_during_period).
 const statChange = (setup, msg) => {
   const c = msg.calendar || {};
-  const v = setup.statistics?.[msg.statistic_id]?.[c.period === 'day' ? (c.offset ? 'yesterday' : 'today') : c.period];
+  const v = setup.statistics?.[msg.statistic_id]?.[c.period === 'day' ? (c.offset ? 'yesterday' : 'today') : c.period === 'month' && c.offset ? 'last_month' : c.period];
   return v === undefined ? Promise.reject(new Error('no statistics')) : Promise.resolve({ change: v });
 };
 // Simulated history (compact format of the history API, seconds): one day of operating modes, ending in heating.
@@ -1130,6 +1130,28 @@ setups.push({
     preset: 'thz', title: 'LWZ', buffer: false,
     tiles: ['cop_heating:today', 'cop_dhw:today', 'energy_heating:today', 'energy_dhw:today', 'heat_heating:total', 'hc_pressure'],
   },
+});
+
+// NIBE F470 (#253): exhaust air heat pump with the condenser in the water jacket of the tank. Ids of the integration, synthetic values.
+const nibeStates = (s) => {
+  const v = (heat, dhw, defrost, idle) => ({ heat, dhw, defrost, idle }[s]);
+  return {
+    'sensor.prio_43086': v('HEAT', 'HOT WATER', 'HEAT', 'OFF'), 'sensor.compressor_state_ep14_43427': s === 'idle' ? 'STOPPED' : 'RUNNING',
+    'sensor.supply_pump_state_ep14_43431': 'ON', 'sensor.bt1_outdoor_temperature_40004': ['1.8', '°C'],
+    'sensor.bt2_supply_temp_s1_40008': [v('30.4', '28.6', '29.1', '26.0'), '°C'], 'sensor.eb100_ep14_bt3_return_temp_40012': [v('26.2', '25.9', '25.8', '24.8'), '°C'],
+    'sensor.bt7_hw_top_40013': [v('54.4', '51.8', '54.0', '53.2'), '°C'], 'sensor.bt6_hw_load_40014': [v('45.7', '42.9', '45.1', '44.6'), '°C'],
+    'sensor.eb100_bt16_evaporator_temp_40020': [v('0.6', '1.1', '4.8', '14.2'), '°C'], 'sensor.bt20_exhaust_air_temp_1_40025': ['22.5', '°C'],
+    'sensor.bt21_vented_air_temp_1_40026': [v('2.4', '2.9', '9.5', '20.1'), '°C'], 'sensor.bt50_room_temp_s1_40033': ['21.6', '°C'],
+    'sensor.calc_supply_s1_43009': ['31.0', '°C'], 'sensor.int_el_add_power_43084': [v('0.0', '2.0', '0.0', '0.0'), 'kW'],
+    'sensor.alarm_45001': v('0', '0', '183', '162'), 'select.holiday_activated_48043': 'INACTIVE',
+  };
+};
+setups.push({
+  name: 'NIBE F470', sub: 'NIBE Heat Pump: exhaust air as the source, condenser in the storage, no water line from the heat pump',
+  states: nibeStates,
+  registry: Object.fromEntries(Object.keys(nibeStates('heat')).map((id) => [id, { platform: 'nibe_heatpump', device_id: 'device-demo-nibe' }])),
+  devices: { 'device-demo-nibe': { manufacturer: 'NIBE Energy Systems', model: 'F470 R 3x400V', name: 'F470' } },
+  config: { preset: 'nibe', title: 'NIBE F470', hc_type: 'underfloor', power_sources: 'manual' },
 });
 
 const scenarios = [['heat', 'Heating'], ['dhw', 'Hot water'], ['defrost', 'Defrost'], ['idle', 'Standby + error']];
