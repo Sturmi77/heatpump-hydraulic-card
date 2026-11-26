@@ -7628,6 +7628,22 @@
     check(selectedOnly.e.dhw_target === 'number.boiler_dhw_seltemp', `EMS-ESP: without settemp the selected temperature stays the target (${selectedOnly.e.dhw_target})`);
   }
 
+  // 25. #506: a defrost entity turns running periods of the timeline into defrost, as the schematic does, also where the mode or the
+  // compressor phase stays on heating while the unit defrosts (Vitocal 250-A with ViCare).
+  {
+    const M = 60000;
+    const card = mount({ entities: { mode: 'sensor.ph', compressor: 'binary_sensor.c', defrost: 'binary_sensor.d', flow: 'sensor.f', return: 'sensor.r' } },
+      hassOf(toStates({ 'sensor.ph': 'heating', 'binary_sensor.c': 'on', 'binary_sensor.d': 'off', 'sensor.f': ['40', '°C'], 'sensor.r': ['36', '°C'] }))); await wait(20);
+    const ids = card._timelineIds();
+    const hist = { 'sensor.ph': [{ t: 0, s: 'heating' }, { t: 60 * M, s: 'standby' }], 'binary_sensor.c': [{ t: 0, s: 'on' }, { t: 60 * M, s: 'off' }],
+      'binary_sensor.d': [{ t: 0, s: 'off' }, { t: 20 * M, s: 'on' }, { t: 23 * M, s: 'off' }, { t: 70 * M, s: 'on' }, { t: 72 * M, s: 'unavailable' }] };
+    const segs = card._timelineSegments(hist, ids, 0, 90 * M).map((x) => `${x.kind}:${x.from / M}-${x.to / M}`).join(' ');
+    check(ids.thaw === 'binary_sensor.d' && segs === 'heat:0-20 defrost:20-23 heat:23-60 idle:60-90', `#506: the defrost entity marks the defrost in the timeline, not while idle (${segs})`);
+    const plain = card._timelineSegments({ ...hist, 'binary_sensor.d': [] }, ids, 0, 90 * M).map((x) => x.kind).join();
+    check(plain === 'heat,idle', `#506: without recorded defrosts the timeline is unchanged (${plain})`);
+    card.remove();
+  }
+
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');
   document.getElementById('result').textContent = fails.length ? 'FAIL' : 'PASS';

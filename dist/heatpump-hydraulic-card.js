@@ -7074,7 +7074,9 @@ class HeatpumpFlowCard extends HTMLElement {
       return { ...(base || {}), ...(base ? cycle : {}), ...overlays, sig: this._runSignalIds(signal),
         valve: this._has('valve') ? this._e.valve : (base?.valve ?? null), thaw: this._has('defrost') ? this._e.defrost : null };
     }
-    return base ? { ...base, ...cycle, ...overlays } : null;
+    // A defrost entity turns a running period into defrost, as in the schematic: units whose mode or compressor phase stays on
+    // heating while they defrost (ViCare, #506).
+    return base ? { ...base, ...cycle, ...overlays, ...(this._has('defrost') ? { thaw: this._e.defrost } : {}) } : null;
   }
 
   // A valve state that means hot water: `valve_map` first, else an on-state (on, true, open, 1, ein) or a text such as Tank or
@@ -7284,6 +7286,34 @@ class HeatpumpFlowCard extends HTMLElement {
     return out;
   }
 
+  // While the defrost entity is on, a running period (heating, hot water, cooling) is defrost, as the schematic shows it (#506).
+  _timelineThaw(segs, list, start, end) {
+    const on = [];
+    list.forEach((e, n) => {
+      if (!hfcCompressorOn(e.s)) return;
+      const from = Math.max(e.t, start); const to = Math.min(list[n + 1] ? list[n + 1].t : end, end);
+      if (to > from) on.push({ from, to });
+    });
+    if (!on.length) return segs;
+    const out = [];
+    const add = (kind, raw, from, to) => {
+      const last = out[out.length - 1];
+      if (last && last.kind === kind && last.to === from) last.to = to; else out.push({ kind, raw, from, to });
+    };
+    segs.forEach((seg) => {
+      if (!['heat', 'dhw', 'cool'].includes(seg.kind)) { add(seg.kind, seg.raw, seg.from, seg.to); return; }
+      let at = seg.from;
+      on.forEach((d) => {
+        const from = Math.max(d.from, at); const to = Math.min(d.to, seg.to);
+        if (to <= from) return;
+        if (from > at) add(seg.kind, seg.raw, at, from);
+        add('defrost', seg.raw, from, to); at = to;
+      });
+      if (at < seg.to) add(seg.kind, seg.raw, at, seg.to);
+    });
+    return out;
+  }
+
   // SG-Ready overrides the displayed operating kind while a grid instruction is active. Normal operation and states that are not
   // in sg_ready_map leave the operating timeline unchanged; unknown history therefore never looks like a lock or forced run.
   _timelineSg(segs, list, start, end) {
@@ -7427,7 +7457,8 @@ class HeatpumpFlowCard extends HTMLElement {
       const last = segs[segs.length - 1];
       if (last && last.kind === p.kind && last.to === from) last.to = to; else segs.push({ kind: p.kind, raw: p.raw, from, to });
     });
-    let out = ids.pv ? this._timelinePv(segs, hist[ids.pv] || [], start, end) : segs;
+    let out = ids.thaw && !signal.length ? this._timelineThaw(segs, hist[ids.thaw] || [], start, end) : segs;
+    if (ids.pv) out = this._timelinePv(out, hist[ids.pv] || [], start, end);
     if (ids.sg) out = this._timelineSg(out, hist[ids.sg] || [], start, end);
     return out;
   }
