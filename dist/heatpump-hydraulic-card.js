@@ -4420,10 +4420,12 @@ class HeatpumpFlowCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    // A standing pipe is its colour faded into the card. On a light card 22 % almost disappears, so it keeps more colour there;
-    // with theme: auto the card follows the dark mode Home Assistant reports, night and contrast set their own value below.
-    // A theme can still set --hfc-idle-mix itself.
-    if (hass?.themes && typeof hass.themes.darkMode === 'boolean') this.style.setProperty('--hfc-idle-auto', hass.themes.darkMode ? '22%' : '32%');
+    // A standing pipe is its colour faded into the card: 32 % on a light card, 35 % on a dark one, 22 % while Home Assistant reports
+    // no dark mode. With theme: auto the card follows that dark mode; night and contrast set their own value below. A theme can
+    // still set --hfc-idle-mix itself.
+    const dark = hass?.themes?.darkMode;
+    const idle = typeof dark === 'boolean' ? (dark ? '35%' : '32%') : '';
+    if (idle && idle !== this._idleAuto) { this._idleAuto = idle; this.style.setProperty('--hfc-idle-auto', idle); }
     this._renderRoot();
     if (!this._config) return;
     HeatpumpFlowCard._loadPresetRegistry(this, () => {
@@ -8750,7 +8752,7 @@ HeatpumpFlowCard.styles = `
     --hfc-grid: #333; --hfc-good: #006b28; --hfc-badge: #5d2483; --hfc-brine: #0057b8; --hfc-ground: #664000;
     --hfc-flow-cold: #b84f00; --hfc-flow-hot: #a40000; --hfc-return-cold: #00749a; --hfc-return-hot: #003f9e;
     --hfc-tank-cold: #003f9e; --hfc-tank-cool: #006b8f; --hfc-tank-warm: #b84f00; --hfc-tank-hot: #a40000; --hfc-flow-dash: #fff; }
-  .theme-night { --hfc-idle-auto: 22%; } .theme-contrast { --hfc-idle-auto: 32%; }
+  .theme-night { --hfc-idle-auto: 35%; } .theme-contrast { --hfc-idle-auto: 32%; }
   .theme-contrast .pipe { stroke-width: 11; } .theme-contrast .unit, .theme-contrast .tank, .theme-contrast .house,
   .theme-contrast .src-ring, .theme-contrast .pump { stroke-width: 3; }
   .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 0 4px 4px; }
