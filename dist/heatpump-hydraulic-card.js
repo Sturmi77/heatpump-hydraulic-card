@@ -4420,6 +4420,10 @@ class HeatpumpFlowCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    // A standing pipe is its colour faded into the card. On a light card 22 % almost disappears, so it keeps more colour there;
+    // with theme: auto the card follows the dark mode Home Assistant reports, night and contrast set their own value below.
+    // A theme can still set --hfc-idle-mix itself.
+    if (hass?.themes && typeof hass.themes.darkMode === 'boolean') this.style.setProperty('--hfc-idle-auto', hass.themes.darkMode ? '22%' : '32%');
     this._renderRoot();
     if (!this._config) return;
     HeatpumpFlowCard._loadPresetRegistry(this, () => {
@@ -8746,6 +8750,7 @@ HeatpumpFlowCard.styles = `
     --hfc-grid: #333; --hfc-good: #006b28; --hfc-badge: #5d2483; --hfc-brine: #0057b8; --hfc-ground: #664000;
     --hfc-flow-cold: #b84f00; --hfc-flow-hot: #a40000; --hfc-return-cold: #00749a; --hfc-return-hot: #003f9e;
     --hfc-tank-cold: #003f9e; --hfc-tank-cool: #006b8f; --hfc-tank-warm: #b84f00; --hfc-tank-hot: #a40000; --hfc-flow-dash: #fff; }
+  .theme-night { --hfc-idle-auto: 22%; } .theme-contrast { --hfc-idle-auto: 32%; }
   .theme-contrast .pipe { stroke-width: 11; } .theme-contrast .unit, .theme-contrast .tank, .theme-contrast .house,
   .theme-contrast .src-ring, .theme-contrast .pump { stroke-width: 3; }
   .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 0 4px 4px; }
@@ -8817,7 +8822,7 @@ HeatpumpFlowCard.styles = `
   .vapour.on .vapour-puff { animation: hfc-vapour var(--hfc-vapour, 2.2s) ease-out infinite; transform-box: fill-box; transform-origin: center bottom; }
   .vapour.on .vapour-puff:nth-child(2) { animation-delay: .45s; } .vapour.on .vapour-puff:nth-child(3) { animation-delay: .9s; }
   /* idle pipes are a solid pale tint, not transparent, so round caps that overlap at a junction do not show as dots */
-  .pipe { fill: none; stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; stroke: color-mix(in srgb, var(--pc, var(--hfc-muted)) 22%, var(--card-background-color, #fff)); transition: stroke .5s; }
+  .pipe { fill: none; stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; stroke: color-mix(in srgb, var(--pc, var(--hfc-muted)) var(--hfc-idle-mix, var(--hfc-idle-auto, 22%)), var(--card-background-color, #fff)); transition: stroke .5s; }
   .pipe.on { stroke: var(--pc, var(--hfc-muted)); }
   .flow { fill: none; stroke: ${hfcVar('flow-dash')}; stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 3 17; opacity: 0; pointer-events: none; }
   .flow.on { opacity: 1; animation: hfc-dash 1s linear infinite; }

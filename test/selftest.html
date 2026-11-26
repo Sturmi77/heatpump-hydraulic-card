@@ -7580,6 +7580,37 @@
     check(selectedOnly.e.dhw_target === 'number.boiler_dhw_seltemp', `EMS-ESP: without settemp the selected temperature stays the target (${selectedOnly.e.dhw_target})`);
   }
 
+  // 24. standing pipes: 22 % of their colour on a dark card, 32 % on a light one; theme night and contrast decide on their own (#501)
+  {
+    const s = setups.find((x) => x.name === 'Vaillant aroTHERM plus') || setups[0];
+    const idlePipe = async (cfg, darkMode, style = {}) => {
+      const hass = { ...hassOf(toStates(s.states('idle')), s.registry || {}, null, s), themes: darkMode === undefined ? undefined : { darkMode } };
+      const c = mount({ ...s.config, ...cfg }, hass); Object.entries(style).forEach(([k, v]) => c.style.setProperty(k, v)); await wait(20);
+      const pipe = [...c.shadowRoot.querySelectorAll('path.pipe')].find((p) => !p.classList.contains('on'));
+      pipe.style.transition = 'none';
+      // the same mix at a fixed share, drawn beside the pipe with its colour, as the reference
+      const at = (pct) => {
+        const probe = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        probe.setAttribute('d', 'M0 0 H1'); probe.style.cssText = `${pipe.style.cssText};transition:none;stroke:color-mix(in srgb, var(--pc, var(--hfc-muted)) ${pct}, var(--card-background-color, #fff))`;
+        pipe.parentNode.appendChild(probe); const v = getComputedStyle(probe).stroke; probe.remove(); return v;
+      };
+      const out = { stroke: getComputedStyle(pipe).stroke, p22: at('22%'), p32: at('32%'), p50: at('50%') };
+      c.remove(); return out;
+    };
+    let o = await idlePipe({}, false);
+    check(o.stroke === o.p32 && o.p32 !== o.p22, `theme auto on a light Home Assistant theme: standing pipes at 32 % (${JSON.stringify(o)})`);
+    o = await idlePipe({}, true);
+    check(o.stroke === o.p22, `theme auto on a dark Home Assistant theme: standing pipes stay at 22 % (${JSON.stringify(o)})`);
+    o = await idlePipe({}, undefined);
+    check(o.stroke === o.p22, `without a reported dark mode the pipes keep 22 % (${JSON.stringify(o)})`);
+    o = await idlePipe({ theme: 'night' }, false);
+    check(o.stroke === o.p22, `theme night on a light dashboard uses the dark value (${JSON.stringify(o)})`);
+    o = await idlePipe({ theme: 'contrast' }, true);
+    check(o.stroke === o.p32, `theme contrast on a dark dashboard uses the light value (${JSON.stringify(o)})`);
+    o = await idlePipe({}, false, { '--hfc-idle-mix': '50%' });
+    check(o.stroke === o.p50, `--hfc-idle-mix from a theme wins over both defaults (${JSON.stringify(o)})`);
+  }
+
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');
   document.getElementById('result').textContent = fails.length ? 'FAIL' : 'PASS';
