@@ -4234,6 +4234,33 @@
     r = resolve(base, { preset: 'vaillant', prefix: 'home' });
     check(r.ready && r.entities.mode === 'sensor.home_energy_manager_state_2', 'with the prefix set by hand the numbered entity is found, too');
 
+    // #502: an aroTHERM pro hybrid re-added to myPyllant. Home-level entities carry the account prefix, the rest the home name;
+    // device 0 is the hydraulic station (efficiency 1.0), device 1 the heat pump, device 2 the gas boiler.
+    const hybrid = {
+      'sensor.acc_energy_manager_state': 'HEATING', 'sensor.acc_outdoor_temperature': ['0.1', '°C'], 'sensor.acc_system_water_pressure': ['1.9', 'bar'],
+      'sensor.acc_domestic_hot_water_0_tank_temperature': ['55.5', '°C'], 'sensor.acc_domestic_hot_water_0_setpoint': ['55.0', '°C'],
+      'sensor.acc_device_0_heating_device_heating_energy_efficiency': '1.0', 'sensor.acc_device_1_heating_device_heating_energy_efficiency': '3.3',
+      'sensor.acc_device_2_ecotec_plus_heating_energy_efficiency': '0.0', 'sensor.haus_heating_energy_efficiency': '3.2',
+      'sensor.haus_circuit_0_current_flow_temperature': ['26.5', '°C'], 'sensor.haus_circuit_0_flow_temperature_setpoint': ['21.9', '°C'], 'sensor.haus_circuit_0_state': 'HEATING',
+      'sensor.haus_zone_1_circuit_0_current_temperature': ['22.7', '°C'], 'sensor.haus_zone_1_circuit_0_desired_temperature': ['9.0', '°C'],
+      'sensor.haus_device_0_heating_device_consumed_electrical_energy_heating': ['0.0', 'Wh'], 'sensor.haus_device_1_heating_device_consumed_electrical_energy_heating': ['18300.0', 'Wh'],
+      'sensor.haus_device_1_heating_device_heat_generated_heating': ['51600.0', 'Wh'], 'sensor.haus_device_2_ecotec_plus_consumed_primary_energy_heating': ['0.0', 'Wh'],
+    };
+    r = resolve(hybrid); e = r.entities;
+    check(r.prefix === 'acc' && e.cop_heating_today === 'sensor.haus_heating_energy_efficiency', `#502: the COP of the system, not that of the hydraulic station (${e.cop_heating_today})`);
+    check(e.hc_flow === 'sensor.haus_circuit_0_current_flow_temperature' && e.hc_mode === 'sensor.haus_circuit_0_state' && e.room === 'sensor.haus_zone_1_circuit_0_current_temperature'
+      && e.room_target === 'sensor.haus_zone_1_circuit_0_desired_temperature' && e.dhw_top === 'sensor.acc_domestic_hot_water_0_tank_temperature',
+    `#502: circuit and zone under the home name next to the home-level entities under the account (${e.hc_flow} / ${e.room})`);
+    check(r.tiles.energy_heating?.today === 'sensor.haus_device_1_heating_device_consumed_electrical_energy_heating' && r.tiles.heat_heating?.today === 'sensor.haus_device_1_heating_device_heat_generated_heating',
+      `#502: the daily energy of the heat pump, not of the station or the boiler (${r.tiles.energy_heating?.today})`);
+    e = resolve({ 'sensor.acc_energy_manager_state': 'HEATING', 'sensor.next_system_flow_temperature': ['30', '°C'], 'sensor.next_circuit_0_current_flow_temperature': ['29', '°C'] }, { preset: 'vaillant', prefix: 'acc' }).entities;
+    check(e.hc_flow === 'sensor.acc_circuit_0_current_flow_temperature', `#502: with two homes the other prefix is the other home, not a second prefix (${e.hc_flow})`);
+    const { 'sensor.haus_heating_energy_efficiency': _sys, ...noSystem } = hybrid;
+    e = resolve(noSystem).entities;
+    check(e.cop_heating_today === 'sensor.acc_device_1_heating_device_heating_energy_efficiency', `#502: without the system value the heat pump is the device with the highest efficiency (${e.cop_heating_today})`);
+    e = resolve({ ...base, 'sensor.home_device_0_heating_device_heating_energy_efficiency': '1.0', 'sensor.home_device_1_arotherm_heating_energy_efficiency': '3.6' }).entities;
+    check(e.cop_heating_today === 'sensor.home_device_1_arotherm_heating_energy_efficiency' && e.hc_flow === 'sensor.home_circuit_0_current_flow_temperature', `#502: one prefix as before (${e.cop_heating_today})`);
+
     // Device counters and water pressure (#120): the heat pump is the device with a power sensor, the hydraulic station's
     // counters are its backup heater; the ids of the installation in #120 (station listed first).
     const counters = {

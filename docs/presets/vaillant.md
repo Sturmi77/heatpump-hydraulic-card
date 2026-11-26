@@ -20,9 +20,10 @@ What you get:
 - DHW tank and buffer
 - circuit 0 flow, setpoint and state
 - zone room temperature and target; without zone sensors the zone thermostat (`climate.<home>_zone_…`) serves as room temperature and target
-- device power and heating efficiency
+- device power and heating efficiency: the value of the system (`<home>_heating_energy_efficiency`), else that of the heat pump; the hydraulic station (1.0) and a gas boiler of a hybrid are not taken (#502)
+- an installation with two prefixes in one home (home-level entities under the account, circuits, zones and devices under the home name, seen after re-adding the integration, #502): with a single home the card also finds the entities under the other prefix; with several homes it keeps to the selected one
 - system water pressure as heating pressure
-- operating hours and on/off cycles of the heat pump (`<home> Device <n> <product> Operation Time`, `… On/Off Cycles`; the device that reports its power, else the first device that is not the hydraulic station) for the details and the hours and starts tiles
+- operating hours and on/off cycles of the heat pump (`<home> Device <n> <product> Operation Time`, `… On/Off Cycles`; the device that reports its power, else the device with the highest heating efficiency) for the details and the hours and starts tiles
 - the hydraulic station's operating hours and on/off cycles as the backup heater (aux hours and starts); on the installation that reported them they matched the heater (1.5 h against 4,165 h of the compressor)
 - trouble codes
 

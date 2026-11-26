@@ -616,35 +616,53 @@ const HFC_PRESETS = {
     // that reports its power, else the first device that is not the hydraulic station. The station's counters count its
     // backup heater: 1.5 h against 4165 h of the compressor on the installation in #120.
     counters: (p, ctx) => {
-      const m = (re) => ctx.match(re, 'mypyllant');
-      const power = m(new RegExp(`^sensor\\.${p}_device_\\d+_(?!hydraulic_station)[^.]*_current_power(?:_\\d+)?$`));
-      const hp = power ? power.match(/_device_(\d+)_/)[1] : '\\d+';
-      const device = (name) => m(new RegExp(`^sensor\\.${p}_device_${hp}_(?!hydraulic_station)[^.]*_${name}(?:_\\d+)?$`));
-      const station = (name) => m(new RegExp(`^sensor\\.${p}_device_\\d+_hydraulic_station_${name}(?:_\\d+)?$`));
+      const find = HFC_PRESETS.vaillant.find(p, ctx);
+      const hp = HFC_PRESETS.vaillant.hpDevice(p, ctx) ?? '\\d+';
+      const device = (name) => find('sensor', `device_${hp}_(?!hydraulic_station)[^.]*_${name}`);
+      const station = (name) => find('sensor', `device_\\d+_hydraulic_station_${name}`);
       return { hours: device('operation_time'), starts: device('on_off_cycles'), aux_hours: station('operation_time'), aux_starts: station('on_off_cycles') };
+    },
+    // The first myPyllant entity of that name with the home's prefix, else with any prefix: an installation re-added after a heat
+    // pump was installed has the home-level entities under the account and the rest under the home name (#502).
+    // Only with one home: with several, another prefix is another home.
+    find: (p, ctx) => (domain, rest) => {
+      const m = (pre) => ctx.match(new RegExp(`^${domain}\\.${pre}_${rest}(?:_\\d+)?$`), 'mypyllant');
+      const homes = new Set(ctx.ids.filter((id) => (!ctx.registry[id] || ctx.registry[id].platform === 'mypyllant'))
+        .map((id) => id.match(/^sensor\.(.+)_(?:energy_manager_state|system_flow_temperature)(?:_\d+)?$/)?.[1]).filter(Boolean));
+      return m(p) || (homes.size <= 1 ? m('[^.]+') : undefined);
+    },
+    // Number of the heat pump among the devices: the one that reports its power, else the one with the highest heating efficiency.
+    // The hydraulic station's backup heater reads 1.0 and a gas boiler (hybrid, #502) less; the numbers move when a device is added.
+    hpDevice: (p, ctx) => {
+      const power = HFC_PRESETS.vaillant.find(p, ctx)('sensor', 'device_\\d+_(?!hydraulic_station)[^.]*_current_power');
+      if (power) return power.match(/_device_(\d+)_/)[1];
+      const best = ctx.ids.filter((id) => /^sensor\.[^.]+_device_\d+_[^.]*_heating_energy_efficiency(?:_\d+)?$/.test(id) && (!ctx.registry[id] || ctx.registry[id].platform === 'mypyllant'))
+        .map((id) => [id.match(/_device_(\d+)_/)[1], parseFloat(ctx.state(id))]).filter(([, v]) => Number.isFinite(v)).sort((a, b) => b[1] - a[1])[0];
+      return best && best[1] > 1 ? best[0] : undefined;
     },
     entities: (p, i, ctx) => {
       const counters = HFC_PRESETS.vaillant.counters(p, ctx);
       const m = (re) => ctx.match(re, 'mypyllant');
-      // The exact id first; if it does not exist, the entity of that name that carries a number (_2).
+      const find = HFC_PRESETS.vaillant.find(p, ctx);
+      const hp = HFC_PRESETS.vaillant.hpDevice(p, ctx);
+      // The exact id first; if it does not exist, the entity of that name that carries a number (_2), then one with another prefix.
       const e = (name) => {
         const exact = `sensor.${p}_${name}`;
-        return ctx.state(exact) !== undefined ? exact : (m(new RegExp(`^sensor\\.${p}_${name}_\\d+$`)) || exact);
+        return ctx.state(exact) !== undefined ? exact : (m(new RegExp(`^sensor\\.${p}_${name}_\\d+$`)) || find('sensor', name) || exact);
       };
       // A myPyllant zone names the circuit it belongs to (`zone_2_circuit_1_…`). Bind every room to that circuit instead
       // of taking the first zone of the home. Older integrations without the circuit part remain the fallback for circuit 0.
-      const zoneSensor = (suffix) => m(new RegExp(`^sensor\\.${p}_zone_.+_circuit_${i.hc}_${suffix}(?:_\\d+)?$`))
-        || (i.hc === 0 ? m(new RegExp(`^sensor\\.${p}_zone_.+_${suffix}(?:_\\d+)?$`)) : undefined);
-      const zoneClimate = m(new RegExp(`^climate\\.${p}_zone_.+_circuit_${i.hc}(?:_climate)?(?:_\\d+)?$`))
-        || (i.hc === 0 ? m(new RegExp(`^climate\\.${p}_zone_[^.]+$`)) : undefined);
+      const zoneSensor = (suffix) => find('sensor', `zone_.+_circuit_${i.hc}_${suffix}`)
+        || (i.hc === 0 ? find('sensor', `zone_.+_${suffix}`) : undefined);
+      const zoneClimate = find('climate', `zone_.+_circuit_${i.hc}(?:_climate)?`)
+        || (i.hc === 0 ? m(new RegExp(`^climate\\.${p}_zone_[^.]+$`)) || m(/^climate\.[^.]+_zone_[^.]+$/) : undefined);
       return {
         mode: e('energy_manager_state'),
         flow: e('system_flow_temperature'),
         outdoor: e('outdoor_temperature'),
         // The heat pump's power, not the hydraulic station's (a few W for its electronics and pumps), which myPyllant may list
         // first on a split unit (forum, 8 November); the station alone stays the fallback.
-        power: m(new RegExp(`^sensor\\.${p}_device_\\d+_(?!hydraulic_station)[^.]*_current_power(?:_\\d+)?$`))
-          || m(new RegExp(`^sensor\\.${p}_device_\\d+.*_current_power(?:_\\d+)?$`)),
+        power: find('sensor', 'device_\\d+_(?!hydraulic_station)[^.]*_current_power') || find('sensor', 'device_\\d+.*_current_power'),
         dhw_top: [e(`domestic_hot_water_${i.dhw}_tank_temperature`), e('top_dhw_cylinder_temperature')],
         dhw_bottom: e('bottom_dhw_cylinder_temperature'),
         dhw_target: e(`domestic_hot_water_${i.dhw}_setpoint`),
@@ -657,7 +675,10 @@ const HFC_PRESETS = {
         room: [zoneSensor('current_temperature'), zoneClimate],
         room_target: [zoneSensor('desired_temperature'), zoneClimate],
         program: zoneSensor('current_special_function'),
-        cop_heating_today: m(new RegExp(`^sensor\\.${p}.*_heating_energy_efficiency(?:_\\d+)?$`)),
+        // The value of the system, else that of the heat pump: not the first device, which may be the hydraulic station (1.0) or a
+        // gas boiler (#502).
+        cop_heating_today: m(new RegExp(`^sensor\\.${p}_heating_energy_efficiency(?:_\\d+)?$`)) || m(/^sensor\.(?![^.]*_device_\d+_)[^.]+_heating_energy_efficiency(?:_\d+)?$/)
+          || (hp !== undefined ? find('sensor', `device_${hp}_[^.]*_heating_energy_efficiency`) : m(new RegExp(`^sensor\\.${p}.*_heating_energy_efficiency(?:_\\d+)?$`))),
         hc_pressure: e('system_water_pressure'),
         hours: counters.hours,
         starts_total: counters.starts,
@@ -668,8 +689,9 @@ const HFC_PRESETS = {
     // Daily energy per device and mode ("Consumed Electrical Energy Heating", "Heat Generated Domestic Hot Water" …), of the
     // heat pump before the hydraulic station, as for `power`.
     tiles: (p, i, ctx) => {
-      const d = (suffix) => ctx.match(new RegExp(`^sensor\\.${p}_device_\\d+_(?!hydraulic_station)[^.]*_${suffix}(?:_\\d+)?$`), 'mypyllant')
-        || ctx.match(new RegExp(`^sensor\\.${p}_device_\\d+.*_${suffix}(?:_\\d+)?$`), 'mypyllant');
+      const find = HFC_PRESETS.vaillant.find(p, ctx);
+      const hp = HFC_PRESETS.vaillant.hpDevice(p, ctx) ?? '\\d+';
+      const d = (suffix) => find('sensor', `device_${hp}_(?!hydraulic_station)[^.]*_${suffix}`) || find('sensor', `device_\\d+.*_${suffix}`);
       const counters = HFC_PRESETS.vaillant.counters(p, ctx);
       return {
         energy_heating: { today: d('consumed_electrical_energy_heating') }, energy_dhw: { today: d('consumed_electrical_energy_domestic_hot_water') },
