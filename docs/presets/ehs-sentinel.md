@@ -12,7 +12,7 @@ For Samsung EHS heat pumps read over the F1/F2 (NASA) bus with an RS485 bridge a
 
 EHS Sentinel names every entity after its NASA message: the prefix (`ENUM_`, `LVAR_`, `NASA_`, `VAR_`) is dropped and the rest written in camel case, so `NASA_INDOOR_WATER_OUT_TEMP` becomes `indoorWaterOutTemp`. The entity id adds the device, which is the instance name of the integration (`Samsung EHSSentinel` by default): `sensor.samsung_ehssentinel_indoorwaterouttemp`. The names stay English in every Home Assistant language. The preset finds the prefix from the water outlet temperature together with the compressor status on platform `ehs_sentinel`, so another instance name works as well. With write mode on, writable messages (DHW target, water outlet target, outing mode) become number or switch entities; the preset takes either.
 
-The preset is built from the integration's NASA repository (v2.2.2) and the entity list and cross-match of an installation (#403). It is not marked as tested until that installation confirms it.
+The preset is built from the integration's NASA repository (v2.2.2) and the entity list and cross-match of an installation (#403). The reporter confirmed it on that installation with 0.20.0-beta.1.
 
 What you get:
 - water outlet and return (0x4238, 0x4236), flow rate (0x42E9, l/min), outdoor temperature (0x8204)

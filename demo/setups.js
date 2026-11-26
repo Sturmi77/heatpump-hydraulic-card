@@ -1061,4 +1061,97 @@ setups.push({
   });
 });
 
+// Stiebel Eltron LWZ / Tecalor THZ on the serial interface (integration thz), resolved via translation_key: the keys of the integration
+// in the German default id style, synthetic values. One pump in front of the diverter valve, no buffer, the hot-water sensor low in
+// the tank. The heat stage control reads 2 (heat pump) while the compressor runs; hot water shows booster stage 1 (3).
+const thzIds = {
+  sensor: {
+    outside_temp: 'aussentemperatur', flow_temp: 'vorlauftemperatur', return_temp: 'rucklauftemperatur', dhw_temp: 'warmwassertemperatur',
+    dhw_set_temp: 'warmwasser_solltemperatur', heat_temp: 'heizkreis_isttemperatur', heat_set_temp: 'heizkreis_solltemperatur',
+    inside_temp_rc: 'raumtemperatur_fernbedienung', room_set_temp: 'raum_solltemperatur', rel_humidity: 'relative_luftfeuchte',
+    actual_power_pel: 'elektrische_leistung', actual_power_qc: 'thermische_leistung', flow_rate: 'volumenstrom', pressure_hc: 'heizkreisdruck',
+    hotgas_temp: 'heissgastemperatur', evaporator_temp: 'verdampfertemperatur', condenser_temp: 'verflussigertemperatur',
+    pressure_hd: 'hochdruck', pressure_nd: 'niederdruck', heating_rel_power: 'heizung_relative_leistung',
+    main_ventilator_speed: 'hauptventilator_drehzahl', heat_stage_control_modul: 'heizstufensteuerung', dhw_op_mode: 'warmwasser_betriebsmodus',
+    daily_cop_hc: 'taglicher_cop_heizung', daily_cop_dhw: 'taglicher_cop_warmwasser', daily_cop_total: 'cop_tag_gesamt', lifetime_cop_total: 'cop_lebensdauer_gesamt',
+    electr_hc_day: 'strom_heizen_tag', electr_hc_total: 'strom_heizen_gesamt', electr_dhw_day: 'strom_warmwasser_tag', electr_dhw_total: 'strom_warmwasser_gesamt',
+    heat_hc_day: 'warme_heizen_tag', heat_hc_total: 'warme_heizen_gesamt', heat_dhw_day: 'warme_warmwasser_tag', heat_dhw_total: 'warme_warmwasser_gesamt',
+    compressor_runtime_heating: 'verdichter_laufzeit_heizen', compressor_runtime_dhw: 'verdichter_laufzeit_warmwasser', fault_status: 'fehlerstatus',
+  },
+  binary_sensor: {
+    compressor: 'verdichter', defrost: 'abtauen', heating_dhw: 'warmwasserbereitung', heating_circuit_pump: 'heizkreispumpe', booster_hc: 'zusatzheizung_hk',
+    evu_release: 'evu_freigabe',
+  },
+  number: { low_end_hc1: 'heizkurve_fusspunkt_hk1' },
+  select: { op_mode: 'betriebsart' },
+  water_heater: { dhw: 'warmwasser' },
+  climate: { heating_circuit: 'heizkreis' },
+};
+const thzId = (domain, tk) => `${domain}.thz_${thzIds[domain][tk]}`;
+const thzStates = (s) => {
+  const pick = (v) => v[s];
+  const sensor = (tk, state, unit) => [thzId('sensor', tk), unit ? [state, unit] : state];
+  const counter = (tk, state, unit) => [thzId('sensor', tk), { state, attributes: { unit_of_measurement: unit, state_class: 'total_increasing' } }];
+  const binary = (tk, on) => [thzId('binary_sensor', tk), on ? 'on' : 'off'];
+  return Object.fromEntries([
+    sensor('outside_temp', '4.1', '°C'),
+    sensor('flow_temp', pick({ heat: '34.2', dhw: '51.8', defrost: '23.9', idle: '29.0' }), '°C'),
+    sensor('return_temp', pick({ heat: '30.1', dhw: '46.5', defrost: '25.8', idle: '28.6' }), '°C'),
+    sensor('dhw_temp', pick({ heat: '46.0', dhw: '47.5', defrost: '45.8', idle: '45.6' }), '°C'), sensor('dhw_set_temp', '48.0', '°C'),
+    sensor('heat_temp', pick({ heat: '33.0', dhw: '30.5', defrost: '27.0', idle: '28.4' }), '°C'), sensor('heat_set_temp', '32.5', '°C'),
+    sensor('inside_temp_rc', '21.6', '°C'), sensor('room_set_temp', '21.0', '°C'), sensor('rel_humidity', '48.0', '%'),
+    sensor('actual_power_pel', pick({ heat: '1150', dhw: '1600', defrost: '900', idle: '0' }), 'W'),
+    sensor('actual_power_qc', pick({ heat: '4300', dhw: '4100', defrost: '0', idle: '0' }), 'W'),
+    sensor('flow_rate', pick({ heat: '15.0', dhw: '14.2', defrost: '14.8', idle: '0.0' }), 'l/min'), sensor('pressure_hc', '1.7', 'bar'),
+    sensor('hotgas_temp', pick({ heat: '66.0', dhw: '82.0', defrost: '40.0', idle: '24.0' }), '°C'),
+    sensor('evaporator_temp', pick({ heat: '-2.0', dhw: '-1.5', defrost: '3.0', idle: '4.0' }), '°C'),
+    sensor('condenser_temp', pick({ heat: '36.0', dhw: '53.5', defrost: '20.0', idle: '28.0' }), '°C'),
+    sensor('pressure_hd', pick({ heat: '18.2', dhw: '26.8', defrost: '12.4', idle: '11.0' }), 'bar'), sensor('pressure_nd', pick({ heat: '5.4', dhw: '5.2', defrost: '4.1', idle: '9.8' }), 'bar'),
+    sensor('heating_rel_power', pick({ heat: '38', dhw: '45', defrost: '40', idle: '-3' }), '%'),
+    sensor('main_ventilator_speed', pick({ heat: '38', dhw: '42', defrost: '0', idle: '0' }), 'Hz'),
+    sensor('heat_stage_control_modul', pick({ heat: '2.0', dhw: '3.0', defrost: '2.0', idle: '0.0' })), sensor('dhw_op_mode', 'setback'),
+    sensor('daily_cop_hc', '5.37'), sensor('daily_cop_dhw', '2.18'), sensor('daily_cop_total', '3.6'), sensor('lifetime_cop_total', '3.5'),
+    counter('electr_hc_day', '5120', 'Wh'), counter('electr_hc_total', '9120', 'kWh'), counter('electr_dhw_day', '1840', 'Wh'), counter('electr_dhw_total', '2480', 'kWh'),
+    counter('heat_hc_day', '19800', 'Wh'), counter('heat_hc_total', '33950', 'kWh'), counter('heat_dhw_day', '5100', 'Wh'), counter('heat_dhw_total', '6900', 'kWh'),
+    sensor('compressor_runtime_heating', '14210', 'h'), sensor('compressor_runtime_dhw', '3120', 'h'), sensor('fault_status', s === 'idle' ? 'fault' : 'ok'),
+    binary('compressor', s !== 'idle'), binary('defrost', s === 'defrost'), binary('heating_dhw', s === 'dhw'), binary('heating_circuit_pump', s === 'heat' || s === 'defrost'),
+    binary('booster_hc', s === 'dhw'), binary('evu_release', false),
+    [thzId('number', 'low_end_hc1'), { state: '3.0', attributes: { unit_of_measurement: 'K', min: 0, max: 20, step: 0.5 } }],
+    [thzId('select', 'op_mode'), { state: s === 'idle' ? 'setback' : 'automatic', attributes: { friendly_name: 'Betriebsart', options: ['standby', 'automatic', 'daymode', 'setback', 'dhwmode', 'manual', 'emergency'] } }],
+    [thzId('water_heater', 'dhw'), { state: 'performance', attributes: { current_temperature: 46, temperature: 48, friendly_name: 'Warmwasser' } }],
+    [thzId('climate', 'heating_circuit'), { state: 'heat', attributes: { current_temperature: 21.6, temperature: 21, friendly_name: 'Heizkreis' } }],
+  ]);
+};
+setups.push({
+  name: 'Stiebel Eltron LWZ / Tecalor THZ', sub: 'THZ integration (serial interface), German entity ids found by translation key, integral unit with one pump, booster stage during hot water, synthetic data',
+  states: thzStates,
+  registry: Object.fromEntries(Object.entries(thzIds).flatMap(([domain, tks]) => Object.keys(tks).map((tk) => [thzId(domain, tk), { platform: 'thz', translation_key: tk }]))),
+  config: {
+    preset: 'thz', title: 'LWZ', buffer: false,
+    tiles: ['cop_heating:today', 'cop_dhw:today', 'energy_heating:today', 'energy_dhw:today', 'heat_heating:total', 'hc_pressure'],
+  },
+});
+
+// NIBE F470 (#253): exhaust air heat pump with the condenser in the water jacket of the tank. Ids of the integration, synthetic values.
+const nibeStates = (s) => {
+  const v = (heat, dhw, defrost, idle) => ({ heat, dhw, defrost, idle }[s]);
+  return {
+    'sensor.prio_43086': v('HEAT', 'HOT WATER', 'HEAT', 'OFF'), 'sensor.compressor_state_ep14_43427': s === 'idle' ? 'STOPPED' : 'RUNNING',
+    'sensor.supply_pump_state_ep14_43431': 'ON', 'sensor.bt1_outdoor_temperature_40004': ['1.8', '°C'],
+    'sensor.bt2_supply_temp_s1_40008': [v('30.4', '28.6', '29.1', '26.0'), '°C'], 'sensor.eb100_ep14_bt3_return_temp_40012': [v('26.2', '25.9', '25.8', '24.8'), '°C'],
+    'sensor.bt7_hw_top_40013': [v('54.4', '51.8', '54.0', '53.2'), '°C'], 'sensor.bt6_hw_load_40014': [v('45.7', '42.9', '45.1', '44.6'), '°C'],
+    'sensor.eb100_bt16_evaporator_temp_40020': [v('0.6', '1.1', '4.8', '14.2'), '°C'], 'sensor.bt20_exhaust_air_temp_1_40025': ['22.5', '°C'],
+    'sensor.bt21_vented_air_temp_1_40026': [v('2.4', '2.9', '9.5', '20.1'), '°C'], 'sensor.bt50_room_temp_s1_40033': ['21.6', '°C'],
+    'sensor.calc_supply_s1_43009': ['31.0', '°C'], 'sensor.int_el_add_power_43084': [v('0.0', '2.0', '0.0', '0.0'), 'kW'],
+    'sensor.alarm_45001': v('0', '0', '183', '162'), 'select.holiday_activated_48043': 'INACTIVE',
+  };
+};
+setups.push({
+  name: 'NIBE F470', sub: 'NIBE Heat Pump: exhaust air as the source, condenser in the storage, no water line from the heat pump',
+  states: nibeStates,
+  registry: Object.fromEntries(Object.keys(nibeStates('heat')).map((id) => [id, { platform: 'nibe_heatpump', device_id: 'device-demo-nibe' }])),
+  devices: { 'device-demo-nibe': { manufacturer: 'NIBE Energy Systems', model: 'F470 R 3x400V', name: 'F470' } },
+  config: { preset: 'nibe', title: 'NIBE F470', hc_type: 'underfloor', power_sources: 'manual' },
+});
+
 const scenarios = [['heat', 'Heating'], ['dhw', 'Hot water'], ['defrost', 'Defrost'], ['idle', 'Standby + error']];
