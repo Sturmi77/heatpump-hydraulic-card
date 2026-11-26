@@ -719,6 +719,17 @@
     const bare = gateCard._timelineSegments({ 'sensor.v250_phase': [{ t: 0, s: 'ready' }], 'binary_sensor.v250_compressor': [{ t: 0, s: 'on' }], 'sensor.v250_flow': [{ t: 0, s: '48' }], 'sensor.v250_dhw': [{ t: 0, s: '45' }], 'select.v250_dhw_mode': [], 'binary_sensor.v250_once': [] }, gateIds, 0, 90 * M).map((x) => x.kind).join();
     check(bare === 'dhw', `#489: without a recorded switch the timeline keeps the rule (${bare})`);
     gateCard.remove();
+    // Codex review of #498: the water heater as the tank temperature and as the switch at once; the editor offers both keys.
+    const whCard = mount({ preset: 'vicare', entities: { dhw_top: 'water_heater.v250' } }, hassOf(state('ready', 'on', '48', { 'water_heater.v250': { state: 'off', attributes: { current_temperature: 30 } } }),
+      Object.fromEntries(Object.entries(offReg).filter(([id]) => id !== 'select.v250_dhw_mode' && id !== 'binary_sensor.v250_once')))); await wait(20);
+    const whIds = whCard._timelineIds();
+    const whRaw = { 'sensor.v250_phase': [{ state: 'ready', last_updated: '2030-01-01T00:00:00Z' }], 'binary_sensor.v250_compressor': [{ state: 'on', last_updated: '2030-01-01T00:00:00Z' }],
+      'sensor.v250_flow': [{ state: '48', last_updated: '2030-01-01T00:00:00Z' }], 'water_heater.v250': [{ state: 'off', attributes: { current_temperature: 30 }, last_updated: '2030-01-01T00:00:00Z' }] };
+    const whSegs = whCard._timelineSegments(whCard._timelineHistory(whRaw, [...new Set(Object.values(whIds).filter(Boolean))]), whIds, Date.parse('2030-01-01T00:00:00Z'), Date.parse('2030-01-01T01:00:00Z')).map((x) => x.kind).join();
+    check(whIds.von === 'water_heater.v250' && whIds.vtank === 'water_heater.v250' && whSegs === 'heat', `#489: a water heater that is tank and switch at once keeps its off state in the timeline (${whSegs})`);
+    whCard.remove();
+    const vkeys = (n) => (n.schema ? n.schema.flatMap(vkeys) : [n.name]);
+    check(['dhw_enabled', 'dhw_once'].every((k) => C._formSchema({ preset: 'vicare' }).schema.flatMap(vkeys).includes(k)), '#489: the editor shows dhw_enabled and dhw_once');
     const gateReport = C._diagnosticReport({ preset: 'vicare' }, hassOf(state('ready', 'on', '48', { 'select.v250_dhw_mode': 'off' }), offReg));
     check(gateReport.includes('not while dhw_enabled is off') && /- dhw_enabled: select\.v250_dhw_mode = off \[preset\]/.test(gateReport), '#489: the report names the switch');
     const report = C._diagnosticReport({ preset: 'vicare' }, hassOf(state('ready', 'on', '29'), registry));
