@@ -603,6 +603,8 @@ const HFC_PRESETS = {
     name: 'Vaillant (myPyllant)',
     tested: true,
     circuit_rooms: true,
+    // The heat pump among the devices follows the readings (#502).
+    dynamic: true,
     index: { hc: 0, dhw: 0 },
     unit_style: 'vaillant',
     // Home Assistant adds a number (_2) to an entity id that was already taken: the home name stands before the name of
@@ -627,17 +629,22 @@ const HFC_PRESETS = {
     // Only with one home: with several, another prefix is another home.
     find: (p, ctx) => (domain, rest) => {
       const m = (pre) => ctx.match(new RegExp(`^${domain}\\.${pre}_${rest}(?:_\\d+)?$`), 'mypyllant');
-      const homes = new Set(ctx.ids.filter((id) => (!ctx.registry[id] || ctx.registry[id].platform === 'mypyllant'))
-        .map((id) => id.match(/^sensor\.(.+)_(?:energy_manager_state|system_flow_temperature)(?:_\d+)?$/)?.[1]).filter(Boolean));
-      return m(p) || (homes.size <= 1 ? m('[^.]+') : undefined);
+      return m(p) || (HFC_PRESETS.vaillant.oneHome(ctx) ? m('[^.]+') : undefined);
     },
+    oneHome: (ctx) => new Set(ctx.ids.filter((id) => (!ctx.registry[id] || ctx.registry[id].platform === 'mypyllant'))
+      .map((id) => id.match(/^sensor\.(.+)_(?:energy_manager_state|system_flow_temperature)(?:_\d+)?$/)?.[1]).filter(Boolean)).size <= 1,
     // Number of the heat pump among the devices: the one that reports its power, else the one with the highest heating efficiency.
     // The hydraulic station's backup heater reads 1.0 and a gas boiler (hybrid, #502) less; the numbers move when a device is added.
+    // Only the devices of the selected home count (another prefix only with a single home). The choice depends on the readings, so
+    // the preset is `dynamic` and maps again once the heat pump reports its efficiency.
     hpDevice: (p, ctx) => {
       const power = HFC_PRESETS.vaillant.find(p, ctx)('sensor', 'device_\\d+_(?!hydraulic_station)[^.]*_current_power');
       if (power) return power.match(/_device_(\d+)_/)[1];
-      const best = ctx.ids.filter((id) => /^sensor\.[^.]+_device_\d+_[^.]*_heating_energy_efficiency(?:_\d+)?$/.test(id) && (!ctx.registry[id] || ctx.registry[id].platform === 'mypyllant'))
-        .map((id) => [id.match(/_device_(\d+)_/)[1], parseFloat(ctx.state(id))]).filter(([, v]) => Number.isFinite(v)).sort((a, b) => b[1] - a[1])[0];
+      const re = (pre) => new RegExp(`^sensor\\.${pre}_device_\\d+_[^.]*_heating_energy_efficiency(?:_\\d+)?$`);
+      const mine = (pre) => ctx.ids.filter((id) => re(pre).test(id) && (!ctx.registry[id] || ctx.registry[id].platform === 'mypyllant')
+        && (!ctx.device || ctx.registry[id]?.device_id === ctx.device));
+      const ids = mine(p).length ? mine(p) : HFC_PRESETS.vaillant.oneHome(ctx) ? mine('[^.]+') : [];
+      const best = ids.map((id) => [id.match(/_device_(\d+)_/)[1], parseFloat(ctx.state(id))]).filter(([, v]) => Number.isFinite(v)).sort((a, b) => b[1] - a[1])[0];
       return best && best[1] > 1 ? best[0] : undefined;
     },
     entities: (p, i, ctx) => {
@@ -676,9 +683,10 @@ const HFC_PRESETS = {
         room_target: [zoneSensor('desired_temperature'), zoneClimate],
         program: zoneSensor('current_special_function'),
         // The value of the system, else that of the heat pump: not the first device, which may be the hydraulic station (1.0) or a
-        // gas boiler (#502).
-        cop_heating_today: m(new RegExp(`^sensor\\.${p}_heating_energy_efficiency(?:_\\d+)?$`)) || m(/^sensor\.(?![^.]*_device_\d+_)[^.]+_heating_energy_efficiency(?:_\d+)?$/)
-          || (hp !== undefined ? find('sensor', `device_${hp}_[^.]*_heating_energy_efficiency`) : m(new RegExp(`^sensor\\.${p}.*_heating_energy_efficiency(?:_\\d+)?$`))),
+        // gas boiler (#502). Both as candidates, so a system value that is unavailable leaves the heat pump's (Codex review).
+        cop_heating_today: [m(new RegExp(`^sensor\\.${p}_heating_energy_efficiency(?:_\\d+)?$`))
+          || (HFC_PRESETS.vaillant.oneHome(ctx) ? m(/^sensor\.(?![^.]*_device_\d+_)[^.]+_heating_energy_efficiency(?:_\d+)?$/) : undefined),
+        hp !== undefined ? find('sensor', `device_${hp}_[^.]*_heating_energy_efficiency`) : m(new RegExp(`^sensor\\.${p}.*_heating_energy_efficiency(?:_\\d+)?$`))].filter(Boolean),
         hc_pressure: e('system_water_pressure'),
         hours: counters.hours,
         starts_total: counters.starts,
