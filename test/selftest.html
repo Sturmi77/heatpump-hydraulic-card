@@ -3550,8 +3550,8 @@
     const hass = hassOf(toStates(s.states('heat')), s.registry || {}, s.energy, s);
     const q = (c, id) => c.shadowRoot.getElementById(id);
     // narrow: larger type tiers and hidden secondary labels, driven by the width of the schematic
-    const sized = async (px) => {
-      const c = mount(s.config, hass); c.style.display = 'block'; c.style.width = `${px}px`; await wait(30);
+    const sized = async (px, extra = {}) => {
+      const c = mount({ ...s.config, ...extra }, hass); c.style.display = 'block'; c.style.width = `${px}px`; await wait(30);
       const svg = q(c, 'svg'); const cs = getComputedStyle(svg);
       const out = { k: cs.getPropertyValue('--k').trim(), vol: getComputedStyle(c.shadowRoot.querySelector('.vol-label')).display, pre: getComputedStyle(c.shadowRoot.querySelector('#t-vl .pre')).display, valve: getComputedStyle(q(c, 't-valve')).display };
       c.remove(); return out;
@@ -3560,12 +3560,13 @@
     check(o.k === '' && o.vol !== 'none' && o.pre !== 'none', `wide schematic keeps the normal type (${JSON.stringify(o)})`);
     o = await sized(560);
     check(o.k === '1.2' && o.vol !== 'none', `medium schematic: type 1.2x, labels stay (${JSON.stringify(o)})`);
+    o = await sized(400, { narrow_values: false });
+    check(o.k === '1.4' && o.vol === 'none' && o.pre === 'none' && o.valve === 'none', `narrow schematic with narrow_values: false: type 1.4x, secondary labels hidden (${JSON.stringify(o)})`);
     o = await sized(400);
-    check(o.k === '1.4' && o.vol === 'none' && o.pre === 'none' && o.valve === 'none', `narrow schematic: type 1.4x, secondary labels hidden (${JSON.stringify(o)})`);
+    check(o.k === '1.4' && o.pre === 'none' && o.valve !== 'none', `#395: on a narrow schematic a secondary label stands where there is room, the prefixes stay out (${JSON.stringify(o)})`);
     const kept = mount({ ...s.config, hc_return_label: true, narrow_values: true }, hass); kept.style.display = 'block'; kept.style.width = '400px'; await wait(30);
-    check(getComputedStyle(q(kept, 't-buf-bottom')).display !== 'none' && getComputedStyle(q(kept, 't-hc-rl')).display !== 'none'
-      && getComputedStyle(q(kept, 't-valve')).display === 'none',
-    'narrow_values keeps buffer sub-values and circuit return, but not unrelated secondary labels');
+    check(getComputedStyle(q(kept, 't-buf-bottom')).display !== 'none' && getComputedStyle(q(kept, 't-hc-rl')).display !== 'none',
+    'narrow_values keeps buffer sub-values and circuit return');
     // #360: the flow rates of the heat pump, the circuits and the source stay with narrow_values and grow like the other kept values.
     check([...kept.shadowRoot.querySelectorAll('.vol-label')].every((t) => getComputedStyle(t).display !== 'none') && parseFloat(getComputedStyle(q(kept, 't-vol')).fontSize) > 15,
       `#360: narrow_values keeps the flow rates (${getComputedStyle(q(kept, 't-vol')).fontSize})`);
@@ -7603,6 +7604,103 @@
     named.card.shadowRoot.querySelector('#stats .stat').click();
     check(named.label === 'My run' && !named.card._tlRun, `#481: an own name and an own action stay (${named.label})`);
     named.card.remove();
+  }
+
+  // 22d. power at the heater rods (#449) and priorities of the labels (#395)
+  {
+    const q = (c, id) => c.shadowRoot.getElementById(id);
+    const states = { 'sensor.f': ['36', '°C'], 'sensor.r': ['30', '°C'], 'sensor.v': ['900', 'l/h'], 'binary_sensor.c': 'on', 'sensor.t1': ['49', '°C'], 'sensor.t2': ['44', '°C'], 'sensor.t3': ['38', '°C'], 'sensor.b1': ['34', '°C'],
+      'sensor.b2': ['32', '°C'], 'sensor.b3': ['29', '°C'], 'sensor.rod': ['1500', 'W'], 'sensor.rod2': ['0.85', 'kW'], 'sensor.inline': ['6', 'kW'], 'binary_sensor.rod': 'on', 'sensor.pct': ['40', '%'], 'sensor.mode': 'heating' };
+    const ents = { mode: 'sensor.mode', flow: 'sensor.f', return: 'sensor.r', volume: 'sensor.v', compressor: 'binary_sensor.c', dhw_top: 'sensor.t1', dhw_bottom: 'sensor.t3', buffer_top: 'sensor.b1', buffer_bottom: 'sensor.b3' };
+    const draw = async (extra, st = {}, px = 900, conf = {}) => {
+      const c = mount({ power_sources: 'manual', ...conf, entities: { ...ents, ...extra } }, hassOf(toStates({ ...states, ...st })));
+      c.style.display = 'block'; c.style.width = `${px}px`; await wait(30); c.hass = { ...c._hass }; await wait(20); return c;
+    };
+    const shown = (c, id) => { const el = q(c, id); return el && getComputedStyle(el).display !== 'none' && el.textContent ? el.textContent : ''; };
+    // The labels under test: the run of the CI draws in other fonts, where unrelated labels of this bare setup can touch a pipe.
+    const ours = (c) => drawingCollisions(q(c, 'svg')).filter((hit) => /heater|t-dhw|t-buf|t-vol/.test(hit));
+    let c = await draw({ dhw_heater: 'sensor.rod', buffer_heater: 'sensor.rod2', heater: 'sensor.inline' });
+    check(shown(c, 't-heater-dhw') === '1.5 kW' && shown(c, 't-heater-buf') === '850 W' && shown(c, 't-heater-inline') === '6.0 kW', `#449: the power stands at the rods and the backup heater (${shown(c, 't-heater-dhw')} / ${shown(c, 't-heater-buf')} / ${shown(c, 't-heater-inline')})`);
+    check(!ours(c).length, `#449: without a collision (${ours(c).join()})`);
+    const taps = []; c.addEventListener('hass-more-info', (e) => taps.push(e.detail.entityId));
+    q(c, 't-heater-dhw').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    check(taps.join() === 'sensor.rod', `#449: a tap on the value opens the heater (${taps.join()})`);
+    c.hass = { ...c._hass, states: { ...c._hass.states, ...toStates({ 'sensor.rod': ['0', 'W'], 'sensor.rod2': ['unavailable', 'kW'], 'sensor.inline': ['0', 'kW'] }) } }; await wait(20);
+    check(!shown(c, 't-heater-dhw') && !shown(c, 't-heater-buf') && !shown(c, 't-heater-inline'), '#449: no number while a heater is off or unavailable');
+    c.remove();
+    c = await draw({ dhw_heater: 'binary_sensor.rod', buffer_heater: 'sensor.pct' });
+    check(q(c, 'heater-dhw').classList.contains('on') && !shown(c, 't-heater-dhw') && !shown(c, 't-heater-buf'), '#449: an on/off or percent entity shows its state only');
+    c.remove();
+    c = await draw({ dhw_heater: 'sensor.stage' }, { 'sensor.stage': '2' });
+    check(q(c, 'heater-dhw').classList.contains('on') && !shown(c, 't-heater-dhw'), '#449: a stage number is not a power');
+    c.remove();
+    // The rod at the bottom sensor: no room left of it, so the value stands outside the tank.
+    c = await draw({ dhw_heater_bottom: 'sensor.rod', dhw_middle: 'sensor.t2' });
+    const out = q(c, 't-heater-dhw-bottom');
+    check(shown(c, 't-heater-dhw-bottom') === '1.5 kW' && out.getAttribute('x') === '652' && out.classList.contains('outside'), `#449: a rod beside its sensor carries the value outside (${out.getAttribute('x')})`);
+    c.remove();
+    c = await draw({ dhw_heater_middle: 'sensor.rod', dhw_middle: 'sensor.t2', hc_flow: 'sensor.f' }, {}, 900, { dhw_type: 'fresh_water', storage: 'combined' });
+    check(!ours(c).length, `#449: beside a fresh-water station (${ours(c).join()})`);
+    c.remove();
+
+    // Narrow: sub-values stand where there is room; narrow_values true keeps them, false leaves them out, narrow_focus too.
+    const ids = ['t-dhw-bottom', 't-buf-bottom', 't-vol'];
+    const vis = (card) => ids.map((id) => (shown(card, id) ? 1 : 0)).join('');
+    // On a narrow card the temperature of the tank comes before the power of its rod, which moves outside.
+    c = await draw({ dhw_heater_bottom: 'sensor.rod' }, {}, 380);
+    check(shown(c, 't-dhw-bottom') && (!shown(c, 't-heater-dhw-bottom') || q(c, 't-heater-dhw-bottom').classList.contains('outside')) && !ours(c).length, `#449: on a narrow card the tank temperature comes before the rod (${shown(c, 't-dhw-bottom')} / ${shown(c, 't-heater-dhw-bottom')} / ${ours(c).join()})`);
+    c.remove();
+    // A wider font (Firefox on Linux) reaches the rod: the tank value moves left instead of giving its place to the rod's power.
+    c = await draw({ dhw_heater_bottom: 'sensor.rod' }, {}, 380);
+    const wider = document.createElement('style'); wider.textContent = '.tank-sub { letter-spacing: 1.5px; }';
+    c.shadowRoot.append(wider); c.hass = { ...c._hass }; await wait(20);
+    const moved = q(c, 't-dhw-bottom').getAttribute('x');
+    check(shown(c, 't-dhw-bottom') && moved !== '580' && (!shown(c, 't-heater-dhw-bottom') || q(c, 't-heater-dhw-bottom').classList.contains('outside')),
+      `#449: with a wider font the tank value moves left beside its rod (x ${moved}, ${shown(c, 't-heater-dhw-bottom')})`);
+    c.remove();
+    c = await draw({}, {}, 380); const auto = vis(c); const clean = ours(c); c.remove();
+    c = await draw({}, {}, 380, { narrow_values: false }); const none = vis(c); c.remove();
+    c = await draw({}, {}, 380, { narrow_values: true }); const keep = vis(c); c.remove();
+    c = await draw({}, {}, 380, { narrow_focus: true }); const focus = vis(c); c.remove();
+    c = await draw({}, {}, 900); const wide = vis(c); c.remove();
+    check(auto[0] === '1' && auto[1] === '1' && !clean.length && none === '000' && keep === '111' && focus === '001' && wide === '111', `#395: priorities of the labels (auto ${auto} false ${none} true ${keep} focus ${focus} wide ${wide}; ${clean.join()})`);
+    // Codex review of #503: the backup heater value has a budget, the keyboard reaches what appears, a new font is measured again,
+    // and the target line of a fresh-water station follows the narrow settings as well.
+    c = await draw({ heater: 'sensor.inline' }, { 'sensor.inline': ['123456789', 'kW'] });
+    check(!shown(c, 't-heater-inline') && !ours(c).length, `#449: a backup heater value wider than the heat pump block is left out (${shown(c, 't-heater-inline')})`);
+    c.remove();
+    c = await draw({}, {}, 380);
+    const grp = q(c, 't-dhw-bottom').closest('[data-entity]');
+    // Within the two seconds in which an update does not refresh the keyboard order, as on the first updates of a card.
+    const upd = async () => { c._a11yAt = Date.now(); c.hass = { ...c._hass }; await wait(20); };
+    const huge = document.createElement('style'); huge.textContent = '.tank-sub { font-size: 90px !important; }';
+    c.shadowRoot.append(huge); await upd();
+    const gone = !shown(c, 't-dhw-bottom') && !grp.hasAttribute('tabindex');
+    huge.remove(); await upd();
+    check(gone && shown(c, 't-dhw-bottom') && grp.getAttribute('tabindex') !== null && /: /.test(grp.getAttribute('aria-label') || ''),
+      `#395: a font that changes without a new width or text is measured again, and the keyboard follows what appears and goes (${gone} / ${grp.getAttribute('tabindex')})`);
+    c.remove();
+    for (const [conf, want] of [[{ narrow_values: false }, ''], [{ narrow_focus: true }, '']]) {
+      c = await draw({ dhw_target: 'sensor.t1', hc_flow: 'sensor.f' }, {}, 380, { dhw_type: 'fresh_water', ...conf });
+      check(shown(c, 't-dhw-mode') === want, `#395: the target line of a fresh-water station follows ${JSON.stringify(conf)} (${shown(c, 't-dhw-mode')})`);
+      c.remove();
+    }
+    // #425: with narrow_focus the flow rate stands larger where there is room; without room it is left out, not drawn small.
+    c = await draw({}, {}, 380, { narrow_focus: true });
+    const fs = parseFloat(getComputedStyle(q(c, 't-vol')).fontSize);
+    const volHits = ours(c).filter((hit) => /t-vol/.test(hit));
+    check(shown(c, 't-vol') && fs === 22 && !volHits.length, `#425: narrow_focus draws the flow rate at 22 units (${shown(c, 't-vol')} / ${fs} / ${volHits.join()})`);
+    c.hass = { ...c._hass, states: { ...c._hass.states, ...toStates({ 'sensor.v': ['123456789012', 'l/h'] }) } }; await wait(20);
+    check(!shown(c, 't-vol'), `#425: a flow rate without room is left out (${shown(c, 't-vol')})`);
+    c.remove();
+    // A value that grows into a neighbour goes; it comes back when there is room again.
+    c = await draw({ dhw_heater: 'sensor.rod' });
+    const was = shown(c, 't-heater-dhw');
+    c.hass = { ...c._hass, states: { ...c._hass.states, ...toStates({ 'sensor.rod': ['123456789012345678901234567890123456789012345678901234567890', 'kW'] }) } }; await wait(20);
+    const big = shown(c, 't-heater-dhw');
+    c.hass = { ...c._hass, states: { ...c._hass.states, ...toStates({ 'sensor.rod': ['2000', 'W'] }) } }; await wait(20);
+    check(was === '1.5 kW' && shown(c, 't-heater-dhw') === '2.0 kW' && big === '', `#395: a label goes and comes back (${was} / ${big} / ${shown(c, 't-heater-dhw')})`);
+    c.remove();
   }
 
   // 23. EMS-ESP hot-water target: the setpoint the boiler works to (dhw/settemp) comes before the selected temperature (dhw/seltemp)

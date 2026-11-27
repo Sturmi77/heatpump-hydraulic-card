@@ -72,7 +72,7 @@ function drawingCollisions(svg) {
   // front of the boiler box and may reach over the edge of the heat pump on a narrow card, where its halo keeps it readable.
   const bodies = [
     ['#hp-box', '.unit-title, .unit-status, .unit-val, .no-pre'],
-    ['rect.tank', '.tank-temp, .tank-sub, .on-tank, .series-title, #cs-tank ~ #t-dhw-mode'],
+    ['rect.tank', '.tank-temp, .tank-sub, .rod-val:not(.outside), .on-tank, .series-title, #cs-tank ~ #t-dhw-mode'],
     ['rect.boiler-box', '.boiler-value'],
     ['rect.fws', '#t-dhw-top'],
     ['rect.radiator, rect.column-rib, circle.pump', null],
