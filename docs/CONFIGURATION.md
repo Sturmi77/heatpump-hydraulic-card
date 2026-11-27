@@ -269,6 +269,7 @@ An action for a key the card has no entity for does nothing; the browser console
 | `--hfc-badge` | `#a855f7` | badge chips |
 | `--hfc-brine`, `--hfc-ground` | `#60a5fa`, `#a16207` | brine pipes, ground loop |
 | `--hfc-flow-dash` | `rgba(255,255,255,.9)` | the moving dashes in the pipes |
+| `--hfc-idle-mix` | `35%` on a dark card, `32%` on a light one, `22%` while Home Assistant reports no dark mode | how much of its colour a standing pipe keeps, mixed into the card background. With `theme: auto` the card follows the dark mode Home Assistant reports; `night` uses the dark value, `contrast` the light one |
 
 ```yaml
 type: custom:heatpump-flow-card
