@@ -188,7 +188,7 @@
     { badges: [{ entity: 'sensor.x', hold_action: 'toggle' }] },
     { program_map: [] }, { program_map: 'eco' }, { sg_ready_map: [] }, { sg_ready_map: { on: 'maybe' } }, { compressor_speed_max: 0 }, { compressor_speed_max: 'fast' },
     { errors: 'sensor.error' }, { error_ok: 'No Error' }, { error_ok: ['No Error', 0] },
-    { timeline: 'yes' }, { timeline_hours: 0 }, { timeline_marks: 'yes' }, { timeline_marks: [{ label: 'x' }] }, { timeline_marks: [7] }, { wall_timeout: -1 }, { wall_timeout: 'soon' }, { unit_style: 'tesla' }, { unit_size: 'huge' },
+    { timeline: 'yes' }, { timeline_hours: 0 }, { timeline_marks: 'yes' }, { timeline_marks: [{ label: 'x' }] }, { timeline_marks: [7] }, { timeline_marks: [{ entity: 'switch.x', color: 7 }] }, { wall_timeout: -1 }, { wall_timeout: 'soon' }, { unit_style: 'tesla' }, { unit_size: 'huge' },
     { animations: 'sometimes' }, { flow_speed: 0 }, { flow_speed: 3.1 }, { source_spread: 'yes' }, { dew_point_margin: -0.1 }, { dew_point_margin: 11 }, { dew_point_margin: 'near' }, { buffer: 'yes' }, { series_buffer: 'yes' }, { primary_pump: 'yes' }, { theme: 'sepia' }, { fullscreen: 'yes' },
     { texts: [] }, { texts: { NL: { title: 'x' } } }, { texts: { nl: { title: 7 } } }, { texts: { nl: { missing_key: 'x' } } },
     { brine_pressure_min: -0.1 }, { hc_pressure_crit: 1.2, hc_pressure_min: 1.0 }, { hc_pressure_min: 3, hc_pressure_max: 2 },
@@ -3577,8 +3577,8 @@
     const hass = hassOf(toStates(s.states('heat')), s.registry || {}, s.energy, s);
     const q = (c, id) => c.shadowRoot.getElementById(id);
     // narrow: larger type tiers and hidden secondary labels, driven by the width of the schematic
-    const sized = async (px) => {
-      const c = mount(s.config, hass); c.style.display = 'block'; c.style.width = `${px}px`; await wait(30);
+    const sized = async (px, extra = {}) => {
+      const c = mount({ ...s.config, ...extra }, hass); c.style.display = 'block'; c.style.width = `${px}px`; await wait(30);
       const svg = q(c, 'svg'); const cs = getComputedStyle(svg);
       const out = { k: cs.getPropertyValue('--k').trim(), vol: getComputedStyle(c.shadowRoot.querySelector('.vol-label')).display, pre: getComputedStyle(c.shadowRoot.querySelector('#t-vl .pre')).display, valve: getComputedStyle(q(c, 't-valve')).display };
       c.remove(); return out;
@@ -3587,12 +3587,13 @@
     check(o.k === '' && o.vol !== 'none' && o.pre !== 'none', `wide schematic keeps the normal type (${JSON.stringify(o)})`);
     o = await sized(560);
     check(o.k === '1.2' && o.vol !== 'none', `medium schematic: type 1.2x, labels stay (${JSON.stringify(o)})`);
+    o = await sized(400, { narrow_values: false });
+    check(o.k === '1.4' && o.vol === 'none' && o.pre === 'none' && o.valve === 'none', `narrow schematic with narrow_values: false: type 1.4x, secondary labels hidden (${JSON.stringify(o)})`);
     o = await sized(400);
-    check(o.k === '1.4' && o.vol === 'none' && o.pre === 'none' && o.valve === 'none', `narrow schematic: type 1.4x, secondary labels hidden (${JSON.stringify(o)})`);
+    check(o.k === '1.4' && o.pre === 'none' && o.valve !== 'none', `#395: on a narrow schematic a secondary label stands where there is room, the prefixes stay out (${JSON.stringify(o)})`);
     const kept = mount({ ...s.config, hc_return_label: true, narrow_values: true }, hass); kept.style.display = 'block'; kept.style.width = '400px'; await wait(30);
-    check(getComputedStyle(q(kept, 't-buf-bottom')).display !== 'none' && getComputedStyle(q(kept, 't-hc-rl')).display !== 'none'
-      && getComputedStyle(q(kept, 't-valve')).display === 'none',
-    'narrow_values keeps buffer sub-values and circuit return, but not unrelated secondary labels');
+    check(getComputedStyle(q(kept, 't-buf-bottom')).display !== 'none' && getComputedStyle(q(kept, 't-hc-rl')).display !== 'none',
+    'narrow_values keeps buffer sub-values and circuit return');
     // #360: the flow rates of the heat pump, the circuits and the source stay with narrow_values and grow like the other kept values.
     check([...kept.shadowRoot.querySelectorAll('.vol-label')].every((t) => getComputedStyle(t).display !== 'none') && parseFloat(getComputedStyle(q(kept, 't-vol')).fontSize) > 15,
       `#360: narrow_values keeps the flow rates (${getComputedStyle(q(kept, 't-vol')).fontSize})`);
@@ -4291,6 +4292,46 @@
     r = resolve(base, { preset: 'vaillant', prefix: 'home' });
     check(r.ready && r.entities.mode === 'sensor.home_energy_manager_state_2', 'with the prefix set by hand the numbered entity is found, too');
 
+    // #502: an aroTHERM pro hybrid re-added to myPyllant. Home-level entities carry the account prefix, the rest the home name;
+    // device 0 is the hydraulic station (efficiency 1.0), device 1 the heat pump, device 2 the gas boiler.
+    const hybrid = {
+      'sensor.acc_energy_manager_state': 'HEATING', 'sensor.acc_outdoor_temperature': ['0.1', '°C'], 'sensor.acc_system_water_pressure': ['1.9', 'bar'],
+      'sensor.acc_domestic_hot_water_0_tank_temperature': ['55.5', '°C'], 'sensor.acc_domestic_hot_water_0_setpoint': ['55.0', '°C'],
+      'sensor.acc_device_0_heating_device_heating_energy_efficiency': '1.0', 'sensor.acc_device_1_heating_device_heating_energy_efficiency': '3.3',
+      'sensor.acc_device_2_ecotec_plus_heating_energy_efficiency': '0.0', 'sensor.haus_heating_energy_efficiency': '3.2',
+      'sensor.haus_circuit_0_current_flow_temperature': ['26.5', '°C'], 'sensor.haus_circuit_0_flow_temperature_setpoint': ['21.9', '°C'], 'sensor.haus_circuit_0_state': 'HEATING',
+      'sensor.haus_zone_1_circuit_0_current_temperature': ['22.7', '°C'], 'sensor.haus_zone_1_circuit_0_desired_temperature': ['9.0', '°C'],
+      'sensor.haus_device_0_heating_device_consumed_electrical_energy_heating': ['0.0', 'Wh'], 'sensor.haus_device_1_heating_device_consumed_electrical_energy_heating': ['18300.0', 'Wh'],
+      'sensor.haus_device_1_heating_device_heat_generated_heating': ['51600.0', 'Wh'], 'sensor.haus_device_2_ecotec_plus_consumed_primary_energy_heating': ['0.0', 'Wh'],
+    };
+    r = resolve(hybrid); e = r.entities;
+    check(r.prefix === 'acc' && e.cop_heating_today === 'sensor.haus_heating_energy_efficiency', `#502: the COP of the system, not that of the hydraulic station (${e.cop_heating_today})`);
+    check(e.hc_flow === 'sensor.haus_circuit_0_current_flow_temperature' && e.hc_mode === 'sensor.haus_circuit_0_state' && e.room === 'sensor.haus_zone_1_circuit_0_current_temperature'
+      && e.room_target === 'sensor.haus_zone_1_circuit_0_desired_temperature' && e.dhw_top === 'sensor.acc_domestic_hot_water_0_tank_temperature',
+    `#502: circuit and zone under the home name next to the home-level entities under the account (${e.hc_flow} / ${e.room})`);
+    check(r.tiles.energy_heating?.today === 'sensor.haus_device_1_heating_device_consumed_electrical_energy_heating' && r.tiles.heat_heating?.today === 'sensor.haus_device_1_heating_device_heat_generated_heating',
+      `#502: the daily energy of the heat pump, not of the station or the boiler (${r.tiles.energy_heating?.today})`);
+    e = resolve({ 'sensor.acc_energy_manager_state': 'HEATING', 'sensor.next_system_flow_temperature': ['30', '°C'], 'sensor.next_circuit_0_current_flow_temperature': ['29', '°C'] }, { preset: 'vaillant', prefix: 'acc' }).entities;
+    check(e.hc_flow === 'sensor.acc_circuit_0_current_flow_temperature', `#502: with two homes the other prefix is the other home, not a second prefix (${e.hc_flow})`);
+    // Codex review of #507: other homes stay out of the COP and of the choice of the heat pump; an unavailable system value leaves
+    // the heat pump's; the choice follows the readings (dynamic preset).
+    const two = { 'sensor.a_energy_manager_state': 'HEATING', 'sensor.b_energy_manager_state': 'HEATING',
+      'sensor.a_device_0_arotherm_heating_energy_efficiency': '3.0', 'sensor.b_device_1_arotherm_heating_energy_efficiency': '5.0', 'sensor.b_heating_energy_efficiency': '4.8' };
+    e = resolve(two, { preset: 'vaillant', prefix: 'a' }).entities;
+    check(e.cop_heating_today === 'sensor.a_device_0_arotherm_heating_energy_efficiency', `#502: with two homes neither the COP nor the device of the other home (${e.cop_heating_today})`);
+    e = resolve({ ...hybrid, 'sensor.haus_heating_energy_efficiency': 'unavailable' }).entities;
+    check(e.cop_heating_today === 'sensor.acc_device_1_heating_device_heating_energy_efficiency', `#502: an unavailable system COP leaves the heat pump's (${e.cop_heating_today})`);
+    const { 'sensor.haus_heating_energy_efficiency': _s2, ...late } = hybrid;
+    const before = resolve({ ...late, 'sensor.acc_device_1_heating_device_heating_energy_efficiency': 'unknown' }).entities.cop_heating_today;
+    const after = resolve(late).entities.cop_heating_today;
+    check(HFC_PRESETS.vaillant.dynamic === true && after === 'sensor.acc_device_1_heating_device_heating_energy_efficiency' && before !== after,
+      `#502: the heat pump follows its readings, and the preset maps again when they arrive (${before} / ${after})`);
+    const { 'sensor.haus_heating_energy_efficiency': _sys, ...noSystem } = hybrid;
+    e = resolve(noSystem).entities;
+    check(e.cop_heating_today === 'sensor.acc_device_1_heating_device_heating_energy_efficiency', `#502: without the system value the heat pump is the device with the highest efficiency (${e.cop_heating_today})`);
+    e = resolve({ ...base, 'sensor.home_device_0_heating_device_heating_energy_efficiency': '1.0', 'sensor.home_device_1_arotherm_heating_energy_efficiency': '3.6' }).entities;
+    check(e.cop_heating_today === 'sensor.home_device_1_arotherm_heating_energy_efficiency' && e.hc_flow === 'sensor.home_circuit_0_current_flow_temperature', `#502: one prefix as before (${e.cop_heating_today})`);
+
     // Device counters and water pressure (#120): the heat pump is the device with a power sensor, the hydraulic station's
     // counters are its backup heater; the ids of the installation in #120 (station listed first).
     const counters = {
@@ -4915,6 +4956,26 @@
     c.remove();
     c = await tl(s, { timeline_marks: false });
     check(!c.shadowRoot.querySelector('#timeline .tl-mark'), 'timeline_marks: false draws no lane');
+    c.remove();
+    // Forum, 23 and 24 November: a colour per lane; within a minute an update of Home Assistant does not draw the timeline again.
+    c = await tl(s, { timeline_details: false, timeline_marks: [{ entity: 'input_boolean.heatpump_boost', label: 'Boost', color: '#ef4444' }, { entity: 'binary_sensor.heat_pump_utility_lock', color: 'no-colour' }] });
+    {
+      const tbox = c.shadowRoot.getElementById('timeline');
+      const seg = c.shadowRoot.querySelector('#timeline .mseg'); const dot = c.shadowRoot.querySelector('#timeline .tl-legend .k-mark');
+      check(getComputedStyle(seg).backgroundColor === 'rgb(239, 68, 68)' && getComputedStyle(dot).backgroundColor === 'rgb(239, 68, 68)', `a lane takes its own colour in the bar and the legend (${getComputedStyle(seg).backgroundColor})`);
+      // The clock is fixed before the baseline is taken, so a minute that turns during the test cannot redraw it (Codex review).
+      const realNow = Date.now;
+      const minuteStart = Math.floor(realNow() / 60000) * 60000;
+      try {
+        Date.now = () => minuteStart + 30000; c.hass = { ...c._hass }; await wait(10);
+        const first = tbox.firstElementChild;
+        Date.now = () => minuteStart + 31000; c.hass = { ...c._hass }; await wait(10);
+        Date.now = () => minuteStart + 45000; c.hass = { ...c._hass }; await wait(10);
+        const same = tbox.firstElementChild === first;
+        Date.now = () => minuteStart + 91000; c.hass = { ...c._hass }; await wait(10);
+        check(same && tbox.firstElementChild !== first, `the timeline is drawn again once a minute, not on every update (${same})`);
+      } finally { Date.now = realNow; }
+    }
     c.remove();
     c = await tl(s, { timeline_marks: [{ entity: 'input_boolean.heatpump_boost', label: 'Boost run' }, 'sensor.nothing_here'] });
     check(c.shadowRoot.querySelectorAll('#timeline .tl-mark').length === 1 && /Boost run/.test(c.shadowRoot.querySelector('#timeline .tl-legend').textContent), 'a list of entities with a label; an entity without a period draws no lane');
@@ -7630,6 +7691,103 @@
     named.card.shadowRoot.querySelector('#stats .stat').click();
     check(named.label === 'My run' && !named.card._tlRun, `#481: an own name and an own action stay (${named.label})`);
     named.card.remove();
+  }
+
+  // 22d. power at the heater rods (#449) and priorities of the labels (#395)
+  {
+    const q = (c, id) => c.shadowRoot.getElementById(id);
+    const states = { 'sensor.f': ['36', '°C'], 'sensor.r': ['30', '°C'], 'sensor.v': ['900', 'l/h'], 'binary_sensor.c': 'on', 'sensor.t1': ['49', '°C'], 'sensor.t2': ['44', '°C'], 'sensor.t3': ['38', '°C'], 'sensor.b1': ['34', '°C'],
+      'sensor.b2': ['32', '°C'], 'sensor.b3': ['29', '°C'], 'sensor.rod': ['1500', 'W'], 'sensor.rod2': ['0.85', 'kW'], 'sensor.inline': ['6', 'kW'], 'binary_sensor.rod': 'on', 'sensor.pct': ['40', '%'], 'sensor.mode': 'heating' };
+    const ents = { mode: 'sensor.mode', flow: 'sensor.f', return: 'sensor.r', volume: 'sensor.v', compressor: 'binary_sensor.c', dhw_top: 'sensor.t1', dhw_bottom: 'sensor.t3', buffer_top: 'sensor.b1', buffer_bottom: 'sensor.b3' };
+    const draw = async (extra, st = {}, px = 900, conf = {}) => {
+      const c = mount({ power_sources: 'manual', ...conf, entities: { ...ents, ...extra } }, hassOf(toStates({ ...states, ...st })));
+      c.style.display = 'block'; c.style.width = `${px}px`; await wait(30); c.hass = { ...c._hass }; await wait(20); return c;
+    };
+    const shown = (c, id) => { const el = q(c, id); return el && getComputedStyle(el).display !== 'none' && el.textContent ? el.textContent : ''; };
+    // The labels under test: the run of the CI draws in other fonts, where unrelated labels of this bare setup can touch a pipe.
+    const ours = (c) => drawingCollisions(q(c, 'svg')).filter((hit) => /heater|t-dhw|t-buf|t-vol/.test(hit));
+    let c = await draw({ dhw_heater: 'sensor.rod', buffer_heater: 'sensor.rod2', heater: 'sensor.inline' });
+    check(shown(c, 't-heater-dhw') === '1.5 kW' && shown(c, 't-heater-buf') === '850 W' && shown(c, 't-heater-inline') === '6.0 kW', `#449: the power stands at the rods and the backup heater (${shown(c, 't-heater-dhw')} / ${shown(c, 't-heater-buf')} / ${shown(c, 't-heater-inline')})`);
+    check(!ours(c).length, `#449: without a collision (${ours(c).join()})`);
+    const taps = []; c.addEventListener('hass-more-info', (e) => taps.push(e.detail.entityId));
+    q(c, 't-heater-dhw').dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    check(taps.join() === 'sensor.rod', `#449: a tap on the value opens the heater (${taps.join()})`);
+    c.hass = { ...c._hass, states: { ...c._hass.states, ...toStates({ 'sensor.rod': ['0', 'W'], 'sensor.rod2': ['unavailable', 'kW'], 'sensor.inline': ['0', 'kW'] }) } }; await wait(20);
+    check(!shown(c, 't-heater-dhw') && !shown(c, 't-heater-buf') && !shown(c, 't-heater-inline'), '#449: no number while a heater is off or unavailable');
+    c.remove();
+    c = await draw({ dhw_heater: 'binary_sensor.rod', buffer_heater: 'sensor.pct' });
+    check(q(c, 'heater-dhw').classList.contains('on') && !shown(c, 't-heater-dhw') && !shown(c, 't-heater-buf'), '#449: an on/off or percent entity shows its state only');
+    c.remove();
+    c = await draw({ dhw_heater: 'sensor.stage' }, { 'sensor.stage': '2' });
+    check(q(c, 'heater-dhw').classList.contains('on') && !shown(c, 't-heater-dhw'), '#449: a stage number is not a power');
+    c.remove();
+    // The rod at the bottom sensor: no room left of it, so the value stands outside the tank.
+    c = await draw({ dhw_heater_bottom: 'sensor.rod', dhw_middle: 'sensor.t2' });
+    const out = q(c, 't-heater-dhw-bottom');
+    check(shown(c, 't-heater-dhw-bottom') === '1.5 kW' && out.getAttribute('x') === '652' && out.classList.contains('outside'), `#449: a rod beside its sensor carries the value outside (${out.getAttribute('x')})`);
+    c.remove();
+    c = await draw({ dhw_heater_middle: 'sensor.rod', dhw_middle: 'sensor.t2', hc_flow: 'sensor.f' }, {}, 900, { dhw_type: 'fresh_water', storage: 'combined' });
+    check(!ours(c).length, `#449: beside a fresh-water station (${ours(c).join()})`);
+    c.remove();
+
+    // Narrow: sub-values stand where there is room; narrow_values true keeps them, false leaves them out, narrow_focus too.
+    const ids = ['t-dhw-bottom', 't-buf-bottom', 't-vol'];
+    const vis = (card) => ids.map((id) => (shown(card, id) ? 1 : 0)).join('');
+    // On a narrow card the temperature of the tank comes before the power of its rod, which moves outside.
+    c = await draw({ dhw_heater_bottom: 'sensor.rod' }, {}, 380);
+    check(shown(c, 't-dhw-bottom') && (!shown(c, 't-heater-dhw-bottom') || q(c, 't-heater-dhw-bottom').classList.contains('outside')) && !ours(c).length, `#449: on a narrow card the tank temperature comes before the rod (${shown(c, 't-dhw-bottom')} / ${shown(c, 't-heater-dhw-bottom')} / ${ours(c).join()})`);
+    c.remove();
+    // A wider font (Firefox on Linux) reaches the rod: the tank value moves left instead of giving its place to the rod's power.
+    c = await draw({ dhw_heater_bottom: 'sensor.rod' }, {}, 380);
+    const wider = document.createElement('style'); wider.textContent = '.tank-sub { letter-spacing: 1.5px; }';
+    c.shadowRoot.append(wider); c.hass = { ...c._hass }; await wait(20);
+    const moved = q(c, 't-dhw-bottom').getAttribute('x');
+    check(shown(c, 't-dhw-bottom') && moved !== '580' && (!shown(c, 't-heater-dhw-bottom') || q(c, 't-heater-dhw-bottom').classList.contains('outside')),
+      `#449: with a wider font the tank value moves left beside its rod (x ${moved}, ${shown(c, 't-heater-dhw-bottom')})`);
+    c.remove();
+    c = await draw({}, {}, 380); const auto = vis(c); const clean = ours(c); c.remove();
+    c = await draw({}, {}, 380, { narrow_values: false }); const none = vis(c); c.remove();
+    c = await draw({}, {}, 380, { narrow_values: true }); const keep = vis(c); c.remove();
+    c = await draw({}, {}, 380, { narrow_focus: true }); const focus = vis(c); c.remove();
+    c = await draw({}, {}, 900); const wide = vis(c); c.remove();
+    check(auto[0] === '1' && auto[1] === '1' && !clean.length && none === '000' && keep === '111' && focus === '001' && wide === '111', `#395: priorities of the labels (auto ${auto} false ${none} true ${keep} focus ${focus} wide ${wide}; ${clean.join()})`);
+    // Codex review of #503: the backup heater value has a budget, the keyboard reaches what appears, a new font is measured again,
+    // and the target line of a fresh-water station follows the narrow settings as well.
+    c = await draw({ heater: 'sensor.inline' }, { 'sensor.inline': ['123456789', 'kW'] });
+    check(!shown(c, 't-heater-inline') && !ours(c).length, `#449: a backup heater value wider than the heat pump block is left out (${shown(c, 't-heater-inline')})`);
+    c.remove();
+    c = await draw({}, {}, 380);
+    const grp = q(c, 't-dhw-bottom').closest('[data-entity]');
+    // Within the two seconds in which an update does not refresh the keyboard order, as on the first updates of a card.
+    const upd = async () => { c._a11yAt = Date.now(); c.hass = { ...c._hass }; await wait(20); };
+    const huge = document.createElement('style'); huge.textContent = '.tank-sub { font-size: 90px !important; }';
+    c.shadowRoot.append(huge); await upd();
+    const gone = !shown(c, 't-dhw-bottom') && !grp.hasAttribute('tabindex');
+    huge.remove(); await upd();
+    check(gone && shown(c, 't-dhw-bottom') && grp.getAttribute('tabindex') !== null && /: /.test(grp.getAttribute('aria-label') || ''),
+      `#395: a font that changes without a new width or text is measured again, and the keyboard follows what appears and goes (${gone} / ${grp.getAttribute('tabindex')})`);
+    c.remove();
+    for (const [conf, want] of [[{ narrow_values: false }, ''], [{ narrow_focus: true }, '']]) {
+      c = await draw({ dhw_target: 'sensor.t1', hc_flow: 'sensor.f' }, {}, 380, { dhw_type: 'fresh_water', ...conf });
+      check(shown(c, 't-dhw-mode') === want, `#395: the target line of a fresh-water station follows ${JSON.stringify(conf)} (${shown(c, 't-dhw-mode')})`);
+      c.remove();
+    }
+    // #425: with narrow_focus the flow rate stands larger where there is room; without room it is left out, not drawn small.
+    c = await draw({}, {}, 380, { narrow_focus: true });
+    const fs = parseFloat(getComputedStyle(q(c, 't-vol')).fontSize);
+    const volHits = ours(c).filter((hit) => /t-vol/.test(hit));
+    check(shown(c, 't-vol') && fs === 22 && !volHits.length, `#425: narrow_focus draws the flow rate at 22 units (${shown(c, 't-vol')} / ${fs} / ${volHits.join()})`);
+    c.hass = { ...c._hass, states: { ...c._hass.states, ...toStates({ 'sensor.v': ['123456789012', 'l/h'] }) } }; await wait(20);
+    check(!shown(c, 't-vol'), `#425: a flow rate without room is left out (${shown(c, 't-vol')})`);
+    c.remove();
+    // A value that grows into a neighbour goes; it comes back when there is room again.
+    c = await draw({ dhw_heater: 'sensor.rod' });
+    const was = shown(c, 't-heater-dhw');
+    c.hass = { ...c._hass, states: { ...c._hass.states, ...toStates({ 'sensor.rod': ['123456789012345678901234567890123456789012345678901234567890', 'kW'] }) } }; await wait(20);
+    const big = shown(c, 't-heater-dhw');
+    c.hass = { ...c._hass, states: { ...c._hass.states, ...toStates({ 'sensor.rod': ['2000', 'W'] }) } }; await wait(20);
+    check(was === '1.5 kW' && shown(c, 't-heater-dhw') === '2.0 kW' && big === '', `#395: a label goes and comes back (${was} / ${big} / ${shown(c, 't-heater-dhw')})`);
+    c.remove();
   }
 
   // 23. EMS-ESP hot-water target: the setpoint the boiler works to (dhw/settemp) comes before the selected temperature (dhw/seltemp)
