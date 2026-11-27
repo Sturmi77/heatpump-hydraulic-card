@@ -83,6 +83,7 @@ valve_dhw
 solar
 brine_pressure
 hc_pressure
+system_pressure
 pressure_normal
 pressure_warning
 pressure_critical
