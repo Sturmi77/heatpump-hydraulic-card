@@ -53,7 +53,7 @@ Everything on this page can also be set in the card editor, except where it says
 | `brine_pressure_min`, `brine_pressure_crit`, `brine_pressure_max` | Optional brine-pressure thresholds in bar. Below `crit` is critical; below `min` or above `max` is a warning. |
 | `hc_pressure_min`, `hc_pressure_crit`, `hc_pressure_max` | Optional heating-pressure thresholds in bar, with the same warning/critical logic, for `system_pressure` and `hc_pressure`. |
 | `dew_point_margin` | Minimum safe difference between circuit flow and dew point while cooling, in K (default `2`, range 0–10). Below it the cooling label warns about condensation risk. |
-| `unit_style` | Drawing of the outdoor unit: `auto` (default, uses the preset style), `generic`, `lambda`, `viessmann`, `vaillant`, `saunier`, `bosch`, `panasonic`, `samsung`, `wolf`, `kronoterm`, `alpha_innotec` or `stiebel`. Ground and groundwater sources keep their loop symbol. See [Outdoor-unit style coverage](#outdoor-unit-style-coverage). |
+| `unit_style` | Drawing of the outdoor unit: `auto` (default, uses the preset style), `generic`, `lambda`, `viessmann`, `vaillant`, `vaillant_pro`, `saunier`, `bosch`, `panasonic`, `samsung`, `wolf`, `kronoterm`, `alpha_innotec` or `stiebel`. Ground and groundwater sources keep their loop symbol. See [Outdoor-unit style coverage](#outdoor-unit-style-coverage). |
 | `unit_size` | Vaillant aroTHERM plus class: `small` (3.5 and 5.5 kW, one fan, low), `medium` (7.5 kW, one fan, default) or `large` (10.5 and 12.5 kW, two fans). Panasonic: `medium` (one fan) or `large` (two fans: T-CAP, 12 and 16 kW, H generation from 9 kW); left out, the HeishaMon preset takes it from the model the heat pump reports (`…_main_heat_pump_model`). |
 | `timeline` | `true` shows a strip with the operating mode of the last hours under the schematic (needs the `mode` entity, or the `compressor` and optionally the `valve`, and the Home Assistant history). A mapped `sg_ready` state splits the strip into utility-lock, raised-target and forced-operation periods. |
 | `timeline_hours` | Length of the timeline in hours, 3 to 72 (default 24). |
@@ -359,6 +359,7 @@ Each `unit_style`, the unit its drawing is based on, the brands it covers and wh
 - `lambda`: Lambda EU-L. With `preset: lambda`.
 - `viessmann`: Viessmann Vitocal 250-A, for Viessmann Vitocal. With `preset: vicare` and `preset: open3e`.
 - `vaillant`: Vaillant aroTHERM plus, for Vaillant and as the default for the other myPyllant brands. With `preset: vaillant`.
+- `vaillant_pro`: Vaillant aroTHERM pro, the anthracite monoblock with louvres over one large fan and a closed service panel on the right. Set by hand: myPyllant reports the same entities for the aroTHERM plus and the aroTHERM pro, so `preset: vaillant` keeps the aroTHERM plus drawing.
 - `saunier`: Saunier Duval GeniaAir Mono. Set by hand, because myPyllant does not identify the brand reliably.
 - `bosch`: Bosch Compress 5800i/6800i AW, for Bosch, Buderus, Junkers, Nefit, Worcester, Sieger, elm.leblanc and iVT through EMS-ESP, and Bosch and Buderus through Home Comfort. With `preset: emsesp` and `preset: bosch_buderus_heating`.
 - `panasonic`: Panasonic Aquarea; with `unit_size: large` the tall unit with two fans (T-CAP, 12 and 16 kW, H generation from 9 kW). With `preset: heishamon`, the size from the model HeishaMon reports.

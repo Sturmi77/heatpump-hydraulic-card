@@ -4381,7 +4381,7 @@
     const draw = async (setup, scen, cfg = {}) => {
       const c = mount({ ...setup.config, ...cfg }, hassOf(toStates(setup.states(scen)), setup.registry || {}, setup.energy, setup)); await wait(20);
       const q = (sel) => c.shadowRoot.querySelectorAll(sel).length;
-      const out = { lam: q('.lam-body'), vai: q('.vai-body'), pana: q('.pana-body'), vies: q('.vies-body'), bosch: q('.bosch-body'), sd: q('.sd-body'), samsung: q('.sam-body'), wolf: q('.wolf-body'), kro: q('.kro-body'), ait: q('.ait-body'), stb: q('.stb-body'), ring: q('.fan-ring'), fans: q('.fan'), snows: q('.snow'), fan2on: c.shadowRoot.getElementById('fan2')?.classList.contains('on'), snow2on: c.shadowRoot.getElementById('snow2')?.classList.contains('on'),
+      const out = { lam: q('.lam-body'), vai: q('.vai-body'), pana: q('.pana-body'), vies: q('.vies-body'), bosch: q('.bosch-body'), sd: q('.sd-body'), samsung: q('.sam-body'), wolf: q('.wolf-body'), kro: q('.kro-body'), ait: q('.ait-body'), stb: q('.stb-body'), vpro: q('.vpro-body'), proFan: c.shadowRoot.getElementById('fan')?.classList.contains('vpro-fan'), ring: q('.fan-ring'), fans: q('.fan'), snows: q('.snow'), fan2on: c.shadowRoot.getElementById('fan2')?.classList.contains('on'), snow2on: c.shadowRoot.getElementById('snow2')?.classList.contains('on'),
         origin: c.shadowRoot.getElementById('fan')?.style.transformOrigin, ok: ok(c) };
       c.remove(); return out;
     };
@@ -4414,6 +4414,13 @@
     check(o.stb === 1 && o.snows === 1, 'WPL-A gets one snowflake while defrosting');
     o = await draw(byPreset('stiebel_isg'), 'heat', { source_type: 'brine' });
     check(o.stb === 0 && o.ok, 'a Stiebel brine unit keeps the loop symbol');
+    // aroTHERM pro: set by hand, since myPyllant reports the same entities as for the aroTHERM plus
+    o = await draw(byPreset('vaillant'), 'heat');
+    check(o.vai === 1 && o.vpro === 0, 'the Vaillant preset keeps the aroTHERM plus');
+    o = await draw(byPreset('vaillant'), 'heat', { unit_style: 'vaillant_pro' });
+    check(o.vpro === 1 && o.vai === 0 && o.ring === 0 && o.fans === 1 && o.proFan && o.ok, `unit_style vaillant_pro draws the aroTHERM pro (${JSON.stringify(o)})`);
+    o = await draw(byPreset('vaillant'), 'defrost', { unit_style: 'vaillant_pro' });
+    check(o.vpro === 1 && o.snows === 1, 'aroTHERM pro gets one snowflake while defrosting');
     o = await draw(byPreset('wolf'), 'heat');
     check(o.wolf === 1 && o.ring === 0 && o.fans === 1 && o.ok, `Wolf preset draws the CHA unit (${JSON.stringify(o)})`);
     o = await draw(byPreset('wolf'), 'defrost');
