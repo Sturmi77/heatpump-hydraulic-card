@@ -2345,7 +2345,7 @@ const HFC_EDITOR = {
     source_type: 'Heat source', src_air: 'Air', src_brine: 'Ground (brine)', src_water: 'Groundwater', src_exhaust: 'Exhaust air (ventilation)',
     condenser: 'Condenser', condenser_water: 'In the heat pump (water lines to the storage)', condenser_tank: 'In the combined storage (no water line)',
     hc_count: 'Heating circuits', hc2_type: 'Circuit 2 emitter', hc3_type: 'Circuit 3 emitter', hc4_type: 'Circuit 4 emitter', hc5_type: 'Circuit 5 emitter', hc6_type: 'Circuit 6 emitter',
-    unit_style: 'Unit drawing', unit_auto: 'Automatic (from the preset)', unit_generic: 'Generic (fan)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch Compress 5800i / 6800i AW', unit_bosch_cs8800i: 'Bosch Compress 8800i AW', unit_bosch_compact: 'Bosch Compress 3800i AW', unit_bosch_square: 'Bosch Compress 5000 AW', unit_bosch_tall: 'Bosch Compress 7001i AW', unit_bosch_tall_silent: 'Bosch Compress 7400i AW', unit_buderus: 'Buderus Logatherm WLW MB AR', unit_buderus_compact: 'Buderus Logatherm WLW166i', unit_buderus_tall: 'Buderus Logatherm WLW196i AR', unit_buderus_tall_indoor: 'Buderus Logatherm WLW196i IR', unit_buderus_tall_silent: 'Buderus Logatherm WLW196i AR S+', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
+    unit_style: 'Unit drawing', unit_auto: 'Automatic (from the preset)', unit_generic: 'Generic (fan)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_vaillant_pro: 'Vaillant aroTHERM pro', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch Compress 5800i / 6800i AW', unit_bosch_cs8800i: 'Bosch Compress 8800i AW', unit_bosch_compact: 'Bosch Compress 3800i AW', unit_bosch_square: 'Bosch Compress 5000 AW', unit_bosch_tall: 'Bosch Compress 7001i AW', unit_bosch_tall_silent: 'Bosch Compress 7400i AW', unit_buderus: 'Buderus Logatherm WLW MB AR', unit_buderus_compact: 'Buderus Logatherm WLW166i', unit_buderus_tall: 'Buderus Logatherm WLW196i AR', unit_buderus_tall_indoor: 'Buderus Logatherm WLW196i IR', unit_buderus_tall_silent: 'Buderus Logatherm WLW196i AR S+', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
     unit_size: 'Size of the unit drawing', size_pana_medium: '1 fan (3 to 9 kW)', size_pana_large: '2 fans (T-CAP, 12 and 16 kW)', size_compact_medium: '1 fan', size_compact_large: '2 fans', size_wide_medium: '4 to 7 kW', size_wide_large: '10 and 12 kW', size_small: '3.5 / 5.5 kW (1 fan, low)', size_medium: '7.5 kW (1 fan)', size_large: '10.5 / 12.5 kW (2 fans)',
     timeline: 'Timeline of the operating mode', timeline_hours: 'Timeline length (hours)', timeline_details: 'Run details under the timeline', timeline_marks: 'Show the badges (e.g. Boost) as extra lanes',
     layout: 'Layout', layout_default: 'Default', layout_compact: 'Compact (narrow columns)', layout_wide: 'Wide (tiles beside the schematic)', layout_wall: 'Wall display (large, controls fade out)',
@@ -2451,7 +2451,7 @@ const HFC_EDITOR = {
     source_type: 'Wärmequelle', src_air: 'Luft', src_brine: 'Erdreich (Sole)', src_water: 'Grundwasser', src_exhaust: 'Abluft (Lüftung)',
     condenser: 'Verflüssiger', condenser_water: 'In der Wärmepumpe (Wasserleitungen zum Speicher)', condenser_tank: 'Im Kombispeicher (keine Wasserleitung)',
     hc_count: 'Heizkreise', hc2_type: 'Wärmeabgabe Heizkreis 2', hc3_type: 'Wärmeabgabe Heizkreis 3', hc4_type: 'Wärmeabgabe Heizkreis 4', hc5_type: 'Wärmeabgabe Heizkreis 5', hc6_type: 'Wärmeabgabe Heizkreis 6',
-    unit_style: 'Geräte-Zeichnung', unit_auto: 'Automatisch (aus der Voreinstellung)', unit_generic: 'Allgemein (Lüfter)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch Compress 5800i / 6800i AW', unit_bosch_cs8800i: 'Bosch Compress 8800i AW', unit_bosch_compact: 'Bosch Compress 3800i AW', unit_bosch_square: 'Bosch Compress 5000 AW', unit_bosch_tall: 'Bosch Compress 7001i AW', unit_bosch_tall_silent: 'Bosch Compress 7400i AW', unit_buderus: 'Buderus Logatherm WLW MB AR', unit_buderus_compact: 'Buderus Logatherm WLW166i', unit_buderus_tall: 'Buderus Logatherm WLW196i AR', unit_buderus_tall_indoor: 'Buderus Logatherm WLW196i IR', unit_buderus_tall_silent: 'Buderus Logatherm WLW196i AR S+', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
+    unit_style: 'Geräte-Zeichnung', unit_auto: 'Automatisch (aus der Voreinstellung)', unit_generic: 'Allgemein (Lüfter)', unit_lambda: 'Lambda EU-L', unit_vaillant: 'Vaillant aroTHERM plus', unit_vaillant_pro: 'Vaillant aroTHERM pro', unit_panasonic: 'Panasonic Aquarea', unit_viessmann: 'Viessmann Vitocal', unit_bosch: 'Bosch Compress 5800i / 6800i AW', unit_bosch_cs8800i: 'Bosch Compress 8800i AW', unit_bosch_compact: 'Bosch Compress 3800i AW', unit_bosch_square: 'Bosch Compress 5000 AW', unit_bosch_tall: 'Bosch Compress 7001i AW', unit_bosch_tall_silent: 'Bosch Compress 7400i AW', unit_buderus: 'Buderus Logatherm WLW MB AR', unit_buderus_compact: 'Buderus Logatherm WLW166i', unit_buderus_tall: 'Buderus Logatherm WLW196i AR', unit_buderus_tall_indoor: 'Buderus Logatherm WLW196i IR', unit_buderus_tall_silent: 'Buderus Logatherm WLW196i AR S+', unit_saunier: 'Saunier Duval GeniaAir', unit_samsung: 'Samsung EHS Mono', unit_wolf: 'Wolf CHA', unit_kronoterm: 'Kronoterm ADAPT', unit_alpha_innotec: 'Alpha Innotec Hybrox', unit_stiebel: 'Stiebel Eltron WPL-A',
     unit_size: 'Größe der Geräte-Zeichnung', size_pana_medium: '1 Lüfter (3 bis 9 kW)', size_pana_large: '2 Lüfter (T-CAP, 12 und 16 kW)', size_compact_medium: '1 Lüfter', size_compact_large: '2 Lüfter', size_wide_medium: '4 bis 7 kW', size_wide_large: '10 und 12 kW', size_small: '3,5 / 5,5 kW (1 Lüfter, niedrig)', size_medium: '7,5 kW (1 Lüfter)', size_large: '10,5 / 12,5 kW (2 Lüfter)',
     timeline: 'Zeitleiste der Betriebsart', timeline_hours: 'Länge der Zeitleiste (Stunden)', timeline_details: 'Laufdetails unter der Zeitleiste', timeline_marks: 'Badges (z. B. Boost) als zusätzliche Spuren zeigen',
     layout: 'Layout', layout_default: 'Standard', layout_compact: 'Kompakt (schmale Spalten)', layout_wide: 'Breit (Kacheln neben dem Schema)', layout_wall: 'Wanddisplay (groß, Bedienelemente blenden aus)',
@@ -3328,7 +3328,7 @@ const HFC_MAP_KEYS = ['valve_map', 'mode_map', 'dhw_mode_map', 'buffer_mode_map'
 // How the tap water is heated: a coil in the tank, a fresh-water station on the storage, or a tank in the combined storage.
 const HFC_DHW_TYPES = ['coil', 'fresh_water', 'tank_in_tank'];
 // Drawing of the outdoor unit: `auto` takes the style of the preset; `unit_size` picks the Vaillant aroTHERM plus class.
-const HFC_UNIT_STYLES = ['auto', 'generic', 'lambda', 'vaillant', 'panasonic', 'viessmann', 'bosch', 'bosch_cs8800i', 'bosch_compact', 'bosch_square', 'bosch_tall', 'bosch_tall_silent', 'buderus', 'buderus_compact', 'buderus_tall', 'buderus_tall_indoor', 'buderus_tall_silent', 'saunier', 'samsung', 'wolf', 'kronoterm', 'alpha_innotec', 'stiebel'];
+const HFC_UNIT_STYLES = ['auto', 'generic', 'lambda', 'vaillant', 'vaillant_pro', 'panasonic', 'viessmann', 'bosch', 'bosch_cs8800i', 'bosch_compact', 'bosch_square', 'bosch_tall', 'bosch_tall_silent', 'buderus', 'buderus_compact', 'buderus_tall', 'buderus_tall_indoor', 'buderus_tall_silent', 'saunier', 'samsung', 'wolf', 'kronoterm', 'alpha_innotec', 'stiebel'];
 const HFC_UNIT_SIZES = ['small', 'medium', 'large'];
 const HFC_EMITTERS = ['underfloor', 'radiator', 'column'];
 // Wall display: seconds the quick controls and the details toggle stay visible after the last touch or mouse move.
@@ -4623,6 +4623,12 @@ class HeatpumpFlowCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    // A standing pipe is its colour faded into the card: 32 % on a light card, 35 % on a dark one, 22 % while Home Assistant reports
+    // no dark mode. With theme: auto the card follows that dark mode; night and contrast set their own value below. A theme can
+    // still set --hfc-idle-mix itself.
+    const dark = hass?.themes?.darkMode;
+    const idle = typeof dark === 'boolean' ? (dark ? '35%' : '32%') : '';
+    if (idle && idle !== this._idleAuto) { this._idleAuto = idle; this.style.setProperty('--hfc-idle-auto', idle); }
     this._renderRoot();
     if (!this._config) return;
     HeatpumpFlowCard._loadPresetRegistry(this, () => {
@@ -6866,6 +6872,23 @@ class HeatpumpFlowCard extends HTMLElement {
         fans: [[...abs(120, 73), 19, 'lam-fan']],
         above: T(`${bars}<path class="lam-cut curve" d="M108 106 C105 84 111 60 120 41"/><path class="lam-cut curve" d="M132 106 C135 84 129 60 120 41"/><path class="lam-cut vein" d="M120 106 V66"/><path class="lam-hi" d="M88 106 H152"/><path class="lam-hi" d="M96 38 V148 M144 38 V148"/><rect class="lam-slot" x="128" y="132" width="3.5" height="13" rx="1.7"/><rect class="lam-rim" x="88" y="36" width="64" height="114" rx="3"/>`),
         snows: [[...abs(120, 73), 17]],
+      };
+    }
+    if (key === 'vaillant_pro') {
+      // aroTHERM pro (monoblock, R290), after the product photos: one matte anthracite box, about 1.5 times as wide as tall. About
+      // 60 % of the front carries dense horizontal louvres with the round fan guard of fine rings and a light hub ring in front of
+      // them; the rest is a flat panel, set off by a seam only. Two small black feet.
+      const x = 52; const y = 54; const w = 128; const h = 84; const pw = 77; const cx = x + 39; const cy = y + h / 2; const r = 35;
+      const slats = Array.from({ length: 19 }, (_, n) => `<path class="vpro-slat" d="M${x + 3} ${y + 5 + n * 4.1} H${x + pw - 1}"/>`).join('');
+      const rings = Array.from({ length: 10 }, (_, n) => `<circle class="vpro-ring" cx="${cx}" cy="${cy}" r="${(r * (1 - n * 0.07)).toFixed(1)}"/>`).join('');
+      const foot = (fx) => `<path class="vpro-foot" d="M${fx} ${y + h} H${fx + 14} L${fx + 17} ${y + h + 5} H${fx - 2} Z"/>`;
+      return {
+        below: T(`${foot(x + 10)}${foot(x + w - 25)}<rect class="vpro-body" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/>${slats}<circle class="vpro-hole" cx="${cx}" cy="${cy}" r="${r}"/>`),
+        fans: [[...abs(cx, cy), +(r * 0.8).toFixed(1), 'vpro-fan']],
+        above: T(`${rings}<circle class="vpro-hub" cx="${cx}" cy="${cy}" r="${(r * 0.3).toFixed(1)}"/>`
+          + `<path class="vpro-seam" d="M${x + pw + 1} ${y + 2} V${y + h - 2}"/><path class="vpro-top" d="M${x + 4} ${y + 0.8} H${x + w - 4}"/>`
+          + `<rect class="vpro-rim" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/>`),
+        snows: [[...abs(cx, cy), 17]],
       };
     }
     if (key.startsWith('vaillant')) {
@@ -9118,6 +9141,7 @@ HeatpumpFlowCard.styles = `
     --hfc-grid: #333; --hfc-good: #006b28; --hfc-badge: #5d2483; --hfc-brine: #0057b8; --hfc-ground: #664000;
     --hfc-flow-cold: #b84f00; --hfc-flow-hot: #a40000; --hfc-return-cold: #00749a; --hfc-return-hot: #003f9e;
     --hfc-tank-cold: #003f9e; --hfc-tank-cool: #006b8f; --hfc-tank-warm: #b84f00; --hfc-tank-hot: #a40000; --hfc-flow-dash: #fff; }
+  .theme-night { --hfc-idle-auto: 35%; } .theme-contrast { --hfc-idle-auto: 32%; }
   .theme-contrast .pipe { stroke-width: 11; } .theme-contrast .unit, .theme-contrast .tank, .theme-contrast .house,
   .theme-contrast .src-ring, .theme-contrast .pump { stroke-width: 3; }
   .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 0 4px 4px; }
@@ -9191,7 +9215,7 @@ HeatpumpFlowCard.styles = `
   .vapour.on .vapour-puff { animation: hfc-vapour var(--hfc-vapour, 2.2s) ease-out infinite; transform-box: fill-box; transform-origin: center bottom; }
   .vapour.on .vapour-puff:nth-child(2) { animation-delay: .45s; } .vapour.on .vapour-puff:nth-child(3) { animation-delay: .9s; }
   /* idle pipes are a solid pale tint, not transparent, so round caps that overlap at a junction do not show as dots */
-  .pipe { fill: none; stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; stroke: color-mix(in srgb, var(--pc, var(--hfc-muted)) 22%, var(--card-background-color, #fff)); transition: stroke .5s; }
+  .pipe { fill: none; stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; stroke: color-mix(in srgb, var(--pc, var(--hfc-muted)) var(--hfc-idle-mix, var(--hfc-idle-auto, 22%)), var(--card-background-color, #fff)); transition: stroke .5s; }
   .pipe.on { stroke: var(--pc, var(--hfc-muted)); }
   .flow { fill: none; stroke: ${hfcVar('flow-dash')}; stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 3 17; opacity: 0; pointer-events: none; }
   .flow.on { opacity: 1; animation: hfc-dash 1s linear infinite; }
@@ -9322,9 +9346,18 @@ HeatpumpFlowCard.styles = `
   .lam-plinth { fill: color-mix(in srgb, var(--primary-text-color, #1f2937) 22%, var(--card-background-color, #fff)); }
   /* a rim in the theme text colour keeps the anthracite body visible on dark cards */
   .lam-rim { fill: none; stroke: color-mix(in srgb, var(--primary-text-color, #1f2937) 48%, transparent); stroke-width: 1.4; }
-  .fan.lam-fan .blade, .fan.vai-fan .blade, .fan.pana-fan .blade, .fan.vies-fan .blade, .fan.bosch-fan .blade, .fan.sd-fan .blade, .fan.sam-fan .blade, .fan.wolf-fan .blade, .fan.kro-fan .blade, .fan.ait-fan .blade, .fan.stb-fan .blade, .fan.bud-fan .blade, .fan.budt-fan .blade, .fan.budi-fan .blade { fill: #9aa3ad; opacity: .55; }
-  .fan.lam-fan .hub, .fan.vai-fan .hub, .fan.pana-fan .hub, .fan.vies-fan .hub, .fan.bosch-fan .hub, .fan.sd-fan .hub, .fan.sam-fan .hub, .fan.wolf-fan .hub, .fan.kro-fan .hub, .fan.ait-fan .hub, .fan.stb-fan .hub, .fan.bud-fan .hub, .fan.budt-fan .hub, .fan.budi-fan .hub { fill: #9aa3ad; }
-  .fan.lam-fan.on .blade, .fan.vai-fan.on .blade, .fan.pana-fan.on .blade, .fan.vies-fan.on .blade, .fan.bosch-fan.on .blade, .fan.sd-fan.on .blade, .fan.sam-fan.on .blade, .fan.wolf-fan.on .blade, .fan.kro-fan.on .blade, .fan.ait-fan.on .blade, .fan.stb-fan.on .blade, .fan.bud-fan.on .blade, .fan.budt-fan.on .blade, .fan.budi-fan.on .blade { fill: ${hfcVar('cool')}; opacity: .95; }
+  .fan.lam-fan .blade, .fan.vai-fan .blade, .fan.pana-fan .blade, .fan.vies-fan .blade, .fan.bosch-fan .blade, .fan.sd-fan .blade, .fan.sam-fan .blade, .fan.wolf-fan .blade, .fan.kro-fan .blade, .fan.ait-fan .blade, .fan.stb-fan .blade, .fan.bud-fan .blade, .fan.budt-fan .blade, .fan.budi-fan .blade, .fan.vpro-fan .blade { fill: #9aa3ad; opacity: .55; }
+  .fan.lam-fan .hub, .fan.vai-fan .hub, .fan.pana-fan .hub, .fan.vies-fan .hub, .fan.bosch-fan .hub, .fan.sd-fan .hub, .fan.sam-fan .hub, .fan.wolf-fan .hub, .fan.kro-fan .hub, .fan.ait-fan .hub, .fan.stb-fan .hub, .fan.bud-fan .hub, .fan.budt-fan .hub, .fan.budi-fan .hub, .fan.vpro-fan .hub { fill: #9aa3ad; }
+  .fan.lam-fan.on .blade, .fan.vai-fan.on .blade, .fan.pana-fan.on .blade, .fan.vies-fan.on .blade, .fan.bosch-fan.on .blade, .fan.sd-fan.on .blade, .fan.sam-fan.on .blade, .fan.wolf-fan.on .blade, .fan.kro-fan.on .blade, .fan.ait-fan.on .blade, .fan.stb-fan.on .blade, .fan.bud-fan.on .blade, .fan.budt-fan.on .blade, .fan.budi-fan.on .blade, .fan.vpro-fan.on .blade { fill: ${hfcVar('cool')}; opacity: .95; }
+  .vpro-body { fill: color-mix(in srgb, ${hfcVar('anthracite')} 70%, #111827); }
+  .vpro-slat { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 55%, #000); stroke-width: 1.6; }
+  .vpro-hole { fill: color-mix(in srgb, ${hfcVar('anthracite')} 35%, #000); }
+  .vpro-ring { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 82%, #6b7280); stroke-width: 1.1; }
+  .vpro-hub { fill: color-mix(in srgb, ${hfcVar('anthracite')} 35%, #000); stroke: color-mix(in srgb, ${hfcVar('anthracite')} 50%, #9ca3af); stroke-width: 2; }
+  .vpro-seam { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 45%, #000); stroke-width: 1.2; }
+  .vpro-top { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 60%, #9ca3af); stroke-width: 1; opacity: .7; }
+  .vpro-rim { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 45%, #000); stroke-width: 1.2; }
+  .vpro-foot { fill: #0b0f14; }
   .vai-body { fill: ${hfcVar('casing')}; stroke: color-mix(in srgb, ${hfcVar('casing')} 80%, #6b7280); stroke-width: 1.5; }
   .vai-dark, .vai-foot { fill: color-mix(in srgb, ${hfcVar('anthracite')} 60%, #000); }
   .vai-gr { fill: none; stroke: color-mix(in srgb, ${hfcVar('anthracite')} 45%, #a0a8b0); stroke-width: 2; } .vai-gr.thin { stroke-width: 1; opacity: .85; }

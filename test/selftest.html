@@ -4408,7 +4408,7 @@
     const draw = async (setup, scen, cfg = {}) => {
       const c = mount({ ...setup.config, ...cfg }, hassOf(toStates(setup.states(scen)), setup.registry || {}, setup.energy, setup)); await wait(20);
       const q = (sel) => c.shadowRoot.querySelectorAll(sel).length;
-      const out = { lam: q('.lam-body'), vai: q('.vai-body'), pana: q('.pana-body'), vies: q('.vies-body'), bosch: q('.bosch-body'), sd: q('.sd-body'), samsung: q('.sam-body'), wolf: q('.wolf-body'), kro: q('.kro-body'), ait: q('.ait-body'), stb: q('.stb-body'), ring: q('.fan-ring'), fans: q('.fan'), snows: q('.snow'), fan2on: c.shadowRoot.getElementById('fan2')?.classList.contains('on'), snow2on: c.shadowRoot.getElementById('snow2')?.classList.contains('on'),
+      const out = { lam: q('.lam-body'), vai: q('.vai-body'), pana: q('.pana-body'), vies: q('.vies-body'), bosch: q('.bosch-body'), sd: q('.sd-body'), samsung: q('.sam-body'), wolf: q('.wolf-body'), kro: q('.kro-body'), ait: q('.ait-body'), stb: q('.stb-body'), vpro: q('.vpro-body'), proFan: c.shadowRoot.getElementById('fan')?.classList.contains('vpro-fan'), ring: q('.fan-ring'), fans: q('.fan'), snows: q('.snow'), fan2on: c.shadowRoot.getElementById('fan2')?.classList.contains('on'), snow2on: c.shadowRoot.getElementById('snow2')?.classList.contains('on'),
         origin: c.shadowRoot.getElementById('fan')?.style.transformOrigin, ok: ok(c) };
       c.remove(); return out;
     };
@@ -4441,6 +4441,13 @@
     check(o.stb === 1 && o.snows === 1, 'WPL-A gets one snowflake while defrosting');
     o = await draw(byPreset('stiebel_isg'), 'heat', { source_type: 'brine' });
     check(o.stb === 0 && o.ok, 'a Stiebel brine unit keeps the loop symbol');
+    // aroTHERM pro: set by hand, since myPyllant reports the same entities as for the aroTHERM plus
+    o = await draw(byPreset('vaillant'), 'heat');
+    check(o.vai === 1 && o.vpro === 0, 'the Vaillant preset keeps the aroTHERM plus');
+    o = await draw(byPreset('vaillant'), 'heat', { unit_style: 'vaillant_pro' });
+    check(o.vpro === 1 && o.vai === 0 && o.ring === 0 && o.fans === 1 && o.proFan && o.ok, `unit_style vaillant_pro draws the aroTHERM pro (${JSON.stringify(o)})`);
+    o = await draw(byPreset('vaillant'), 'defrost', { unit_style: 'vaillant_pro' });
+    check(o.vpro === 1 && o.snows === 1, 'aroTHERM pro gets one snowflake while defrosting');
     o = await draw(byPreset('wolf'), 'heat');
     check(o.wolf === 1 && o.ring === 0 && o.fans === 1 && o.ok, `Wolf preset draws the CHA unit (${JSON.stringify(o)})`);
     o = await draw(byPreset('wolf'), 'defrost');
@@ -7854,6 +7861,48 @@
     check(older.e.dhw_target === 'sensor.boiler_wwsettemp', `EMS-ESP: older ww names, the active setpoint wwsettemp first (${older.e.dhw_target})`);
     const selectedOnly = resolve({ 'number.boiler_dhw_seltemp': ['48', '°C'] });
     check(selectedOnly.e.dhw_target === 'number.boiler_dhw_seltemp', `EMS-ESP: without settemp the selected temperature stays the target (${selectedOnly.e.dhw_target})`);
+  }
+
+  // 24. standing pipes: 35 % of their colour on a dark card, 32 % on a light one, 22 % without a reported dark mode; theme night and contrast decide on their own (#501)
+  {
+    const s = setups.find((x) => x.config.preset === 'vaillant');
+    const idlePipe = async (cfg, darkMode, style = {}) => {
+      const hass = { ...hassOf(toStates(s.states('idle')), s.registry || {}, null, s), themes: darkMode === undefined ? undefined : { darkMode } };
+      const c = mount({ ...s.config, ...cfg }, hass); Object.entries(style).forEach(([k, v]) => c.style.setProperty(k, v)); await wait(20);
+      const pipe = [...c.shadowRoot.querySelectorAll('path.pipe')].find((p) => !p.classList.contains('on'));
+      pipe.style.transition = 'none';
+      // the same mix at a fixed share, drawn beside the pipe with its colour, as the reference
+      const at = (pct) => {
+        const probe = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        probe.setAttribute('d', 'M0 0 H1'); probe.style.cssText = `${pipe.style.cssText};transition:none;stroke:color-mix(in srgb, var(--pc, var(--hfc-muted)) ${pct}, var(--card-background-color, #fff))`;
+        pipe.parentNode.appendChild(probe); const v = getComputedStyle(probe).stroke; probe.remove(); return v;
+      };
+      const out = { stroke: getComputedStyle(pipe).stroke, p22: at('22%'), p32: at('32%'), p35: at('35%'), p50: at('50%'), set: c._idleAuto };
+      c.remove(); return out;
+    };
+    let o = await idlePipe({}, false);
+    check(o.stroke === o.p32 && o.p32 !== o.p22, `theme auto on a light Home Assistant theme: standing pipes at 32 % (${JSON.stringify(o)})`);
+    o = await idlePipe({}, true);
+    check(o.stroke === o.p35 && o.p35 !== o.p22, `theme auto on a dark Home Assistant theme: standing pipes at 35 % (${JSON.stringify(o)})`);
+    o = await idlePipe({}, undefined);
+    check(o.stroke === o.p22, `without a reported dark mode the pipes keep 22 % (${JSON.stringify(o)})`);
+    o = await idlePipe({ theme: 'night' }, false);
+    check(o.stroke === o.p35, `theme night on a light dashboard uses the dark value (${JSON.stringify(o)})`);
+    o = await idlePipe({ theme: 'contrast' }, true);
+    check(o.stroke === o.p32, `theme contrast on a dark dashboard uses the light value (${JSON.stringify(o)})`);
+    o = await idlePipe({}, false, { '--hfc-idle-mix': '50%' });
+    check(o.stroke === o.p50, `--hfc-idle-mix from a theme wins over both defaults (${JSON.stringify(o)})`);
+    // the host property is written only when the dark mode changes, not on every state update
+    {
+      const base = hassOf(toStates(s.states('idle')), s.registry || {}, null, s);
+      const c = mount(s.config, { ...base, themes: { darkMode: false } }); await wait(20);
+      const writes = []; const orig = c.style.setProperty.bind(c.style);
+      c.style.setProperty = (k, v, pr) => { if (k === '--hfc-idle-auto') writes.push(v); return orig(k, v, pr); };
+      c.hass = { ...base, themes: { darkMode: false } }; c.hass = { ...base, themes: { darkMode: false } };
+      c.hass = { ...base, themes: { darkMode: true } }; c.hass = { ...base, themes: { darkMode: true } };
+      check(writes.join() === '35%', `--hfc-idle-auto is set only when the dark mode changes (${writes.join()})`);
+      c.remove();
+    }
   }
 
   // 25. #506: a defrost entity turns running periods of the timeline into defrost, as the schematic does, also where the mode or the
