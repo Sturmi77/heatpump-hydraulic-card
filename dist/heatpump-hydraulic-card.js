@@ -3900,7 +3900,10 @@ class HeatpumpFlowCard extends HTMLElement {
     }
     if (config.timeline_marks !== undefined && config.timeline_marks !== null && typeof config.timeline_marks !== 'boolean') {
       if (!Array.isArray(config.timeline_marks)) throw new Error('timeline_marks must be true or a list of entities');
-      config.timeline_marks.forEach((m) => { if (!(typeof m === 'string' ? m : m && m.entity)) throw new Error('timeline_marks: every entry needs an entity'); });
+      config.timeline_marks.forEach((m) => {
+        if (!(typeof m === 'string' ? m : m && m.entity)) throw new Error('timeline_marks: every entry needs an entity');
+        if (m && typeof m === 'object' && m.color !== undefined && typeof m.color !== 'string') throw new Error('timeline_marks: color must be a CSS colour, for example "#ef4444"');
+      });
     }
     if (config.units !== undefined && config.units !== null) {
       const ids = (v) => [v].flat().length > 0 && [v].flat().every((id) => typeof id === 'string' && id);
@@ -7665,14 +7668,16 @@ class HeatpumpFlowCard extends HTMLElement {
     return out;
   }
 
-  // Entities shown as extra lanes under the bar: timeline_marks true = the badges, or a list of entities / { entity, label }.
+  // Entities shown as extra lanes under the bar: timeline_marks true = the badges, or a list of entities / { entity, label, color }.
   _timelineMarks() {
     const m = this._config.timeline_marks;
     if (!m) return [];
     const list = m === true ? this._badges : (Array.isArray(m) ? m : []);
     const seen = new Set();
     return list.map((x) => (typeof x === 'string' ? { entity: x } : x)).filter((x) => x && x.entity && !seen.has(x.entity) && seen.add(x.entity))
-      .map((x) => ({ entity: x.entity, label: x.label || this._hass.states[x.entity]?.attributes?.friendly_name || x.entity }));
+      .map((x) => ({ entity: x.entity, label: x.label || this._hass.states[x.entity]?.attributes?.friendly_name || x.entity,
+        // A colour of its own (forum, 23 November); one the browser does not know leaves the badge colour.
+        color: typeof x.color === 'string' && globalThis.CSS?.supports?.('color', x.color) ? x.color : '' }));
   }
 
   // Periods in which a mark entity was on (same on-states as the badge chips), merged, between start and end.
@@ -7689,10 +7694,18 @@ class HeatpumpFlowCard extends HTMLElement {
     return segs;
   }
 
-  _timelineTime(ms) {
-    let tz; try { tz = this._hass.config?.time_zone; new Intl.DateTimeFormat('en', { timeZone: tz }); } catch (err) { tz = undefined; }
-    return new Intl.DateTimeFormat(this._lang, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: tz }).format(ms);
+  // One format per language and time zone: a lane with a few hundred periods formats each of them (forum, 24 November).
+  _timelineFormat(locale = this._lang) {
+    const zone = this._hass?.config?.time_zone;
+    const key = `${locale}|${zone}`;
+    if (this._tlFmt?.key !== key) {
+      let tz; try { tz = zone; new Intl.DateTimeFormat('en', { timeZone: tz }); } catch (err) { tz = undefined; }
+      this._tlFmt = { key, fmt: new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: tz }) };
+    }
+    return this._tlFmt.fmt;
   }
+
+  _timelineTime(ms) { return this._timelineFormat().format(ms); }
 
   // Whole minutes; less than a minute (a gap of a few seconds) reads "< 1 min" instead of a minute that did not pass.
   _timelineDuration(ms) {
@@ -7798,8 +7811,11 @@ class HeatpumpFlowCard extends HTMLElement {
     if (!run) this._tlRun = null;
     const panel = run && this._layout !== 'wall';
     const rows = panel ? this._runValues(run) : [];
+    // To the minute: the first period starts at the window start and the last ends at now, both of which move with every update.
+    // Keyed to the millisecond, the timeline was drawn again on every update of Home Assistant (forum, 24 November).
     const minute = Math.floor(now / 60000);
-    const key = `${minute}|${segs.map((s) => `${s.kind}${s.from}${s.to}`).join(',')}|${lanes.map((l) => `${l.n}${l.label}${l.segs.map((s) => `${s.from}-${s.to}`).join(',')}`).join(';')}|${this._lang}|${this._tlSel ?? ''}|${this._tlMarkSel ?? ''}|${this._tlRun ?? ''}|${runs.length}|${rows.map((r) => r.join('=')).join(';')}`;
+    const mn = (t) => Math.floor(t / 60000);
+    const key = `${minute}|${segs.map((s) => `${s.kind}${mn(s.from)}-${mn(s.to)}`).join(',')}|${lanes.map((l) => `${l.n}${l.label}${l.color}${l.segs.map((s) => `${mn(s.from)}-${mn(s.to)}`).join(',')}`).join(';')}|${this._lang}|${this._tlSel ?? ''}|${this._tlMarkSel ?? ''}|${this._tlRun ?? ''}|${runs.length}|${rows.map((r) => r.join('=')).join(';')}`;
     if (box._k === key) return;
     box._k = key; box.hidden = false;
     this._tl = { segs, start, now, lanes, runs };
@@ -7807,8 +7823,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const i = this._i;
     // Hour ticks at clock times (every 6 h for a day), found in the Home Assistant time zone.
     const step = hours <= 6 ? 1 : hours <= 24 ? 6 : hours <= 48 ? 12 : 24;
-    let tz; try { tz = this._hass.config?.time_zone; new Intl.DateTimeFormat('en', { timeZone: tz }); } catch (err) { tz = undefined; }
-    const fmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: tz });
+    const fmt = this._timelineFormat('en-GB');
     const ticks = [];
     for (let t = Math.ceil(start / 900000) * 900000; t < now; t += 900000) {
       const [h, m] = fmt.format(t).split(':').map(Number);
@@ -7827,10 +7842,10 @@ class HeatpumpFlowCard extends HTMLElement {
     `<span class="seg k-${s.kind}${n === sel && !run ? ' sel' : ''}" data-seg="${n}" style="left:${pct(s.from)}%;width:${(pct(s.to) - pct(s.from)).toFixed(3)}%" title="${this._esc(this._timelineDetail(s))}"></span>`).join('')}${edges.map((t) =>
     `<span class="tick" style="left:${pct(t)}%"></span>`).join('')}${run ? `<span class="run-sel" style="left:${pct(run.from)}%;width:${(pct(run.to) - pct(run.from)).toFixed(3)}%"></span>` : ''}</div>
       ${lanes.map((l) => `<div class="tl-mark" role="img" aria-label="${this._esc(`${l.label}: ${l.segs.map((s) => `${this._timelineTime(s.from)}–${this._timelineTime(s.to)}`).join(', ')}`)}">${l.segs.map((s) =>
-    `<span class="mseg${`${l.n}:${s.from}` === this._tlMarkSel ? ' sel' : ''}" data-mseg="${l.n}:${s.from}" style="left:${pct(s.from)}%;width:${(pct(s.to) - pct(s.from)).toFixed(3)}%" title="${this._esc(markDetail(l, s))}"></span>`).join('')}</div>`).join('')}
+    `<span class="mseg${`${l.n}:${s.from}` === this._tlMarkSel ? ' sel' : ''}" data-mseg="${l.n}:${s.from}" style="left:${pct(s.from)}%;width:${(pct(s.to) - pct(s.from)).toFixed(3)}%${l.color ? `;background:${this._esc(l.color)}` : ''}" title="${this._esc(markDetail(l, s))}"></span>`).join('')}</div>`).join('')}
       <div class="tl-axis">${ticks.map(([t, l]) => `<span style="left:${pct(t)}%">${l}</span>`).join('')}</div>
       ${panel ? this._runPanel(run, rows) : ''}
-      <div class="tl-legend">${kinds.map((k) => `<span><i class="k-${k}"></i>${this._esc(this._timelineLabel({ kind: k }))}</span>`).join('')}${lanes.map((l) => `<span><i class="k-mark"></i>${this._esc(l.label)}</span>`).join('')}</div>`;
+      <div class="tl-legend">${kinds.map((k) => `<span><i class="k-${k}"></i>${this._esc(this._timelineLabel({ kind: k }))}</span>`).join('')}${lanes.map((l) => `<span><i class="k-mark"${l.color ? ` style="background:${this._esc(l.color)}"` : ''}></i>${this._esc(l.label)}</span>`).join('')}</div>`;
   }
 
   // Identity of a run for the selection and its query. A run cut by the window starts at the window start, which moves with
