@@ -54,7 +54,7 @@ Notes from the reference installation (Hydro S 2 + ADAPT 0312, Cloud API):
 - `dhw_top` / `dhw_target`: with Modbus the sensors `dhw_temperature` (2102) / `dhw_current_setpoint` (2024); with the Cloud API the climate entity `dhw_temperature`, read as `current_temperature` and `temperature`. `circulation`: binary sensor `circulation_pump` (bit 0 of 2028).
 - Loops 1 to 4 as heating circuits (`hc_count`): `hc_flow` from `loop_N_inlet_temperature` (Cloud) or `loop_N_temp` (Modbus 2130, 2110 …), else `loop_N_temperature` (Cloud, only without a room thermostat, because with one it is the room temperature); `hc_pump` from the binary sensor `circulation_loop_N` (2045, 2055 …).
 - `room` / `room_target` of circuit 1: `loop_1_thermostat_temperature` / `loop_1_room_current_setpoint` (Modbus), else the target `temperature` of the loop climate. Only with a room thermostat.
-- `hc_pressure`: `heating_system_pressure`; see Integration versions.
+- `system_pressure`: `heating_system_pressure`; see Integration versions.
 - `program`: the select `operational_mode` (auto / eco / comfort), else the Modbus sensor `operation_program`. Eco shows the eco chip.
 - `energy_today`: `energy_combined` (Cloud, electricity today). `energy_total`: `electrical_energy_heating_dhw` (total increasing; week, month and year come from its statistics).
 - `evap_temp` / `hot_gas`: `temperature_compressor_inlet` (2105, evaporation) / `temperature_compressor_outlet` (2106).
