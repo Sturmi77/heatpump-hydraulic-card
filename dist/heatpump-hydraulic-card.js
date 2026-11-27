@@ -379,6 +379,7 @@ const HFC_PRESETS = {
         cop_dhw_today: `${hp}_hot_water_cop_daily`,
         starts_today: `${hp}_compressor_start_cycling_daily`,
         starts_total: `${hp}_compressor_start_cycling_total`,
+        aux_hours: `${hp}_heating_rod_runtime_total`,
         energy_total: `${hp}_compressor_power_consumption_accumulated`,
         heat_total: `${hp}_compressor_thermal_energy_output_accumulated`,
         compressor_speed: `${hp}_compressor_unit_rating`,
@@ -395,6 +396,7 @@ const HFC_PRESETS = {
       const per = (base, periods = { today: 'daily', month: 'monthly', year: 'yearly', total: 'total' }) =>
         Object.fromEntries(Object.entries(periods).map(([k, v]) => [k, `${hp}_${base}_${v}`]));
       const cyc = { today: 'daily', yesterday: 'yesterday', total: 'total' };
+      const run = { today: 'daily', total: 'total' };
       return {
         cop_heating: per('heating_cop'), cop_dhw: per('hot_water_cop'), cop_cooling: per('cooling_cop'),
         energy: { total: `${hp}_compressor_power_consumption_accumulated` }, heat: { total: `${hp}_compressor_thermal_energy_output_accumulated` },
@@ -405,6 +407,8 @@ const HFC_PRESETS = {
         starts: per('compressor_start_cycling', { today: 'daily', yesterday: 'yesterday', month: 'monthly', total: 'total' }),
         cycles_heating: per('heating_cycling', cyc), cycles_dhw: per('hot_water_cycling', cyc),
         cycles_cooling: per('cooling_cycling', cyc), defrosts: per('defrost_cycling', cyc),
+        // Running time per mode, in hours; the daily counters start again at midnight.
+        hours_heating: per('heating_runtime', run), hours_dhw: per('hot_water_runtime', run), hours_defrost: per('defrost_runtime', run), aux_hours: per('heating_rod_runtime', run),
       };
     },
     errors: (p, i) => {
@@ -455,6 +459,10 @@ const HFC_PRESETS = {
         mode: s('compressor_phase'),
         compressor: b('compressor'),
         valve: b('domestic_hot_water_charging'),
+        // Hot water switched off (#489): the DHW operating mode (E3 devices), else the water heater, which reports on or off as the
+        // operating mode, not a charge. A one-time charge runs all the same.
+        dhw_enabled: [ctx.key('vicare', 'select', 'dhw_operating_mode'), ctx.key('vicare', 'water_heater', 'domestic_hot_water')].filter(Boolean),
+        dhw_once: b('one_time_charge'),
         flow: s('secondary_circuit_supply_temperature', 'supply_temperature'),
         return: s('secondary_circuit_return_temperature', 'return_temperature'),
         volume: s('volumetric_flow'),
@@ -1916,7 +1924,7 @@ function hfcNibeTank(devices) {
 // Built-in languages: one entry here, one block in HFC_I18N (card texts) and one in HFC_EDITOR (editor labels), see
 // docs/TRANSLATING.md. The value is the name of the language in that language. A language may be translated in part:
 // every missing text falls back to English. `npm run i18n:check` verifies the blocks.
-const HFC_LANGUAGES = { en: 'English', de: 'Deutsch', pl: 'Polski', sk: 'Slovenčina', cs: 'Čeština', nl: 'Nederlands', lt: 'Lietuvių' };
+const HFC_LANGUAGES = { en: 'English', de: 'Deutsch', pl: 'Polski', sk: 'Slovenčina', cs: 'Čeština', nl: 'Nederlands', lt: 'Lietuvių', tr: 'Türkçe' };
 
 const HFC_I18N = {
   en: {
@@ -1956,6 +1964,7 @@ const HFC_I18N = {
       energy_defrost: 'Electricity defrost', energy_standby: 'Standby', energy_aux: 'Electricity heater',
       heat: 'Heat', heat_heating: 'Heat heating', heat_dhw: 'Heat DHW', heat_cooling: 'Cooling output', heat_defrost: 'Heat defrost',
       starts: 'Compressor starts', cycles_heating: 'Heating cycles', cycles_dhw: 'DHW cycles', cycles_cooling: 'Cooling cycles', defrosts: 'Defrosts',
+      hours_heating: 'Runtime heating', hours_dhw: 'Runtime DHW', hours_defrost: 'Runtime defrost',
       hours: 'Compressor hours', hours_per_start: 'Runtime per start', load_classes: 'Load classes 1-5', aux_hours: 'Heater hours', aux_starts: 'Heater starts',
       spread: 'Spread', volume: 'Flow rate', heat_estimated: 'Heat output', power: 'Power', heat_live: 'Heat output', compressor_speed: 'Compressor',
       source_spread: 'Source spread', outdoor: 'Outdoor', dhw_top: 'DHW tank', room: 'Room', brine_pressure: 'Brine pressure', hc_pressure: 'Heating pressure', hc_spread: 'Circuit spread', pv_share: 'PV share today',
@@ -2004,6 +2013,7 @@ const HFC_I18N = {
       energy_defrost: 'Strom Abtauen', energy_standby: 'Standby', energy_aux: 'Strom Heizstab',
       heat: 'Wärme', heat_heating: 'Wärme Heizen', heat_dhw: 'Wärme WW', heat_cooling: 'Kälte', heat_defrost: 'Wärme Abtauen',
       starts: 'Verdichterstarts', cycles_heating: 'Heizzyklen', cycles_dhw: 'WW-Zyklen', cycles_cooling: 'Kühlzyklen', defrosts: 'Abtauungen',
+      hours_heating: 'Laufzeit Heizen', hours_dhw: 'Laufzeit Warmwasser', hours_defrost: 'Laufzeit Abtauen',
       hours: 'Verdichterstunden', hours_per_start: 'Laufzeit pro Start', load_classes: 'Lastklassen 1-5', aux_hours: 'Heizstab-Stunden', aux_starts: 'Heizstab-Starts',
       spread: 'Spreizung', volume: 'Volumenstrom', heat_estimated: 'Wärmeleistung', power: 'Leistung', heat_live: 'Wärmeleistung', compressor_speed: 'Verdichter',
       source_spread: 'Spreizung Quelle', outdoor: 'Außen', dhw_top: 'WW-Speicher', room: 'Raum', brine_pressure: 'Soledruck', hc_pressure: 'Heizungsdruck', hc_spread: 'Spreizung Heizkreis', pv_share: 'PV-Anteil heute',
@@ -2238,6 +2248,49 @@ const HFC_I18N = {
       frost: 'Apsauga nuo užšalimo', circulate: 'Cirkuliacija', off: 'Išjungta', legionella: 'Legionelė', trailing: 'Siurblio išbėgimas',
     },
   },
+  tr: {
+    not_found: 'Bu ön ayara ait varlık bulunamadı. Entegrasyonu ve öneki kontrol edin ya da kart düzenleyicisini açın.',
+    start: 'Desteklenen bir ısı pompası entegrasyonu bulunamadı. Ön ayar seçmek ya da varlıkları eşlemek için kart düzenleyicisini açın.', start_link: 'Desteklenen entegrasyonlar',
+    title: 'Isı pompası', heat_pump: 'Isı pompası', boiler: 'Kombi', boiler_off: 'Kombi kapalı', dhw: 'Sıcak su', buffer: 'Tampon tank', series_tank: 'Seri tampon', combined_tank: 'Kombine depo', heating_zone: 'Isıtma', fresh_water_station: 'Taze su istasyonu', heating_circuit: 'Isıtma devresi',
+    house: 'Odalar', room: 'Oda', room_target: 'Oda hedefi', humidity: 'Nem', dew_point: 'Çiy noktası', dew_margin: 'Çiy noktası payı', dew_warning: 'yoğuşma riski', flow_short: 'Gidiş', comfort_below: 'hedefin altında', comfort_on: 'hedefte', comfort_above: 'hedefin üstünde', running: 'çalışıyor', compressor_off: 'Kompresör kapalı', source_in: 'Hava girişi', outdoor: 'Dış',
+    energy_missing: 'Enerji panosu: {sources} için güç sensörü yok; yalnız enerji sayaçları anlık akışı gösteremez.',
+    brine_in: 'Salamura giriş', brine_out: 'Salamura çıkış', well_in: 'Kuyu giriş', well_out: 'Kuyu çıkış',
+    details: 'Ayrıntılar', sec_operation: 'Çalışma', sec_hydraulic: 'Hidrolik basınçlar', sec_refrigerant: 'Soğutucu devresi', sec_cutouts: 'Emniyet kesmeleri (olay sayısı)', sec_more: 'Diğer',
+    diagnostic_copy: 'Tanı raporunu kopyala', diagnostic_copied: 'Tanı raporu kopyalandı', diagnostic_failed: 'Tanı raporu kopyalanamadı',
+    fullscreen_open: 'Tam ekran aç', fullscreen_close: 'Tam ekranı kapat',
+    det: {
+      hours: 'Kompresör saati', starts_total: 'Toplam kompresör çalışması', aux_hours: 'Isıtıcı saati', aux_starts: 'Toplam ısıtıcı çalışması', energy_total: 'Toplam elektrik',
+      cutout_high_pressure: 'Yüksek basınç kesmesi', cutout_low_pressure: 'Alçak basınç kesmesi', cutout_temperature: 'Sıcaklık kesmesi',
+      env_energy: 'Toplam çevre enerjisi', heat_total: 'Toplam ısı', cop_total: 'Toplam COP', compressor_speed: 'Kompresör', evap_temp: 'Buharlaşma', cond_temp: 'Yoğuşma',
+      suction_temp: 'Emiş gazı', hot_gas: 'Sıcak gaz', liquid_temp: 'Sıvı hattı', low_pressure: 'Alçak basınç', high_pressure: 'Yüksek basınç',
+      eev: 'Genleşme valfi', superheat: 'Kızgınlık', subcooling: 'Aşırı soğutma',
+    },
+    source_flow: 'Kaynak', target: 'Hedef', curve_offset: 'eğri', curve_shift: 'kaydırma', mixer: 'Karışım vanası', mixer_opening: 'açılıyor', mixer_closing: 'kapanıyor', return_short: 'Dön', error: 'Hata', circulation: 'Sirk.', circulation_from: 'başlangıç', circulation_until: 'bitiş', valve_dhw: 'Sıcak su', solar: 'Güneş',
+    brine_pressure: 'Salamura basıncı', hc_pressure: 'Isıtma basıncı', pressure_normal: 'normal', pressure_warning: 'uyarı', pressure_critical: 'kritik',
+    timeline_title: 'Son {h} saat', timeline_gap: 'Veri yok', timeline_aria: 'Son {h} saatin çalışma modu. Ok tuşlarıyla bir dönem seçilir.',
+    run_series: '{t} beri {n}. çalışma', run_pause: 'öncesinde {d} duruş', run_partial: 'zaman çizelgesinden önce başladı', run_ongoing: 'hâlâ çalışıyor', run_phase: 'çalışma dönemi, kompresör verisi yok', run_close: 'Kapat', run_electricity: 'Elektrik', run_heat: 'Isı', sec_units: 'Üniteler', unit: 'Ünite', units_running: '{n} / {m} ünite', unit_off: 'kapalı', unit_stale: 'ısı güncel değil', run_flow: 'Gidiş', run_reached: 'ulaşıldı', run_missed: '{d} K altında', run_heater: 'Isıtıcı çubuk', run_on: 'açık', run_off: 'kapalı',
+    programs: { eco: 'Eko', night: 'Gece', party: 'Parti', holiday: 'Tatil' },
+    sg_ready: { normal: 'SG normal', blocked: 'Şebeke kilidi', boost: 'SG yükseltme', forced: 'SG zorunlu açık' },
+    valve_heating: 'Isıtma', valve_cooling: 'Soğutma', bypass: 'Baypas', pv: 'Güneş', pv_boost: 'Güneş fazlası', battery: 'Batarya', grid: 'Şebeke',
+    stat_cop_heating: 'Bugünkü ısıtma COP', stat_cop_dhw: 'Bugünkü sıcak su COP', stat_energy: 'Bugünkü enerji',
+    stat_starts: 'Bugünkü çalışmalar', stat_spread: 'Sıcaklık farkı', stat_volume: 'Debi', stat_heat: 'Isı gücü', pv_share: 'Güneş',
+    tiles: {
+      cop_live: 'Anlık COP', cop_heating: 'Isıtma COP', cop_dhw: 'Sıcak su COP', cop_cooling: 'Soğutma EER', cop_total: 'Toplam COP', spf: 'SPF (yıl)',
+      energy: 'Elektrik', env_energy: 'Çevre enerjisi', energy_heating: 'Isıtma elektriği', energy_dhw: 'Sıcak su elektriği', energy_cooling: 'Soğutma elektriği',
+      energy_defrost: 'Defrost elektriği', energy_standby: 'Bekleme', energy_aux: 'Isıtıcı elektriği',
+      heat: 'Isı', heat_heating: 'Isıtma ısısı', heat_dhw: 'Sıcak su ısısı', heat_cooling: 'Soğutma gücü', heat_defrost: 'Defrost ısısı',
+      starts: 'Kompresör çalışmaları', cycles_heating: 'Isıtma çevrimleri', cycles_dhw: 'Sıcak su çevrimleri', cycles_cooling: 'Soğutma çevrimleri', defrosts: 'Defrostlar',
+      hours: 'Kompresör saati', hours_per_start: 'Çalışma başına süre', load_classes: 'Yük sınıfları 1-5', aux_hours: 'Isıtıcı saati', aux_starts: 'Isıtıcı çalışmaları',
+      spread: 'Sıcaklık farkı', volume: 'Debi', heat_estimated: 'Isı gücü', power: 'Güç', heat_live: 'Isı gücü', compressor_speed: 'Kompresör',
+      source_spread: 'Kaynak farkı', outdoor: 'Dış', dhw_top: 'Boyler', room: 'Oda', brine_pressure: 'Salamura basıncı', hc_pressure: 'Isıtma basıncı', hc_spread: 'Devre farkı', pv_share: 'Bugünkü güneş payı',
+      pv_boost_share: 'Isıtmada güneş fazlası payı', pv_production: 'Güneş üretimi', solar_thermal: 'Güneş kolektörü', cost: 'Maliyet', dhw_loss: 'Boyler bekleme kaybı',
+    },
+    periods: { now: 'şimdi', today: 'bugün', yesterday: 'dün', week: 'hafta', month: 'ay', year: 'yıl', total: 'toplam' },
+    modes: {
+      idle: 'Beklemede', heating: 'Isıtma', dhw: 'Sıcak su', cooling: 'Soğutma', defrost: 'Defrost', blocked: 'Kilitli',
+      frost: 'Don koruma', circulate: 'Sirkülasyon', off: 'Kapalı', legionella: 'Lejyonella', trailing: 'Ardıl çalışma',
+    },
+  },
 };
 
 // Translation objects are a public configuration surface. Merge them recursively so a custom language only needs to
@@ -2350,6 +2403,7 @@ const HFC_EDITOR = {
     valve: 'Diverter valve towards hot water (on/off, or a state like Tank/Room)', bypass_valve: 'Series buffer bypass valve (on = bypass; default: defrost)',
     pv_boost: 'PV surplus mode (on, or a power above 0)',
     sg_ready: 'SG-Ready / utility lock state (1–4 or text)',
+    dhw_enabled: 'Hot water switched on (the state "off" stops the hot-water rule of the preset)', dhw_once: 'One-time hot-water charge (on/off)',
     dhw_top: 'DHW tank top (°C)', dhw_middle: 'DHW tank middle (°C)', dhw_bottom: 'DHW tank bottom (°C)', dhw_target: 'DHW target (°C)', dhw_mode: 'DHW mode (state text)',
     circulation: 'Circulation pump running (on/off)', circulation_start: 'Circulation window starts', circulation_end: 'Circulation window ends', circulation_schedule: 'Circulation schedule (next change)', dhw_loss_sensor: 'DHW standby-loss measurement (°C)', buffer_top: 'Buffer top (°C)', buffer_middle: 'Buffer middle (°C)', buffer_bottom: 'Buffer bottom (°C)', buffer_mode: 'Buffer mode (state text)',
     hc_flow: 'Circuit flow temperature (°C)', hc_return: 'Circuit return temperature (°C)', hc_setpoint: 'Circuit flow target (°C)',
@@ -2455,6 +2509,7 @@ const HFC_EDITOR = {
     valve: 'Umschaltventil auf Warmwasser (ein/aus, oder Zustand wie Tank/Room)', bypass_valve: 'Bypass-Ventil Reihenpuffer (ein = Bypass; Standard: Abtauen)',
     pv_boost: 'PV-Überschussbetrieb (ein, oder Leistung über 0)',
     sg_ready: 'SG-Ready / EVU-Sperre (1–4 oder Text)',
+    dhw_enabled: 'Warmwasser eingeschaltet (Zustand „off“ sperrt die Warmwasser-Regel des Presets)', dhw_once: 'Einmalige Warmwasserladung (ein/aus)',
     dhw_top: 'WW-Speicher oben (°C)', dhw_middle: 'WW-Speicher Mitte (°C)', dhw_bottom: 'WW-Speicher unten (°C)', dhw_target: 'WW-Soll (°C)', dhw_mode: 'WW-Betriebsart (Statustext)',
     circulation: 'Zirkulationspumpe läuft (ein/aus)', circulation_start: 'Zirkulationsfenster beginnt', circulation_end: 'Zirkulationsfenster endet', circulation_schedule: 'Zirkulations-Zeitplan (nächster Wechsel)', dhw_loss_sensor: 'Messsensor WW-Standbyverlust (°C)', buffer_top: 'Puffer oben (°C)', buffer_middle: 'Puffer Mitte (°C)', buffer_bottom: 'Puffer unten (°C)', buffer_mode: 'Puffer-Betriebsart (Statustext)',
     hc_flow: 'Heizkreis-Vorlauf (°C)', hc_return: 'Heizkreis-Rücklauf (°C)', hc_setpoint: 'Heizkreis-Vorlauf-Soll (°C)',
@@ -2950,6 +3005,110 @@ const HFC_EDITOR = {
     sec_boiler: 'Ketel / tweede warmteopwekker', boiler_state: 'Ketel actief (aan/uit, of een vermogen boven 0)', boiler_power: 'Ketelvermogen (W of kW)', boiler_flow: 'Aanvoertemperatuur ketel (°C)',
     hc_mixer: 'Stand of aandeel mengklep (%, getoond zoals gemeld)', hc_mixer_opening: 'Mengklepmotor opent (aan/uit)', hc_mixer_closing: 'Mengklepmotor sluit (aan/uit)',
   },
+  tr: {
+    preset: 'Ön ayar', prefix: 'Önek (boş = otomatik bul)', device: 'Cihaz (isteğe bağlı, ön ayarı sınırlar)',
+    title: 'Başlık', language: 'Dil', power_threshold: 'Çalışıyor sayılır, üstünde (W)', hc_type: 'Isıtıcı yüzey',
+    power_sources: 'Güneş / batarya / şebeke', ps_auto: 'Enerji panosu, aşağıda verilmedikçe', ps_manual: 'Yalnız aşağıdaki sensörler',
+    source_type: 'Isı kaynağı', src_air: 'Hava', src_brine: 'Toprak (salamura)', src_water: 'Yeraltı suyu',
+    hc_count: 'Isıtma devreleri', hc2_type: '2. devre ısıtıcısı', hc3_type: '3. devre ısıtıcısı', hc4_type: '4. devre ısıtıcısı', hc5_type: '5. devre ısıtıcısı', hc6_type: '6. devre ısıtıcısı',
+    unit_style: 'Ünite çizimi', unit_auto: 'Otomatik (ön ayardan)', unit_generic: 'Genel (fan)',
+    unit_size: 'Ünite çiziminin boyutu', size_pana_medium: '1 fan (3 - 9 kW)', size_pana_large: '2 fan (T-CAP, 12 ve 16 kW)', size_compact_medium: '1 fan', size_compact_large: '2 fan', size_wide_medium: '4 - 7 kW', size_wide_large: '10 ve 12 kW', size_small: '3,5 / 5,5 kW (1 fan, alçak)', size_medium: '7,5 kW (1 fan)', size_large: '10,5 / 12,5 kW (2 fan)',
+    timeline: 'Çalışma modu zaman çizelgesi', timeline_hours: 'Zaman çizelgesi uzunluğu (saat)', timeline_details: 'Zaman çizelgesi altında çalışma ayrıntıları', timeline_marks: 'Rozetleri (ör. Boost) ek şerit olarak göster',
+    layout: 'Yerleşim', layout_default: 'Varsayılan', layout_compact: 'Sıkışık (dar sütunlar)', layout_wide: 'Geniş (kutucuklar şemanın yanında)', layout_wall: 'Duvar ekranı (büyük, kontroller gizlenir)',
+    animations: 'Animasyonlar', animations_auto: 'Otomatik (azaltılmış hareket ayarına uyar)', animations_always: 'Her zaman', animations_off: 'Kapalı',
+    flow_speed: 'Animasyon hızı', source_spread: 'Kaynak farkını göster',
+    theme: 'Kart teması', theme_auto: 'Otomatik (pano)', theme_night: 'Gece', theme_contrast: 'Yüksek kontrast', fullscreen: 'Tam ekran düğmesi', diagnostic: 'Tanı raporu düğmesi',
+    wall_timeout: 'Kontrolleri gizle (saniye, 0 = asla)',
+    hc_flow_label: 'Devre gidiş sıcaklığını göster', hc_return_label: 'Devre dönüş sıcaklığını göster', dew_point_margin: 'En az çiy noktası payı (K)', narrow_values: 'Dar kartlarda tank alt değerleri, sıcak su hedefi, devre dönüşü ve debiler kalsın', narrow_focus: 'Telefon odağı: dar kartlarda ana değerler büyük, ikincil değerler altta tek satır', flow_rate_unit: 'Debi birimi', buffer_values: 'Tampon sıcaklığı vurgusu', buffer_values_default: 'Üst değer öne çıkar (varsayılan)', buffer_values_equal: 'Tüm değerler eşit', storage: 'Depolama', storage_separate: 'Ayrı boyler ve tampon tank', storage_combined: 'Kombine depo (tek tank, sıcak su bölgesi üstte)', buffer: 'Paralel tampon tank (sensörsüz de)', dhw_type: 'Sıcak su hazırlama', dhw_type_coil: 'Serpantinli boyler', dhw_type_fresh_water: 'Taze su istasyonu (tampon veya kombine depo üzerinde)', dhw_type_tank_in_tank: 'Tank içinde tank (kombine depo)', series_buffer: 'Dönüşte seri tampon', series_bypass: 'Baypas vanalı seri tampon (kapalı: devreler defrostta çalışır)', primary_pump: 'Birincil pompa', hc_name: '1. devre adı', hc2_name: '2. devre adı', hc3_name: '3. devre adı', hc4_name: '4. devre adı', hc5_name: '5. devre adı', hc6_name: '6. devre adı',
+    sec_hc2: '2. ısıtma devresi', sec_hc3: '3. ısıtma devresi', sec_hc4: '4. ısıtma devresi', sec_hc5: '5. ısıtma devresi', sec_hc6: '6. ısıtma devresi', sec_details: 'Ayrıntılar: çalışma', sec_refrigerant: 'Ayrıntılar: soğutucu devresi', sec_cutouts: 'Ayrıntılar: kesme sayaçları',
+    controls: 'Hızlı kontroller (anahtar, düğme, seçim, sayı …)', details_open: 'Ayrıntılar açık başlasın',
+    from_preset: 'Ön ayar buldu', more_fields: 'Diğer alanlar',
+    sum_help: 'Bu varlıkların toplamı',
+    sec_advanced: 'Gelişmiş',
+    tiles_custom: 'Kendi kutucuk seçimim', tiles: 'Kutucuklar (sıralamak için sürükleyin)',
+    tiles_custom_help: 'Kapalı: varsayılan kutucuklar. Açık: bu kurulumun sağladıklarından kutucuk ve dönem seçin; boş liste satırı gizler.',
+    tiles_yaml: 'Bazı kutucukların kendi adı, varlığı, fiyatı veya eylemi var: bunları YAML ile düzenleyin.',
+    tile_entity: 'Bir Home Assistant varlığını kutucuk olarak ekle', tile_entity_help: 'Kutucuk listenin sonuna eklenir. Aşağıda adlandırılabilir.',
+    tile_names: 'Kutucukların adları', tile_name: 'Ad: {tile}', tile_preview: 'Gösterir: {value}',
+    price_fixed: 'kWh başına elektrik fiyatı', price_entity: 'Elektrik fiyatı varlığı',
+    price_help: 'Maliyet kutucuğunu açar. Uzun süreli istatistiği olan bir varlıkla (ör. dinamik tarife) maliyet saat saat hesaplanır.',
+    untested: 'test edilmedi',
+    untested_help: 'Henüz gerçek bir kurulumda denenmedi. Çalışıp çalışmadığını bildirin: github.com/Sturmi77/heatpump-hydraulic-card/issues (Preset feedback).',
+    warn_title: 'Kartta eksik',
+    warn_running: 'Çalışma modu, kompresör, durum veya güç yok: kart ısı pompasının çalışıp çalışmadığını bilemez.',
+    warn_power: 'Elektrik gücü yok: anlık COP yok, Enerji panosundan güneş / batarya / şebeke payı da yok.',
+    warn_energy_sources: 'Enerji panosu: {sources} için güç sensörü yok; yalnız enerji sayaçları anlık akışı gösteremez.',
+    warn_temps: 'Gidiş veya dönüş sıcaklığı yok: sıcaklık farkı ve tahmini ısı gücü yok.',
+    warn_heat: 'Isı gücü ve debi yok: anlık COP yok.',
+    warn_valve: 'Üç yollu vana bir sayı bildiriyor ve vana durumları tanımlı değil: kart 1 değerini sıcak su sayar. Bu vanada 1 ısıtma demekse durumlarını Gelişmiş altında girin.',
+    warn_map_entities: '{maps} varlıkların altında; kart orada okumaz. YAML içinde kart ayarının en üst seviyesine aittir.',
+    warn_disabled: 'Ön ayar bu varlıkları kullanırdı ama Home Assistant’ta devre dışılar: {list}. Ayarlar → Cihazlar ve hizmetler → Varlıklar altında etkinleştirin.',
+    checks_title: 'Bu alanları kontrol edin',
+    check_unit: '{field}: {entity} {unit} bildiriyor, beklenen {expected}.',
+    check_domain: '{field}: {entity} bir {domain} varlığı, beklenen {expected}.',
+    check_state: '{field}: {entity} "{state}" bildiriyor, beklenen {expected}.',
+    check_counter: '{field}: {entity} bir sayaç (yalnız artar), beklenen {expected}.',
+    check_same: '{field}: {entity} {other} için de kullanılıyor; iki alan farklı şeyler ölçer.',
+    check_air: '{field}: {entity} girilmiş ama ısı kaynağı hava. Kart salamura veya kuyu döngüsü çizmez; alanı boşaltın ya da ısı kaynağını değiştirin.',
+    check_setting: '{field}: {entity} bir ayar ({domain}), ısı pompasının şu an yaptığı şey değil. "Yalnız ısıtma" gibi seçilmiş bir mod beklemede okunur; alanı boş bırakın ya da anlık çalışmayı gösteren bir sensör kullanın.',
+    check_today: '{field}: {entity} {value} bildiriyor, bir günde olabilecekten fazla. Toplam sayaç mı?',
+    kind_temperature: 'bir sıcaklık (°C)', kind_offset: 'bir sıcaklık farkı (K)', kind_power: 'bir güç (W veya kW)', kind_energy: 'bir enerji (kWh)',
+    kind_pressure: 'bir basınç (bar)', kind_flowrate: 'bir debi (l/h, l/min veya m³/h)', kind_hours: 'bir süre (h)', kind_percent: 'bir yüzde (%)',
+    kind_counter: 'birimsiz bir sayı (adet)', kind_ratio: 'birimsiz bir sayı', kind_speed: 'açık/kapalı ya da bir frekans veya hız',
+    kind_onoff: 'açık/kapalı', kind_onoff_power: 'açık/kapalı, bir kademe veya bir güç (W)', kind_valve: 'açık/kapalı ya da Tank/Room gibi bir durum', kind_text: 'bir durum metni',
+    all_entities: 'Seçicilerde tüm varlıkları göster',
+    all_entities_help: 'Kapalı: ölçüm alanları birimi veya cihaz sınıfı uyan varlıkları sunar (°C, W, kWh, bar, l/h). Açık: birimsiz sensörler için tüm varlıklar.',
+    assistant_device: 'Bu ısı pompası cihazında varlık bul',
+    assistant_device_help: 'Yalnız desteklenen bir ön ayar bulunmadığında kullanılabilir. Öneriler siz seçip onaylayana kadar kaydedilmez.',
+    assistant_title: 'Önerilen varlık eşlemesi',
+    assistant_intro: 'Tam İngilizce ve Almanca adlar, birimler ve cihaz sınıfları kontrol edilir. Kaydetmek istediğiniz her öneriyi seçin.',
+    assistant_apply: 'Seçili önerileri kullan',
+    assistant_none: 'Bu cihazda kesin bir öneri bulunamadı.',
+    confirm_title: 'Kurulumunuzu kontrol edin',
+    confirm_intro: 'Entegrasyon bunu bildirmiyor ve cevap çizimi değiştiriyor. Önizleme seçiminizi hemen gösterir; Kaydet’e basana kadar hiçbir şey kaydedilmez.',
+    confirm_buffer: 'Isı pompası ile ısıtma devreleri arasında bir tampon tank var mı?',
+    confirm_buffer_help: 'Tampon tank ısı pompası devresini ısıtma devrelerinden ayırır. Boyler sayılmaz.',
+    confirm_primary_pump: 'Entegrasyonun bildirdiği pompa boyler dolarken de çalışıyor mu?',
+    confirm_primary_pump_help: 'Evet: üç yollu vanadan önceki, ısı pompasının kendi pompası. Hayır: ısıtma devresinin pompası.',
+    confirm_circuits: 'Entegrasyon {from} - {to} arası ısıtma devrelerini bildiriyor ama {missing}. devreyi bildirmiyor. Bu devreler gösterilsin mi?',
+    confirm_circuits_help: 'Evet: kart {from}. devreden başlar. Hayır: {missing}. devre ilk kalır.',
+    confirm_yes: 'Evet', confirm_no: 'Hayır', confirm_unknown: 'Bilmiyorum',
+    preset_help: 'Bulunan varlıklar aşağıya doldurulur. Değiştirmek için başka bir varlık seçin, gizlemek için alanı boşaltın.',
+    from_energy: 'Boş: Enerji panosundan alınır',
+    errors: 'Hata varlıkları', error_ok_text: 'Hata yok anlamına gelen metin durumları',
+    valve_dhw_text: 'Sıcak su için vana durumları', valve_heating_text: 'Isıtma için vana durumları',
+    valve_help: 'Vana varlığının ham durumları, virgülle ayrılmış; örneğin 0, 1 veya Tank. Şu anki durum: {state}.',
+    errors_help: '0 dışındaki bir sayıda veya on durumunda etkin. Metin için aşağıdaki hata yok durumları gerekir; unknown, unavailable, off ve boş yok sayılır.',
+    error_ok_help: 'Virgülle ayrılmış, büyük/küçük harf fark etmez; örneğin: No Error, OK. Bilinen başka her metin hata etiketini gösterir.',
+    total_cop_help: 'Toplam ısı, çevre enerjisi ve elektrik aynı zaman aralığını kapsamalı. Toplam ısı yoksa COP çevre enerjisi artı elektrikle hesaplanır.',
+    language_help: 'Ek diller ve kendi etiketleriniz YAML içinde texts ile ayarlanır; eksik etiketler İngilizceye düşer.',
+    detected: 'Bulundu', entities_found: 'varlık', also_detected: 'Burada ayrıca bulunanlar:', not_detected: 'Bu Home Assistant’ta bulunamadı - entegrasyonu, öneki kontrol edin ya da başka bir ön ayar seçin',
+    program: 'Isıtma programı (eko, gece, parti, tatil)', solar_collector: 'Güneş kolektörü sıcaklığı (°C)', solar_pump: 'Güneş pompası çalışıyor (açık/kapalı)',
+    source_out: 'Kaynak çıkış sıcaklığı (°C: salamura veya kuyu suyu çıkışı)', heater: 'Isı pompasının yedek / hat ısıtıcısı etkin (açık/kapalı, kademe 1 - 3 veya W)',
+    dhw_heater: 'Boyler rezistansı etkin (açık/kapalı veya W)', buffer_heater: 'Tampon rezistansı etkin (açık/kapalı veya W)',
+    dhw_heater_top: 'Boyler üst rezistansı etkin (açık/kapalı veya W)', dhw_heater_middle: 'Boyler orta rezistansı etkin (açık/kapalı veya W)', dhw_heater_bottom: 'Boyler alt rezistansı etkin (açık/kapalı veya W)',
+    buffer_heater_top: 'Tampon üst rezistansı etkin (açık/kapalı veya W)', buffer_heater_middle: 'Tampon orta rezistansı etkin (açık/kapalı veya W)', buffer_heater_bottom: 'Tampon alt rezistansı etkin (açık/kapalı veya W)',
+    hc_underfloor: 'Yerden ısıtma', hc_radiator: 'Panel radyatör', hc_column: 'Dilimli radyatör',
+    brine_pressure_min: 'Salamura basıncı uyarı, altında', brine_pressure_crit: 'Salamura basıncı kritik, altında', brine_pressure_max: 'Salamura basıncı uyarı, üstünde',
+    hc_pressure_min: 'Isıtma basıncı uyarı, altında', hc_pressure_crit: 'Isıtma basıncı kritik, altında', hc_pressure_max: 'Isıtma basıncı uyarı, üstünde',
+    sec_hp: 'Isı pompası', sec_boiler: 'Kombi / ikinci ısı üreticisi', sec_storage: 'Depolama', sec_hc: 'Isıtma devresi ve ev', sec_power: 'Güç kaynakları', sec_stats: 'İstatistikler',
+    mode: 'Çalışma modu (durum metni)', status: 'Durum / alt durum (metin)', compressor: 'Kompresör çalışıyor (açık/kapalı ya da 0 üstü frekans / hız)', defrost: 'Defrost etkin (açık/kapalı)', fan_speed: 'Fan hızı (rpm ya da açık/kapalı)', power: 'Isı pompasının elektrik gücü (W veya kW)',
+    heat: 'Isı gücü (kW veya W)', flow: 'Isı pompası gidiş sıcaklığı (°C)', return: 'Isı pompası dönüş sıcaklığı (°C)', volume: 'Isı pompası devresinin debisi (l/h veya l/min, birincil pompa)', primary_pump_state: 'Birincil pompa çalışıyor (açık/kapalı; varsayılan: debiden)',
+    boiler_state: 'Kombi çalışıyor (açık/kapalı ya da 0 üstü güç)', boiler_power: 'Kombi gücü (W veya kW)', boiler_flow: 'Kombi gidiş sıcaklığı (°C)',
+    source_volume: 'Salamura veya kuyu devresinin debisi (l/h veya l/min, hava için değil)', source_in: 'Kaynak giriş sıcaklığı (°C: hava, salamura veya kuyu suyu girişi)', outdoor: 'Dış sıcaklık (°C)',
+    valve: 'Üç yollu vana sıcak suya (açık/kapalı ya da Tank/Room gibi bir durum)', bypass_valve: 'Seri tampon baypas vanası (açık = baypas; varsayılan: defrost)',
+    pv_boost: 'Güneş fazlası modu (açık ya da 0 üstü güç)',
+    sg_ready: 'SG-Ready / şebeke kilidi durumu (1–4 veya metin)',
+    dhw_top: 'Boyler üst (°C)', dhw_middle: 'Boyler orta (°C)', dhw_bottom: 'Boyler alt (°C)', dhw_target: 'Sıcak su hedefi (°C)', dhw_mode: 'Sıcak su modu (durum metni)',
+    circulation: 'Sirkülasyon pompası çalışıyor (açık/kapalı)', circulation_start: 'Sirkülasyon penceresi başlangıcı', circulation_end: 'Sirkülasyon penceresi bitişi', circulation_schedule: 'Sirkülasyon programı (sonraki değişim)', dhw_loss_sensor: 'Boyler bekleme kaybı ölçümü (°C)', buffer_top: 'Tampon üst (°C)', buffer_middle: 'Tampon orta (°C)', buffer_bottom: 'Tampon alt (°C)', buffer_mode: 'Tampon modu (durum metni)',
+    hc_flow: 'Devre gidiş sıcaklığı (°C)', hc_return: 'Devre dönüş sıcaklığı (°C)', hc_setpoint: 'Devre gidiş hedefi (°C)',
+    hc_mode: 'Devre modu (durum metni)', hc_pump: 'Devre pompası çalışıyor (açık/kapalı)', hc_volume: 'Isıtma devresinin debisi (l/h veya l/min, devre pompası)', hc_curve_offset: 'Isıtma eğrisi kaydırma (K)', hc_mixer: 'Karışım vanası konumu veya payı (%, bildirildiği gibi)', hc_mixer_opening: 'Karışım vanası motoru açıyor (açık/kapalı)', hc_mixer_closing: 'Karışım vanası motoru kapatıyor (açık/kapalı)', hc_pressure: 'Isıtma devresi basıncı (bar)', brine_pressure: 'Salamura devresi basıncı (bar)',
+    cutout_high_pressure: 'Yüksek basınç kesmeleri (olay sayısı, basınç değil)', cutout_low_pressure: 'Alçak basınç kesmeleri (olay sayısı, basınç değil)', cutout_temperature: 'Sıcaklık kesmeleri (olay sayısı, sıcaklık değil)',
+    room: 'Oda sıcaklığı (°C)', room_target: 'Oda hedefi (°C)', room_humidity: 'Oda nemi (%)', dew_point: 'Çiy noktası (°C, isteğe bağlı)',
+    env_energy: 'Toplam çevre enerjisi (kWh)', pv: 'Güneşten gelen güç (W)', battery: 'Bataryadan gelen güç (W)', grid: 'Şebekeden gelen güç (W)',
+    cop_heating_today: 'Bugünkü ısıtma COP', cop_dhw_today: 'Bugünkü sıcak su COP', energy_today: 'Bugünkü enerji (kWh)',
+    pv_share_today: 'Bugünkü güneş payı (%)', starts_today: 'Bugünkü kompresör çalışmaları',
+  },
 };
 
 // Heating circuits the card can draw; circuit 1 uses the plain hc_ keys, circuits 2 to 6 hc2_ to hc6_.
@@ -2986,7 +3145,7 @@ const hfcCompressorOn = (s) => ['on', 'true', 'open', 'ein', 'running', 'startin
 const HFC_ENTITY_GROUPS = {
   sec_hp: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'primary_pump_state', 'source_volume', 'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost', 'sg_ready'],
   sec_boiler: ['boiler_state', 'boiler_power', 'boiler_flow'],
-  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'circulation_start', 'circulation_end', 'circulation_schedule', 'dhw_loss_sensor', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
+  sec_storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'dhw_enabled', 'dhw_once', 'circulation', 'circulation_start', 'circulation_end', 'circulation_schedule', 'dhw_loss_sensor', 'dhw_heater', 'dhw_heater_top', 'dhw_heater_middle', 'dhw_heater_bottom', 'buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode', 'buffer_heater', 'buffer_heater_top', 'buffer_heater_middle', 'buffer_heater_bottom', 'bypass_valve', 'solar_collector', 'solar_pump'],
   sec_hc: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_mixer', 'hc_mixer_opening', 'hc_mixer_closing', 'hc_pressure', 'room', 'room_target', 'room_humidity', 'dew_point', 'program'],
   // The room of circuit 1 uses room/room_target; circuits 2 to 6 use their numbered keys in the shared house overview.
   sec_hc2: ['hc2_flow', 'hc2_return', 'hc2_setpoint', 'hc2_mode', 'hc2_pump', 'hc2_volume', 'hc2_curve_offset', 'hc2_mixer', 'hc2_mixer_opening', 'hc2_mixer_closing', 'hc2_room', 'hc2_room_target', 'hc2_room_humidity', 'hc2_dew_point'],
@@ -3052,10 +3211,10 @@ const HFC_KEY_KINDS = Object.fromEntries(Object.entries({
   counter: ['starts_total', 'starts_today', 'aux_starts', 'cutout_high_pressure', 'cutout_low_pressure', 'cutout_temperature'],
   ratio: ['cop_heating_today', 'cop_dhw_today'],
   speed: ['compressor', 'fan_speed', 'compressor_speed'],
-  onoff: ['defrost', 'circulation', 'hc_pump', 'primary_pump_state', 'hc_mixer_opening', 'hc_mixer_closing', 'solar_pump', 'bypass_valve'],
+  onoff: ['defrost', 'circulation', 'dhw_once', 'hc_pump', 'primary_pump_state', 'hc_mixer_opening', 'hc_mixer_closing', 'solar_pump', 'bypass_valve'],
   onoff_power: ['heater', 'boiler_state', ...HFC_TANK_HEATERS, 'pv_boost'],
   valve: ['valve'],
-  text: ['mode', 'status', 'dhw_mode', 'buffer_mode', 'hc_mode', 'program', 'sg_ready'],
+  text: ['mode', 'status', 'dhw_mode', 'dhw_enabled', 'buffer_mode', 'hc_mode', 'program', 'sg_ready'],
   time: ['circulation_start', 'circulation_end'],
   schedule: ['circulation_schedule'],
 }).flatMap(([kind, keys]) => keys.map((key) => [key, kind])));
@@ -3212,6 +3371,7 @@ const HFC_TILES = {
   starts: { kind: 'count', legacy: 'starts_today' },
   cycles_heating: { kind: 'count' }, cycles_dhw: { kind: 'count' }, cycles_cooling: { kind: 'count' }, defrosts: { kind: 'count' },
   hours: { kind: 'hours' },
+  hours_heating: { kind: 'hours' }, hours_dhw: { kind: 'hours' }, hours_defrost: { kind: 'hours' },
   hours_per_start: { kind: 'hours', ratio: ['hours', 'starts'], perStart: true },
   load_classes: { kind: 'classes' },
   aux_hours: { kind: 'hours' }, aux_starts: { kind: 'count' },
@@ -4247,7 +4407,7 @@ class HeatpumpFlowCard extends HTMLElement {
       ...(cleared.length ? [`- Cleared on purpose: ${cleared.join(', ')}`] : []),
       `- Not mapped: ${unmapped.length ? unmapped.join(', ') : 'none'} (an empty key is fine when the installation does not have it)`,
       ...(r.preset?.valve_rule === 'flow_above_dhw' && !r.entities.valve && r.entities.flow && r.entities.dhw_top
-        ? ['- Hot water without a valve entity: while the heat pump runs and flow is above dhw_top (preset rule)'] : []),
+        ? [`- Hot water without a valve entity: while the heat pump runs and flow is above dhw_top (preset rule)${r.entities.dhw_enabled ? ', not while dhw_enabled is off' : ''}`] : []),
       '',
       'Power sources (PV, battery, grid):',
       ...energyLines,
@@ -4671,6 +4831,11 @@ class HeatpumpFlowCard extends HTMLElement {
     }
     return { kind, entity: this._e[key] };
   }
+  // "850 W" or "1.5 kW" of a heater entity that reports a power, else nothing.
+  _heaterPower(key) {
+    const w = hfcPowerFactor(this._st(key)?.attributes?.unit_of_measurement) === undefined ? NaN : hfcPowerW(this._st(key));
+    return w > 0 ? (w >= 1000 ? `${this._fmt(w / 1000, 1)} kW` : `${this._fmt(w, 0)} W`) : '';
+  }
   // Heater level: 0 = off, 1 = on / stage 1, 2-3 = stage. Binary, on/off text, power (> 0) or a stage number.
   _level(key) {
     if (!this._has(key)) return 0;
@@ -4995,6 +5160,87 @@ class HeatpumpFlowCard extends HTMLElement {
     }
   }
 
+  // Priorities of the labels (#395, stage 3). Most labels always stand. A label with data-prio="room" stands while there is room: the
+  // power at a heater rod at every width, the others on a narrow schematic, where the larger type needs their space (above 500 px they
+  // always stand; `narrow_values: true` keeps the listed ones and `false` leaves all of them out there). In the order of data-rank each
+  // is measured at its own place and at its other places (data-places, "x anchor" separated by ";"), against every label, pipe,
+  // appliance and heater rod, by the rules of the drawing tests; without a free place it is left out.
+  _roomLabels() {
+    const svg = this._rendered && this._$('svg'); if (!svg) return;
+    const all = [...svg.querySelectorAll('text[data-prio="room"]')];
+    const narrow = parseFloat(getComputedStyle(svg).getPropertyValue('--k')) >= 1.4;
+    const own = this._config.narrow_values;
+    // With narrow_focus the flow rates of the heat pump and the circuits stand larger, where there is room for them (#425).
+    const focusFlow = (el) => narrow && this._narrowFocus() && el.classList.contains('vol-label') && !el.closest('.src');
+    const asked = (el) => el.textContent.trim() && (el.classList.contains('rod-val') || el.classList.contains('heater-val') || focusFlow(el)
+      || (narrow && own !== false && !this._narrowFocus()));
+    if (!all.some(asked)) { if (this._roomKey0) { all.forEach((el) => el.classList.remove('room')); this._roomKey0 = ''; this._a11y(true); } return; }
+    const shown = [...svg.querySelectorAll('text')];
+    // The fonts count as well: a theme or card-mod that changes them changes the room (Codex review).
+    const font = all.map((el) => { const cs = getComputedStyle(el); return `${cs.fontSize} ${cs.fontWeight} ${cs.fontFamily}`; }).join('|');
+    const key = `${svg.clientWidth}|${narrow}|${own}|${font}|${shown.map((el) => el.textContent).join('|')}`;
+    if (this._roomKey0 === key && this._roomSvg === svg) return;
+    this._roomKey0 = key; this._roomSvg = svg;
+    let root; try { root = svg.getScreenCTM().inverse(); } catch (err) { return; }
+    const visible = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility === 'visible';
+    const map = (el, b) => {
+      let m; try { m = root.multiply(el.getScreenCTM()); } catch (err) { return null; }
+      const pts = [b.l, b.r].flatMap((x) => [b.t, b.b].map((y) => new DOMPoint(x, y).matrixTransform(m)));
+      return { l: Math.min(...pts.map((p) => p.x)), r: Math.max(...pts.map((p) => p.x)), t: Math.min(...pts.map((p) => p.y)), b: Math.max(...pts.map((p) => p.y)) };
+    };
+    const body = (el) => { try { const b = el.getBBox(); return map(el, { l: b.x, r: b.x + b.width, t: b.y, b: b.y + b.height }); } catch (err) { return null; } };
+    const text = (el) => {
+      let b; try { b = el.getBBox(); } catch (err) { return null; }
+      if (!(b.width > 0)) return null;
+      const size = Math.max(...[el, ...el.querySelectorAll('tspan')].map((n) => parseFloat(getComputedStyle(n).fontSize)).filter(Number.isFinite));
+      let top = Infinity; let bottom = -Infinity;
+      for (let n = 0; n < el.getNumberOfChars(); n++) { try { const { y } = el.getStartPositionOfChar(n); top = Math.min(top, y - 0.72 * size); bottom = Math.max(bottom, y + 0.22 * size); } catch (err) { /* hidden part */ } }
+      const box = map(el, { l: b.x, r: b.x + b.width, t: Number.isFinite(top) ? top : b.y, b: Number.isFinite(bottom) ? bottom : b.y + b.height });
+      // The name column of the room overview is clipped.
+      const clip = box && el.matches('.house-row-name') && /^polygon\([^,]+, ([\d.]+)px /.exec(getComputedStyle(el).clipPath);
+      if (clip) box.r = Math.min(box.r, box.l + Number(clip[1]));
+      return box;
+    };
+    const hit = (a, b, gap) => Math.min(a.r, b.r) - Math.max(a.l, b.l) > gap && Math.min(a.b, b.b) - Math.max(a.t, b.t) > gap;
+    const before = all.filter((el) => el.classList.contains('room'));
+    all.forEach((el) => el.classList.remove('room'));
+    // What narrow_values keeps stands anyway and only takes its room.
+    const list = all.filter((el) => asked(el) && !visible(el));
+    const labels = shown.filter((el) => !list.includes(el) && el.textContent.trim() && visible(el)).map(text).filter(Boolean);
+    const bodies = [...svg.querySelectorAll('#hp-box, rect.tank, rect.boiler-box, rect.fws, rect.radiator, rect.column-rib, circle.pump, circle.valve, .heater-flange, rect.collector')].filter(visible).map(body).filter(Boolean);
+    const rods = [...svg.querySelectorAll('.heater-case')].filter(visible).map((el) => [el.parentNode, body(el)]);
+    const dots = [...svg.querySelectorAll('path.pipe')].filter(visible).flatMap((pipe) => {
+      const r = parseFloat(getComputedStyle(pipe).strokeWidth) / 2 || 2; let len = 0; let m;
+      try { len = pipe.getTotalLength(); m = root.multiply(pipe.getScreenCTM()); } catch (err) { return []; }
+      const out = [];
+      for (let at = 0; at <= len; at += 4) { const { x, y } = pipe.getPointAtLength(at).matrixTransform(m); if (!bodies.some((c) => x > c.l && x < c.r && y > c.t && y < c.b)) out.push({ l: x - r, r: x + r, t: y - r, b: y + r }); }
+      return out;
+    });
+    const vb = svg.viewBox.baseVal;
+    const free = (el, b) => b.l >= vb.x && b.r <= vb.x + vb.width && b.t >= vb.y && b.b <= vb.y + vb.height
+      && labels.every((o) => !hit(b, o, -HFC_LABEL_GAP)) && dots.every((o) => !hit(b, o, 1)) && rods.every(([g, o]) => g === el.parentNode || !hit(b, o, 0))
+      // A label inside a tank or the heat pump belongs to it; on its edge it does not fit.
+      && bodies.every((o) => !hit(b, o, 1) || (b.l >= o.l && b.r <= o.r && b.t >= o.t && b.b <= o.b));
+    list.sort((a, b) => a.dataset.rank - b.dataset.rank).forEach((el) => {
+      const home = el._roomHome || (el._roomHome = { x: el.getAttribute('x'), anchor: el.getAttribute('text-anchor') || 'start' });
+      const places = [home, ...(el.dataset.places || '').split(';').map((s) => s.trim().split(/\s+/)).filter((p) => p[0]).map(([x, anchor]) => ({ x, anchor: anchor || home.anchor }))];
+      el.classList.add('room');
+      // A label with a width budget stands in full or not at all.
+      if (el._fit && el.textContent === el._fit.shown) { el.textContent = el._fit.full; el._fit = null; }
+      let wide = 0; try { wide = el.dataset.fit ? el.getComputedTextLength() - parseFloat(el.dataset.fit) : 0; } catch (err) { /* not laid out */ }
+      const at = wide > 0 ? -1 : places.findIndex((p) => {
+        if (places.length > 1) { el.setAttribute('x', p.x); el.setAttribute('text-anchor', p.anchor); }
+        const b = text(el);
+        return b && free(el, b) && labels.push(b);
+      });
+      if (at < 0) el.classList.remove('room');
+      el.classList.toggle('outside', at > 0);
+    });
+    // A value that appears or goes changes what the keyboard can reach (Codex review).
+    const after = all.filter((el) => el.classList.contains('room'));
+    if (after.length !== before.length || after.some((el, n) => el !== before[n])) this._a11y(true);
+  }
+
   // Label whose tail (for example the humidity after the room target) the narrow focus view hides; a narrow schematic also hides
   // the humidity after the room target, which is wider than the house there.
   _txtTail(id, main, tail) {
@@ -5198,7 +5444,7 @@ class HeatpumpFlowCard extends HTMLElement {
             <g class="impeller" id="impeller-primary" style="transform-origin:${P.boiler ? 316 : 340}px 250px"><path d="M${P.boiler ? 316 : 340} 238 L${P.boiler ? 322 : 346} 250 L${P.boiler ? 310 : 334} 250Z M${P.boiler ? 316 : 340} 262 L${P.boiler ? 310 : 334} 250 L${P.boiler ? 322 : 346} 250Z" class="imp"/></g>
           </g>` : ''}
           ${P.condenser ? '' : `${P.boiler ? '' : `<g class="tap" ${de('flow')}><text class="pipe-label${nf ? ' nf-big' : ''}" id="t-vl" x="${this._primaryPump() ? 340 : 338}" y="${this._primaryPump() ? 226 : 236}" text-anchor="middle"></text></g>`}
-          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${P.boiler ? 336 : (this._primaryPump() ? 340 : 346)}" y="${P.boiler ? 324 : this._primaryPump() ? 284 : 275}" text-anchor="middle"></text></g>
+          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" data-prio="room" data-rank="2" x="${P.boiler ? 336 : (this._primaryPump() ? 340 : 346)}" y="${P.boiler ? 324 : this._primaryPump() ? 284 : 275}" text-anchor="middle"></text></g>
           <g class="tap" ${de('return')}><text class="pipe-label" id="t-rl" x="335" y="406" text-anchor="middle"></text></g>`}
 
           <g class="tap" ${de('mode')}>
@@ -5235,7 +5481,7 @@ class HeatpumpFlowCard extends HTMLElement {
             ${P.condenser ? '' : `<g class="tap" ${de(e.valve ? 'valve' : 'dhw_mode')}>
               <circle class="valve" cx="420" cy="250" r="18"/>
               <path class="valve-arrow" id="valve-arrow" d="M420 262 V240 M412 248 L420 240 L428 248"/>
-              <text class="small" id="t-valve" x="432" y="198"></text>
+              <text class="small" id="t-valve" x="432" y="198" data-prio="room" data-rank="6"></text>
             </g>`}
             <g class="tap" ${de(['dhw_top', 'dhw_middle', 'dhw_bottom'].find((k) => e[k]) || 'dhw_top')}>
               ${P.combined ? `<text class="tank-title" x="580" y="30" text-anchor="middle" data-fit="220">${this._esc(i.combined_tank)}</text>
@@ -5249,12 +5495,12 @@ class HeatpumpFlowCard extends HTMLElement {
               ${P.dhwType === 'fresh_water' ? `${pipePair('fws-a', `M640 ${HFC_STATION_PORTS.flow} H654`)}${pipePair('fws-b', `M640 ${HFC_STATION_PORTS.return} H654`)}${this._stationArt(652, HFC_STATION_PORTS.flow - 10, 56, HFC_STATION_PORTS.return - HFC_STATION_PORTS.flow + 20)}` : ''}
               ${P.condenser ? '<path class="coil" id="coil-cond" d="M520 336 H546 L528 354 H546 L528 372 H546 L528 390 H546 L528 408 H546 L528 426 H546 L528 444 H546 L528 462 H546 L528 480 H520"/>' : ''}
               <text class="tank-temp" id="t-dhw-top" x="580" y="112" text-anchor="middle"></text>
-              <text class="small${P.combined ? ' on-tank' : ''}" id="t-dhw-mode" x="580" y="262" text-anchor="middle" data-fit="164"></text>
+              <text class="small${P.combined ? ' on-tank' : ''}" id="t-dhw-mode" x="580" y="262" text-anchor="middle" data-fit="164" data-prio="room" data-rank="3"></text>
             </g>
-            ${this._has('dhw_middle') ? `<g class="tap" ${de('dhw_middle')}><text class="tank-sub" id="t-dhw-middle" x="580" y="166" text-anchor="middle"></text></g>` : ''}
-            <g class="tap" ${de('dhw_bottom')}><text class="tank-sub" id="t-dhw-bottom" x="580" y="222" text-anchor="middle"></text></g>
+            ${this._has('dhw_middle') ? `<g class="tap" ${de('dhw_middle')}><text class="tank-sub" id="t-dhw-middle" x="580" y="166" text-anchor="middle" data-prio="room" data-rank="4"${this._rodBeside('dhw_heater_middle')}></text></g>` : ''}
+            <g class="tap" ${de('dhw_bottom')}><text class="tank-sub" id="t-dhw-bottom" x="580" y="222" text-anchor="middle" data-prio="room" data-rank="2"${this._rodBeside('dhw_heater_bottom')}></text></g>
             ${this._tankHeaters('dhw', P).map((h) => this._heaterSvg(...h)).join('')}
-            ${P.circ ? `<g class="tap" ${de(this._circulationKey())}><text class="small circ" id="t-circ" x="650" y="60">↻ ${this._esc(i.circulation)}</text></g>` : ''}` : ''}
+            ${P.circ ? `<g class="tap" ${de(this._circulationKey())}><text class="small circ" id="t-circ" x="650" y="60" data-prio="room" data-rank="5">↻ ${this._esc(i.circulation)}</text></g>` : ''}` : ''}
 
           ${P.buffer ? `
             <g class="tap" ${de(P.combined ? (['buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode'].find((k) => e[k]) || 'buffer_top') : 'buffer_top')}>
@@ -5264,8 +5510,8 @@ class HeatpumpFlowCard extends HTMLElement {
               <text class="tank-temp${equalBuffer ? ' buffer-value' : ''}" id="t-buf-top" x="580" y="${bufferY.buffer_top ?? 392}" text-anchor="middle"></text>
               <text class="small" id="t-buf-mode" x="580" y="542" text-anchor="middle"></text>
             </g>
-            ${this._has('buffer_middle') ? `<g class="tap" ${de('buffer_middle')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-middle" x="580" y="${bufferY.buffer_middle ?? 446}" text-anchor="middle"></text></g>` : ''}
-            <g class="tap" ${de('buffer_bottom')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-bottom" x="580" y="${bufferY.buffer_bottom ?? 502}" text-anchor="middle"></text></g>
+            ${this._has('buffer_middle') ? `<g class="tap" ${de('buffer_middle')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-middle" x="580" y="${bufferY.buffer_middle ?? 446}" text-anchor="middle" data-prio="room" data-rank="4"${this._rodBeside('buffer_heater_middle')}></text></g>` : ''}
+            <g class="tap" ${de('buffer_bottom')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-bottom" x="580" y="${bufferY.buffer_bottom ?? 502}" text-anchor="middle" data-prio="room" data-rank="2"${this._rodBeside('buffer_heater_bottom')}></text></g>
             ${this._tankHeaters('buffer', P).map((h) => this._heaterSvg(...h)).join('')}` : ''}
 
 
@@ -6309,9 +6555,9 @@ class HeatpumpFlowCard extends HTMLElement {
         <text class="tank-title" x="580" y="122" text-anchor="middle">${this._esc(i.fresh_water_station)}</text>
         ${this._stationArt(526, 132, 108, 80)}
         <text class="house-temp" id="t-dhw-top" x="580" y="182" text-anchor="middle"></text>
-        <text class="small" id="t-dhw-mode" x="580" y="100" text-anchor="middle"></text>
+        <text class="small" id="t-dhw-mode" x="580" y="100" text-anchor="middle" data-prio="room" data-rank="3"></text>
       </g>
-      ${this._parts.circ ? `<g class="tap" ${de(this._circulationKey())}><text class="small circ" id="t-circ" x="650" y="60">↻ ${this._esc(i.circulation)}</text></g>` : ''}`;
+      ${this._parts.circ ? `<g class="tap" ${de(this._circulationKey())}><text class="small circ" id="t-circ" x="650" y="60" data-prio="room" data-rank="5">↻ ${this._esc(i.circulation)}</text></g>` : ''}`;
   }
 
   _seriesSvg() {
@@ -6414,8 +6660,8 @@ class HeatpumpFlowCard extends HTMLElement {
     : `<g class="tap" ${de(k('flow'))}>${this._hcCount > 1
       ? `<text class="pipe-label" id="t-hc${s}" x="688" y="334" text-anchor="start"></text>`
       : `<text class="pipe-label" id="t-hc${s}" x="740" y="334" text-anchor="middle"></text>`}</g>`}
-      <g class="tap" ${de(k('volume'))}><text class="vol-label" id="t-hc-vol${s}" x="720" y="${e[k('curve_offset')] ? 414 : 394}" text-anchor="middle"></text></g>
-      ${this._config.hc_return_label ? `<g class="tap" ${de(k('return'))}><text class="vol-label" id="t-hc-rl${s}" x="690" y="515" text-anchor="start"></text></g>` : ''}
+      <g class="tap" ${de(k('volume'))}><text class="vol-label" id="t-hc-vol${s}" data-prio="room" data-rank="3" x="720" y="${e[k('curve_offset')] ? 414 : 394}" text-anchor="middle"></text></g>
+      ${this._config.hc_return_label ? `<g class="tap" ${de(k('return'))}><text class="vol-label" id="t-hc-rl${s}" data-prio="room" data-rank="4" x="690" y="515" text-anchor="start"></text></g>` : ''}
       ${n === 1 && e.hc_pressure
     // Starts right of the storage column (and right of the risers of further circuits), so a long text such as
     // "Heizungsdruck 1,8 bar" is not covered by the buffer (#129); low enough to pass between the pipes of an underfloor loop. With a
@@ -7062,7 +7308,8 @@ class HeatpumpFlowCard extends HTMLElement {
   // running compressor win over an idle mode; without a valve, `valve_rule` adds flow and tank temperature.
   _timelineIds() {
     const comp = this._has('compressor') ? { comp: this._e.compressor, valve: this._has('valve') ? this._e.valve : null } : null;
-    const byFlow = this._valveByFlow() ? { vflow: this._e.flow, vtank: this._e.dhw_top } : {};
+    const byFlow = this._valveByFlow() ? { vflow: this._e.flow, vtank: this._e.dhw_top,
+      ...(this._has('dhw_enabled') ? { von: this._e.dhw_enabled } : {}), ...(this._has('dhw_once') ? { vonce: this._e.dhw_once } : {}) } : {};
     const base = this._has('mode') ? { mode: this._e.mode, ...byFlow, ...(comp && this._preset?.compressor_over_idle ? comp : {}) }
       : comp ? { ...comp, ...byFlow } : null;
     // The runs read the compressor even where the segments follow the mode alone; `cycle` only when `comp` is not there already.
@@ -7252,6 +7499,9 @@ class HeatpumpFlowCard extends HTMLElement {
   // Preset rule for units without a valve or hot-water charging entity (`valve_rule: 'flow_above_dhw'`, ViCare #196): hot water
   // while the heat pump runs and its flow is above the tank temperature, since heating keeps the flow below a charged tank.
   // A tank that has cooled below the heating flow reads as hot water for that time.
+  // Switched off, hot water cannot be what the heat pump makes, however cold the tank is (#489); `dhw_enabled` is off only as the text
+  // "off", and a one-time charge (`dhw_once`) runs also then.
+  _dhwOff(enabled, once) { return String(enabled ?? '').trim().toLowerCase() === 'off' && String(once ?? '').trim().toLowerCase() !== 'on'; }
   _valveByFlow() {
     return this._preset?.valve_rule === 'flow_above_dhw' && !this._has('valve') && this._has('flow') && this._has('dhw_top');
   }
@@ -7352,6 +7602,10 @@ class HeatpumpFlowCard extends HTMLElement {
       const attr = hfcTempAttr(id, key);
       out[id] = list.map((e) => ({ t: time(e), s: String((attr ? e.attributes?.[attr] ?? e.a?.[attr] : undefined) ?? e.s ?? e.state) }))
         .filter((e) => Number.isFinite(e.t)).sort((a, b) => a.t - b.t);
+      // A water heater that is the tank temperature and the hot-water switch at once: the switch reads its state (Codex review of #498).
+      if (attr && id === this._e?.dhw_enabled) {
+        out[`${id}#state`] = list.map((e) => ({ t: time(e), s: String(e.s ?? e.state) })).filter((e) => Number.isFinite(e.t)).sort((a, b) => a.t - b.t);
+      }
     });
     return out;
   }
@@ -7396,14 +7650,15 @@ class HeatpumpFlowCard extends HTMLElement {
       const list = (id) => (id ? hist[id] || [] : []);
       const held = (entries) => { let n = -1; return (t) => { while (n + 1 < entries.length && entries[n + 1].t <= t) n++; return entries[n]?.s; }; };
       const mode = held(list(ids.mode)); const comp = held(list(ids.comp)); const valve = held(list(ids.valve));
-      const vflow = held(list(ids.vflow)); const vtank = held(list(ids.vtank));
+      const vflow = held(list(ids.vflow)); const vtank = held(list(ids.vtank)); const von = held(ids.von && hist[`${ids.von}#state`] ? hist[`${ids.von}#state`] : list(ids.von)); const vonce = held(list(ids.vonce));
       // Compressor on: the rule of the live view, so the timeline never shows heating while the heat pump block says off.
       const on = (s) => s !== undefined && hfcCompressorOn(s);
       const dhw = (s) => this._valveDhwState(s);
-      const times = [...new Set([ids.mode, ids.comp, ids.valve, ids.vflow, ids.vtank].flatMap((id) => list(id).map((e) => e.t)))].sort((a, b) => a - b);
+      const times = [...new Set([ids.mode, ids.comp, ids.valve, ids.vflow, ids.vtank, ids.von, ids.vonce].flatMap((id) => list(id).map((e) => e.t)))].sort((a, b) => a - b);
       times.forEach((t) => {
         const ms = mode(t); const cs = comp(t); const vs = valve(t); const fl = parseFloat(vflow(t)); const tk = parseFloat(vtank(t));
-        const toDhw = ids.valve ? dhw(vs) : !!ids.vflow && fl > tk;
+        const off = this._dhwOff(von(t), vonce(t));
+        const toDhw = ids.valve ? dhw(vs) : !!ids.vflow && fl > tk && !off;
         if (ids.mode) {
           if (ms === undefined) return;
           const kind = kindOfMode(ms);
@@ -7885,20 +8140,24 @@ class HeatpumpFlowCard extends HTMLElement {
     return Object.entries(y).map(([pos, h]) => [`${tank}_heater${pos ? `_${pos}` : ''}`, `${dhw ? 'dhw' : 'buf'}${pos ? `-${pos}` : ''}`, h, pos ? 612 : dhw ? 604 : 578]);
   }
 
+  // A tank value beside a heater rod at its height may move left on a narrow card, where wider fonts reach the rod (Firefox on Linux).
+  _rodBeside(key) { return this._has(key) ? ' data-places="568 middle; 524 start"' : ''; }
+
   // Heater rod entering a tank from the right wall at height y, reaching left to x; backup / inline heater as a box inside the heat pump.
   _heaterSvg(key, id, y, left) {
     if (!this._has(key)) return '';
     const de = `data-entity="${this._esc(this._e[key])}"`;
     if (id === 'inline') {
       return `<g class="tap heater" id="heater-${id}" ${de}><rect class="heater-box" x="230" y="266" width="46" height="30" rx="6"/>
-        <path class="heater-el" d="M236 281 l4 -8 l6 16 l6 -16 l6 16 l6 -16 l6 16 l4 -8"/></g>`;
+        <path class="heater-el" d="M236 281 l4 -8 l6 16 l6 -16 l6 16 l6 -16 l6 16 l4 -8"/><text class="unit-val heater-val" id="t-heater-inline" x="253" y="310" text-anchor="middle" data-prio="room" data-rank="3"></text></g>`;
     }
     // A running rod is red like the hot-water phase of the timeline, with rising heat waves like the emitters; a dark casing keeps
     // it visible in a tank of a similar colour.
     const d = `M640 ${y - 4} H${left + 6} Q${left} ${y - 4} ${left} ${y} Q${left} ${y + 4} ${left + 6} ${y + 4} H640`;
     const waves = [0, 1, 2].map((n) => `<path class="wave" d="M${left + 6 + n * (634 - left - 6) / 2} ${y - 7} q4 -4 0 -8 q-4 -4 0 -8"/>`).join('');
     return `<g class="tap heater rod" id="heater-${id}" ${de}><rect class="heater-flange" x="638" y="${y - 9}" width="9" height="18" rx="2"/>
-      <path class="heater-case" d="${d}"/><path class="heater-el" d="${d}"/><g class="waves rod-waves">${waves}</g></g>`;
+      <path class="heater-case" d="${d}"/><path class="heater-el" d="${d}"/><g class="waves rod-waves">${waves}</g>
+      <text class="rod-val" id="t-heater-${id}" x="${left - 7}" y="${y + 5}" text-anchor="end" data-prio="room" data-rank="3" data-places="652 start"></text></g>`;
   }
 
   // Solar thermal loop into the right side of the DHW tank. Drawn before the tank, so the tank covers the pipe ends; at the
@@ -7941,7 +8200,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const labels = `<g class="tap" ${out}><text class="small" id="t-src-out" x="${this._sourceType === 'exhaust' ? 126 : 130}" y="462" text-anchor="end" data-fit="126"></text></g>
       <g class="tap" ${inn}><text class="small" id="t-src-in" x="${this._sourceType === 'exhaust' ? 214 : 210}" y="462" data-fit="${this._sourceType === 'exhaust' ? 150 : 120}"></text></g>
       <g class="tap" ${inn}><text class="small source-spread" id="t-src-spread" x="128" y="512" text-anchor="end" data-fit="124"></text></g>
-      <g class="tap" ${this._e.source_volume ? `data-entity="${this._esc(this._e.source_volume)}"` : ''}><text class="vol-label" id="t-src-vol" x="212" y="512"></text></g>
+      <g class="tap" ${this._e.source_volume ? `data-entity="${this._esc(this._e.source_volume)}"` : ''}><text class="vol-label" id="t-src-vol" data-prio="room" data-rank="5" x="212" y="512"></text></g>
       ${this._sourceType === 'brine' && this._e.brine_pressure ? `<g class="tap pressure" id="pressure-brine" data-entity="${this._esc(this._e.brine_pressure)}"><text class="pressure-label" id="t-brine-pressure" x="212" y="532" data-fit="300"></text></g>` : ''}`;
     if (this._sourceType === 'exhaust') {
       // Exhaust air comes from the rooms, the vented air leaves through the wall.
@@ -8172,7 +8431,7 @@ class HeatpumpFlowCard extends HTMLElement {
     // A `valve_map` (raw state → dhw | heating) decides first, for valves that report 1 for heating or other texts.
     const valveMapped = this._has('valve') ? this._valveMapped(this._s('valve')) : undefined;
     const valveDhw = this._has('valve') ? (valveMapped ?? this._valveDhwState(this._s('valve')))
-      : this._valveByFlow() && running && this._n('flow') > this._n('dhw_top');
+      : this._valveByFlow() && running && this._n('flow') > this._n('dhw_top') && !this._dhwOff(this._s('dhw_enabled'), this._s('dhw_once'));
     // Integrations without an operating-mode entity: a running compressor means heating unless the valve says DHW.
     // Defrost wins over a stopped compressor: it pauses for about a minute while the 4-way valve switches (HeishaMon).
     // run_signal (#365): the mode decides only cooling and a lock; the valve decides hot water while the heat pump runs.
@@ -8277,6 +8536,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._updateDrawing();
     this._fitLabels();
     this._placeLabels();
+    this._roomLabels();
   }
 
   _updateDrawing() {
@@ -8476,6 +8736,8 @@ class HeatpumpFlowCard extends HTMLElement {
       const lv = this._level(key);
       el.classList.toggle('on', lv > 0); el.classList.toggle('stage2', lv > 1);
       el.querySelector('.waves')?.classList.toggle('on', lv > 0);
+      // The measured power of a heater whose entity reports one (#449); on or off alone is drawn, not written.
+      this._txt(`t-heater-${id}`, lv > 0 ? this._heaterPower(key) : '');
     });
 
     if (P.boiler) {
@@ -8895,6 +9157,10 @@ HeatpumpFlowCard.styles = `
   .heater-flange, .heater-box { fill: var(--secondary-background-color, rgba(127,127,127,.15)); stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 1.5; }
   .heater.on .heater-el { stroke: ${hfcVar('heat')}; filter: url(#glow); }
   .heater.on.stage2 .heater-el { stroke: ${hfcVar('hot')}; }
+  .rod-val { font-size: calc(13px * var(--k2, 1)); font-weight: 600; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.45); stroke-width: 3px; }
+  .rod-val:not(.room), .heater-val:not(.room) { display: none; }
+  .rod-val.outside { fill: var(--hfc-muted); stroke: var(--card-background-color, #fff); }
+  .heater-val { font-size: 12px; }
   .heater.rod.on .heater-el, .rod-waves .wave { stroke: ${hfcVar('hot')}; } .rod-waves .wave { stroke-width: 2; }
   .boiler-title { font-size: 12px; font-weight: 600; fill: var(--primary-text-color); }
   .boiler-box { fill: var(--card-background-color, #fff); stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 2; }
@@ -9137,7 +9403,7 @@ HeatpumpFlowCard.styles = `
   /* narrow schematic (phones, narrow columns): larger type, secondary labels hidden */
   .stage { container-type: inline-size; }
   @container (max-width: 640px) { #svg { --k: 1.2; --ku: 1.1; --kp: 1; --k2: 1; --ks: 1.2; --kt: 1.15; } }
-  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .vol-label, .tank-sub, .pre, #t-valve, #t-circ, #t-dhw-mode, #t-room-target .nf-tail { display: none; } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values #t-dhw-middle, .narrow-values #t-dhw-bottom, .narrow-values #t-dhw-mode, .narrow-values .vol-label { display: block; font-size: calc(13px * var(--k2, 1)); } }
+  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .pre, #t-room-target .nf-tail, [data-prio="room"]:not(.room) { display: none; } [data-prio="room"].room:not(.rod-val) { font-size: calc(14px * var(--k2, 1)); } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values #t-dhw-middle, .narrow-values #t-dhw-bottom, .narrow-values #t-dhw-mode, .narrow-values .vol-label { display: block; font-size: calc(13px * var(--k2, 1)); } }
   /* narrow_focus: below 500 px the key values grow to about the size of the tank temperature; the outdoor, air inlet and power
      source values move to one line under the schematic, and the secondary labels are hidden. Wins over narrow_values. */
   #t-hp-heat, .focus-line { display: none; }
@@ -9158,6 +9424,7 @@ HeatpumpFlowCard.styles = `
     .narrow-focus .nf-two .house-row-value { font-size: 26px; text-anchor: start; transform: translate(-204px, 27px); }
     .narrow-focus #house-row2.nf-two { transform: translateY(24.5px); } .narrow-focus #house-row3.nf-two { transform: translateY(49px); }
     .narrow-focus .focus-line:not(:empty) { display: block; }
+    .narrow-focus .vol-label[data-prio="room"].room { font-size: 22px; font-weight: 600; fill: var(--primary-text-color); }
   }
   @container (max-width: 500px) {
     .src-val { transform: translateY(7px); }
