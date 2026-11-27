@@ -1,0 +1,1 @@
+- Turkish translation of the card and the editor.
