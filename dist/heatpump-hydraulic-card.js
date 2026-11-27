@@ -5350,8 +5350,8 @@ class HeatpumpFlowCard extends HTMLElement {
               <text class="tank-temp" id="t-dhw-top" x="580" y="112" text-anchor="middle"></text>
               <text class="small${P.combined ? ' on-tank' : ''}" id="t-dhw-mode" x="580" y="262" text-anchor="middle" data-fit="164" data-prio="room" data-rank="3"></text>
             </g>
-            ${this._has('dhw_middle') ? `<g class="tap" ${de('dhw_middle')}><text class="tank-sub" id="t-dhw-middle" x="580" y="166" text-anchor="middle" data-prio="room" data-rank="4"></text></g>` : ''}
-            <g class="tap" ${de('dhw_bottom')}><text class="tank-sub" id="t-dhw-bottom" x="580" y="222" text-anchor="middle" data-prio="room" data-rank="2"></text></g>
+            ${this._has('dhw_middle') ? `<g class="tap" ${de('dhw_middle')}><text class="tank-sub" id="t-dhw-middle" x="580" y="166" text-anchor="middle" data-prio="room" data-rank="4"${this._rodBeside('dhw_heater_middle')}></text></g>` : ''}
+            <g class="tap" ${de('dhw_bottom')}><text class="tank-sub" id="t-dhw-bottom" x="580" y="222" text-anchor="middle" data-prio="room" data-rank="2"${this._rodBeside('dhw_heater_bottom')}></text></g>
             ${this._tankHeaters('dhw', P).map((h) => this._heaterSvg(...h)).join('')}
             ${P.circ ? `<g class="tap" ${de(this._circulationKey())}><text class="small circ" id="t-circ" x="650" y="60" data-prio="room" data-rank="5">↻ ${this._esc(i.circulation)}</text></g>` : ''}` : ''}
 
@@ -5363,8 +5363,8 @@ class HeatpumpFlowCard extends HTMLElement {
               <text class="tank-temp${equalBuffer ? ' buffer-value' : ''}" id="t-buf-top" x="580" y="${bufferY.buffer_top ?? 392}" text-anchor="middle"></text>
               <text class="small" id="t-buf-mode" x="580" y="542" text-anchor="middle"></text>
             </g>
-            ${this._has('buffer_middle') ? `<g class="tap" ${de('buffer_middle')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-middle" x="580" y="${bufferY.buffer_middle ?? 446}" text-anchor="middle" data-prio="room" data-rank="4"></text></g>` : ''}
-            <g class="tap" ${de('buffer_bottom')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-bottom" x="580" y="${bufferY.buffer_bottom ?? 502}" text-anchor="middle" data-prio="room" data-rank="2"></text></g>
+            ${this._has('buffer_middle') ? `<g class="tap" ${de('buffer_middle')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-middle" x="580" y="${bufferY.buffer_middle ?? 446}" text-anchor="middle" data-prio="room" data-rank="4"${this._rodBeside('buffer_heater_middle')}></text></g>` : ''}
+            <g class="tap" ${de('buffer_bottom')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-bottom" x="580" y="${bufferY.buffer_bottom ?? 502}" text-anchor="middle" data-prio="room" data-rank="2"${this._rodBeside('buffer_heater_bottom')}></text></g>
             ${this._tankHeaters('buffer', P).map((h) => this._heaterSvg(...h)).join('')}` : ''}
 
 
@@ -7975,6 +7975,9 @@ class HeatpumpFlowCard extends HTMLElement {
     if (occupied.some((pos) => Math.abs(y[pos] - y['']) < 34)) y[''] = dhw ? 128 : 410;
     return Object.entries(y).map(([pos, h]) => [`${tank}_heater${pos ? `_${pos}` : ''}`, `${dhw ? 'dhw' : 'buf'}${pos ? `-${pos}` : ''}`, h, pos ? 612 : dhw ? 604 : 578]);
   }
+
+  // A tank value beside a heater rod at its height may move left on a narrow card, where wider fonts reach the rod (Firefox on Linux).
+  _rodBeside(key) { return this._has(key) ? ' data-places="568 middle; 524 start"' : ''; }
 
   // Heater rod entering a tank from the right wall at height y, reaching left to x; backup / inline heater as a box inside the heat pump.
   _heaterSvg(key, id, y, left) {
