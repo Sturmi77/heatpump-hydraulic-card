@@ -612,7 +612,7 @@
         await probe(`${LONG}: ${name}`, named(config), { ...widen({ ...statesOf(c, idx % 2 ? 'cool' : 'heat'), ...extra }), 'sensor.t_system': [low ? '0.4' : '10.2', 'bar'] }, { narrow });
         idx++;
       }
-    // Heat source: source type × unit drawing (air only; brine and water draw the loop) × brine pressure × spread × source flow.
+    // Heat source: source type × unit drawing (air only; brine and water draw the loop) × brine pressure × spread (off, K, °C) × source flow.
     const UNITS = [...HFC_UNIT_STYLES.filter((u) => u !== 'auto').flatMap((u) => (u === 'vaillant' ? HFC_UNIT_SIZES.map((size) => [u, size])
       : ['panasonic', 'bosch', 'buderus', 'bosch_compact', 'buderus_compact'].includes(u) ? [[u, 'medium'], [u, 'large']] : [[u]]))];
     idx = 0;
@@ -630,6 +630,12 @@
         const name = `zone source ${source} ${unit}${size ? `-${size}` : ''}${pressure ? ' pressure' : ''}${spread ? '' : ' nospread'}${volume ? ' volume' : ''} ${narrow ? 'narrow' : config.layout}`;
         if (!sweep) await probe(name, config, { ...statesOf(c, 'heat'), ...extra }, { narrow, english: true });
         await probe(`${LONG}: ${name}`, named(config), widen({ ...statesOf(c, idx % 2 ? 'defrost' : 'heat'), ...extra }), { narrow });
+        // spread_unit °C makes the ΔT label wider: the same case in °C, at the same place, so the K cases keep their layout.
+        if (spread) {
+          const deg = { ...config, spread_unit: '°C' };
+          if (!sweep) await probe(`${name} degC`, deg, { ...statesOf(c, 'heat'), ...extra }, { narrow, english: true });
+          await probe(`${LONG}: ${name} degC`, named(deg), widen({ ...statesOf(c, idx % 2 ? 'defrost' : 'heat'), ...extra }), { narrow });
+        }
         idx++;
       }
   }
