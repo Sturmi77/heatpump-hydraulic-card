@@ -8005,7 +8005,7 @@ class HeatpumpFlowCard extends HTMLElement {
     }, (res) => res || {});
     if (!hist) return null;
     // The rows of a run are computed once per history and minute: _updateTimeline asks on every card update.
-    const memo = `${this._runId(run)}|${run.kind}|${Math.floor(run.to / 60000)}|${this._lang}|${this._config.flow_rate_unit || ''}`;
+    const memo = `${this._runId(run)}|${run.kind}|${Math.floor(run.to / 60000)}|${this._lang}|${this._config.flow_rate_unit || ''}|${this._spreadUnit()}`;
     // The panel and the tile of the last heating run can show different runs, so the latest few stay.
     this._runMemo = this._runMemo || [];
     const known = this._runMemo.find((m) => m.hist === hist && m.key === memo);

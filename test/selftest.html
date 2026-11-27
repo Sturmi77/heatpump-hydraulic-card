@@ -7666,6 +7666,9 @@
     const otherRun = o.card._tl.runs.find((r) => r.kind === 'dhw'); o.card._tlRun = o.card._runId(otherRun); o.card.hass = { ...o.card._hass }; await wait(40);
     const f1 = o.card._runFigures(panelRun); const f2 = o.card._runFigures(otherRun);
     check(f1 && f2 && f1 === o.card._runFigures(panelRun) && f2 === o.card._runFigures(otherRun), '#481: the panel and the tile keep the values of two runs side by side');
+    // The unit of the spreads is part of the stored rows: a new spread_unit computes them again (Codex review of the option).
+    o.card._config = { ...o.card._config, spread_unit: '°C' };
+    check(o.card._runFigures(panelRun) !== f1, 'spread_unit: a change of the unit computes the run details again');
     o.card.remove();
     // Without a timeline: the tile loads the history itself, limited to timeline_hours, and a tap opens the compressor.
     o = await runTile(hist, { timeline_hours: 11 });
