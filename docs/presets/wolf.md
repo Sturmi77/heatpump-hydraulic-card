@@ -68,7 +68,7 @@ Since release 0.3.0 (2026-10-26) the integration sets a fixed `translation_key` 
 | `hc_flow` | sensor | `flow_temperature` | Vorlauftemperatur (Bedienmodul BM-2) |
 | `hc_pump` | sensor | `mixer_circuit_pump`, else `mkp_mixer_circuit_pump` | Mischerkreispumpe, else Ausgang MKP |
 | `hc_mode` | sensor | `mixer_circuit_status` | Mischerkreis Status |
-| `hc_pressure` | sensor | `system_pressure` | Anlagendruck |
+| `system_pressure` | sensor | `system_pressure` | Anlagendruck |
 | `room` | sensor | `room_temperature` | Raumtemperatur |
 | `room_target` | number | `day_temperature_mixer_circuit_1` | Tagtemperatur (Heizung) (Mischerkreis 1) |
 | `program` | sensor | `mixer_circuit_demand` | Anforderung Mischerkreis |

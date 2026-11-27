@@ -439,7 +439,7 @@
     check(r.prefix === 'ebusd', `ebusd prefix detected (got ${r.prefix})`);
     check(r.entities.evap_temp === 'sensor.ebusd_hmu_rundataevaporationtemp', 'ebusd: optional entities stay in the selected entity group');
     check(r.entities.hc2_flow === 'sensor.ebusd_ctlv2_hc2flowtemp' && r.entities.hc2_pump === 'sensor.ebusd_ctlv2_hc2pumpstatus', 'ebusd: second circuit from the controller');
-    check(r.entities.hc_pressure === 'sensor.ebusd_hmu_flowpressure' && r.entities.hc2_pressure === undefined, 'ebusd: one system pressure, not copied to circuit 2');
+    check(r.entities.system_pressure === 'sensor.ebusd_hmu_flowpressure' && r.entities.hc_pressure === undefined && r.entities.hc2_pressure === undefined, 'ebusd: one system pressure, not copied to circuit 2');
     // #1: a mixed circuit's signed mixer movement from the controller draws the mixer; a circuit without it draws none.
     // #189: fallbacks seen on an aroTHERM plus where the selected daemon lacks the usual messages.
     const alt = toStates({
@@ -1505,7 +1505,7 @@
     `ESPAltherma core: R2T, R4T, l/min, inverter, 3-way valve, defrost, outdoor, no mode (${r.prefix} / ${e.flow} / ${e.compressor})`);
     check(e.power === 'sensor.espaltherma_stats_electrical_input_estimated_kw' && e.heat === 'sensor.espaltherma_stats_heat_output_kw'
       && e.dhw_top === 'sensor.espaltherma_dhw_tank_temp_r5t' && e.dhw_target === 'number.espaltherma_hot_water_target' && e.dhw_heater === 'binary_sensor.espaltherma_bsh'
-      && e.hc_setpoint === 'sensor.espaltherma_lw_setpoint_main' && e.hc_pressure === 'sensor.espaltherma_water_pressure' && e.room === 'sensor.espaltherma_indoor_ambient_temp_r1t',
+      && e.hc_setpoint === 'sensor.espaltherma_lw_setpoint_main' && e.system_pressure === 'sensor.espaltherma_water_pressure' && e.room === 'sensor.espaltherma_indoor_ambient_temp_r1t',
     'ESPAltherma: statistics power and heat, tank, booster heater, circuit 1 target, pressure and room');
     const findings = C._checks({ preset: 'espaltherma' }, hass, r).map((f) => `${f.key}:${f.code}`);
     check(!findings.length, `ESPAltherma: the mapping passes the plausibility checks (${findings.join(', ')})`);
@@ -1851,10 +1851,10 @@
       && resolved.entities.hc2_setpoint === ids.circuitTarget2 && resolved.entities.hc2_pump === ids.circuitPump2
       && resolved.tiles.cop_heating.today === ids.cop, 'Open3E preset maps both circuits and daily COP entities');
     check(stubConfig.hc_count === 2, `Open3E detects two circuits (got ${stubConfig.hc_count})`);
-    check(resolved.entities.hc_pressure === ids.pressure && !resolved.entities.brine_pressure && !resolved.entities.hc2_pressure,
-      `#318: Open3E water pressure is the heating pressure at circuit 1, not a brine pressure (${resolved.entities.hc_pressure} / ${resolved.entities.brine_pressure})`);
+    check(resolved.entities.system_pressure === ids.pressure && !resolved.entities.brine_pressure && !resolved.entities.hc2_pressure,
+      `#318: Open3E water pressure is the system pressure, not a brine pressure (${resolved.entities.system_pressure} / ${resolved.entities.brine_pressure})`);
     const second = C._resolve({ preset: 'open3e', hc_count: 1, index: { hc: 2 } }, hass).entities;
-    check(second.hc_pressure === ids.pressure && second.hc_flow === ids.circuitFlow2, 'Open3E: the heating pressure stays when the card starts at circuit 2');
+    check(second.system_pressure === ids.pressure && second.hc_flow === ids.circuitFlow2, 'Open3E: the system pressure stays when the card starts at circuit 2');
     const card = mount({ preset: 'open3e' }, hass);
     check(/Hot water/.test(card.shadowRoot.getElementById('chip-mode')?.textContent || ''), 'Open3E hot_water valve state selects DHW mode');
     check(/Hot water/.test(card.shadowRoot.getElementById('t-dhw-mode')?.textContent || ''), 'Open3E domestic_hot_water_status "active" shows hot water charging');
@@ -2526,7 +2526,7 @@
     check(C._resolve({ preset: 'wolf' }, hassOf(toStates(without(ws.states('heat'), adjId)), without(ws.registry, adjId))).entities.dhw_target === numId,
       'wolf_smartset DHW target falls back to the number');
     check(e.hc_flow === 'sensor.bedienmodul_bm_2_0_vorlauftemperatur' && e.hc_pump === 'sensor.wolf_cha_mischerkreispumpe' && e.hc_mode === 'sensor.bedienmodul_bm_2_0_mischerkreis_status'
-      && e.hc_pressure === 'sensor.heizgerat_anlagendruck' && e.room_target === 'number.bedienmodul_bm_2_0_tagtemperatur_heizung_mischerkreis_1',
+      && e.system_pressure === 'sensor.heizgerat_anlagendruck' && e.room_target === 'number.bedienmodul_bm_2_0_tagtemperatur_heizung_mischerkreis_1',
       `wolf_smartset circuit: flow, system-tab pump, mode, pressure and the number as room target (${e.hc_pump} / ${e.room_target})`);
     check(e.hours === 'sensor.heizgerat_betriebsstunden_verdichter' && e.aux_hours === 'sensor.heizgerat_betriebsstunden_e_heizung' && e.buffer_top === 'sensor.heizgerat_sammlertemperatur',
       'wolf_smartset hours counters and the manual buffer line');
@@ -3707,7 +3707,7 @@
     check(e.compressor === bid('compressor_on') && e.defrost === bid('evaporator_defrost') && e.valve === bid('is_heating_water') && e.mode === undefined, `Stiebel ISG compressor, defrost and hot water flag, no mode entity (${e.compressor})`);
     check(e.flow === sid('flow_temperature_wp1') && e.return === sid('return_temperature_wp1') && e.volume === sid('volume_stream_wp1') && e.outdoor === sid('outdoor_temperature'), 'Stiebel ISG heat pump 1 flow, return, flow rate and outdoor temperature');
     check(e.power === sid('current_power_consumption') && e.dhw_top === sid('actual_temperature_water') && e.dhw_target === sid('target_temperature_water') && e.buffer_top === sid('actual_temperature_buffer'), 'Stiebel ISG power, hot water with target, buffer');
-    check(e.hc_flow === sid('actual_temperature_hk1') && e.hc_setpoint === sid('target_temperature_hk1') && e.hc_pump === bid('heating_circuit_1_pump') && e.hc_pressure === sid('heater_pressure'), 'Stiebel ISG heating circuit 1 and the system pressure');
+    check(e.hc_flow === sid('actual_temperature_hk1') && e.hc_setpoint === sid('target_temperature_hk1') && e.hc_pump === bid('heating_circuit_1_pump') && e.system_pressure === sid('heater_pressure'), 'Stiebel ISG heating circuit 1 and the system pressure');
     check(e.room === sid('actual_room_temperature_hk1') && e.room_target === sid('target_room_temperature_hk1') && e.program === isgId('select', 'operation_mode'), 'Stiebel ISG room temperature with target and the operating mode select');
     check(e.source_in === undefined && e.brine_pressure === undefined && e.solar_collector === undefined && e.hot_gas === sid('hot_gas_temperature_wp1') && e.circulation === bid('circulation_pump') && e.heater === bid('nhz_stages_running'),
       'Stiebel ISG: heat source and solar collector that read unavailable are left out, refrigerant circuit, circulation pump and heater are mapped');
@@ -3830,7 +3830,7 @@
     check(e.flow === sid('flow_temp') && e.return === sid('return_temp') && e.volume === sid('flow_rate') && e.outdoor === sid('outside_temp')
       && e.power === sid('actual_power_pel') && e.heat === sid('actual_power_qc'), 'THZ flow, return, flow rate, outdoor, electrical and thermal power');
     check(e.dhw_bottom === sid('dhw_temp') && e.dhw_top === undefined && e.dhw_target === sid('dhw_set_temp') && e.hc_flow === sid('heat_temp') && e.hc_setpoint === sid('heat_set_temp')
-      && e.hc_pump === bid('heating_circuit_pump') && e.hc_pressure === sid('pressure_hc'), 'THZ hot water sensor at the bottom of the tank with target, heating circuit 1 and its pressure');
+      && e.hc_pump === bid('heating_circuit_pump') && e.system_pressure === sid('pressure_hc'), 'THZ hot water sensor at the bottom of the tank with target, heating circuit 1 and its pressure');
     check(e.room === sid('inside_temp_rc') && e.room_target === sid('room_set_temp') && e.room_humidity === sid('rel_humidity') && e.program === tid('select', 'op_mode'),
       'THZ room values of the remote control and the operating mode select');
     check(e.heater === sid('heat_stage_control_modul') && e.hot_gas === sid('hotgas_temp') && e.evap_temp === sid('evaporator_temp') && e.cond_temp === sid('condenser_temp')
@@ -4317,7 +4317,7 @@
       `without a power sensor the first device that is not the hydraulic station gives hours and starts (${e.hours}, ${e.starts_total})`);
     check(e.aux_hours === 'sensor.home_device_1_hydraulic_station_operation_time' && r.tiles.aux_starts.total === 'sensor.home_device_1_hydraulic_station_on_off_cycles',
       'the hydraulic station counts as the backup heater (hours and starts)');
-    check(e.hc_pressure === 'sensor.home_system_water_pressure' && r.tiles.hours.total === e.hours && r.tiles.starts.total === e.starts_total,
+    check(e.system_pressure === 'sensor.home_system_water_pressure' && r.tiles.hours.total === e.hours && r.tiles.starts.total === e.starts_total,
       'system water pressure as heating pressure; hours and starts tiles from the heat pump');
     r = resolve({ ...counters, 'sensor.home_device_2_flexotherm_operation_time': ['10', 'h'], 'sensor.home_device_2_flexotherm_current_power': ['1.2', 'kW'] });
     check(r.entities.hours === 'sensor.home_device_2_flexotherm_operation_time', `the device with a power sensor wins (${r.entities.hours})`);
@@ -5210,8 +5210,8 @@
     check(r.entities.program === `switch.${p}_main_holiday_mode_state`, 'HeishaMon falls back to the holiday switch');
     // #276: the water pressure (K/L series) only where the entity exists, and only for the first circuit.
     const withPressure = C._resolve({ preset: 'heishamon', hc_count: 2 }, hassOf(toStates({ ...v2, [`sensor.${p}_main_water_pressure`]: ['2.26', 'bar'] }))).entities;
-    check(!r.entities.hc_pressure && withPressure.hc_pressure === `sensor.${p}_main_water_pressure` && !withPressure.hc2_pressure,
-      `HeishaMon maps the water pressure only where it exists (${r.entities.hc_pressure} / ${withPressure.hc_pressure} / ${withPressure.hc2_pressure})`);
+    check(!r.entities.system_pressure && withPressure.system_pressure === `sensor.${p}_main_water_pressure` && !withPressure.hc2_pressure,
+      `HeishaMon maps the water pressure only where it exists (${r.entities.system_pressure} / ${withPressure.system_pressure} / ${withPressure.hc2_pressure})`);
     const card = mount({ preset: 'heishamon' }, hassOf(toStates(v2))); await wait(20);
     const chip = card.shadowRoot.getElementById('chip-program');
     check(chip.classList.contains('on') && chip.classList.contains('holiday'), 'holiday switch on shows the holiday chip');
@@ -5243,7 +5243,7 @@
     check(e.hc_flow === 'sensor.kronoterm_loop_1_inlet_temperature' && e.hc2_flow === 'sensor.kronoterm_loop_2_temperature', `circuit flow: inlet of loop 1, loop 2 without a thermostat (${e.hc_flow} / ${e.hc2_flow})`);
     check(e.hc_pump === 'binary_sensor.kronoterm_heat_pump_circulation_loop_1' && e.hc2_pump === 'binary_sensor.kronoterm_heat_pump_circulation_loop_2', 'circuit pumps');
     check(e.room === 'sensor.kronoterm_heat_pump_loop_1_thermostat_temperature' && e.room_target === 'climate.kronoterm_loop_1_temperature', `room and target from the loop 1 thermostat (${e.room} / ${e.room_target})`);
-    check(e.program === 'select.kronoterm_operational_mode' && e.circulation === 'binary_sensor.kronoterm_heat_pump_circulation_pump' && e.hc_pressure === 'sensor.kronoterm_heat_pump_heating_system_pressure', 'program, circulation and heating pressure');
+    check(e.program === 'select.kronoterm_operational_mode' && e.circulation === 'binary_sensor.kronoterm_heat_pump_circulation_pump' && e.system_pressure === 'sensor.kronoterm_heat_pump_heating_system_pressure', 'program, circulation and heating pressure');
     check(e.energy_today === 'sensor.kronoterm_energy_combined' && e.energy_total === 'sensor.kronoterm_heat_pump_electrical_energy_heating_dhw', 'electricity today and in total');
     check(!e.heat_total && !e.hours && !e.buffer_top && !e.status, `the heat counter, the compressor hours and the reservoir are left out (${e.heat_total} / ${e.buffer_top})`);
     check(!('hc2_pressure' in r.fromPreset), `the system pressure is not copied to circuit 2 (${r.fromPreset.hc2_pressure})`);
@@ -7664,6 +7664,49 @@
     named.card.shadowRoot.querySelector('#stats .stat').click();
     check(named.label === 'My run' && !named.card._tlRun, `#481: an own name and an own action stay (${named.label})`);
     named.card.remove();
+  }
+
+  // 22e. pressure of the heating system at the heat pump's return (forum, system_pressure)
+  {
+    const q = (c, id) => c.shadowRoot.getElementById(id);
+    const st = { 'sensor.f': ['36', '°C'], 'sensor.r': ['30', '°C'], 'sensor.v': ['900', 'l/h'], 'sensor.hcf': ['34', '°C'], 'sensor.sys': ['1.8', 'bar'], 'sensor.circ': ['1.2', 'bar'], 'sensor.b': ['34', '°C'] };
+    const ents = { flow: 'sensor.f', return: 'sensor.r', volume: 'sensor.v', hc_flow: 'sensor.hcf', buffer_top: 'sensor.b' };
+    const draw = async (conf, extra, more = {}) => {
+      const c = mount({ power_sources: 'manual', details_open: true, ...conf, entities: { ...ents, ...extra } }, hassOf(toStates({ ...st, ...more }))); await wait(20); return c;
+    };
+    const rowsOf = (c) => [...c.shadowRoot.querySelectorAll('[data-entity="sensor.sys"], [data-entity="sensor.circ"]')].filter((el) => !el.closest('svg')).map((el) => el.textContent.trim().replace(/\s+/g, ' '));
+    let c = await draw({ tiles: ['hc_pressure'], hc_pressure_min: 1, hc_pressure_crit: 0.5, hc_pressure_max: 2.5, actions: { hc_pressure: { tap_action: { action: 'none' } } } }, { system_pressure: 'sensor.sys' });
+    check(q(c, 't-system-pressure').textContent === '1.8 bar' && !q(c, 't-hc-pressure') && /Heating pressure: 1.8 bar/.test(q(c, 'pressure-system').dataset.a11y), `system_pressure: at the heat pump's return, not at the circuit (${q(c, 't-system-pressure').textContent})`);
+    check(tileRows(c).some((r) => /Heating pressure/.test(JSON.stringify(r)) && /1\.8 bar/.test(JSON.stringify(r))), `system_pressure: the tile hc_pressure shows it (${JSON.stringify(tileRows(c))})`);
+    check(rowsOf(c).some((r) => /Heating pressure/.test(r)), `system_pressure: listed in the details (${rowsOf(c).join(' / ')})`);
+    const ev = new MouseEvent('click', { bubbles: true, composed: true }); let acts = null;
+    q(c, 'pressure-system').addEventListener('click', (e) => { acts = c._elementActs(e); }, { once: true });
+    q(c, 't-system-pressure').dispatchEvent(ev);
+    check(acts?.entity === 'sensor.sys' && acts.tap_action?.action === 'none', `system_pressure: actions.hc_pressure still applies (${JSON.stringify(acts)})`);
+    const level = async (v) => { c.hass = { ...c._hass, states: { ...c._hass.states, ...toStates({ 'sensor.sys': [v, 'bar'] }) } }; await wait(10); return `${q(c, 'pressure-system').getAttribute('class')} ${q(c, 't-system-pressure').textContent}`; };
+    check(/warning ! 0.9 bar$/.test(await level('0.9')) && /critical ⚠ 0.4 bar$/.test(await level('0.4')) && /warning ! 2.8 bar$/.test(await level('2.8')) && /pressure 1.8 bar$/.test((await level('1.8')).replace(/ +/g, ' ')), 'system_pressure: the hc_pressure thresholds apply');
+    c.remove();
+    c = await draw({ tiles: ['hc_pressure'] }, { system_pressure: 'sensor.sys', hc_pressure: 'sensor.circ' });
+    check(q(c, 't-system-pressure').textContent === '1.8 bar' && /1\.2 bar/.test(q(c, 't-hc-pressure').textContent) && /1\.2 bar/.test(JSON.stringify(tileRows(c)))
+      && rowsOf(c).some((r) => /System pressure/.test(r)) && rowsOf(c).some((r) => /Heating pressure/.test(r)), `system_pressure beside a pressure of the circuit: both, each with its name (${rowsOf(c).join(' / ')})`);
+    c.remove();
+    // Condenser in the storage (#253): no water line from the heat pump, so the pressure stands at circuit 1.
+    c = await draw({ storage: 'combined', condenser: 'tank' }, { system_pressure: 'sensor.sys' });
+    check(!q(c, 'pressure-system') && /1\.8 bar/.test(q(c, 't-hc-pressure')?.textContent || '') && q(c, 'pressure-hc').dataset.entity === 'sensor.sys', `system_pressure: with the condenser in the storage it stands at circuit 1 (${q(c, 't-hc-pressure')?.textContent})`);
+    c.remove();
+    // Discussion #425: on a narrow card the pressure grows with the other secondary labels.
+    c = await draw({}, { system_pressure: 'sensor.sys', hc_pressure: 'sensor.circ' });
+    c.style.display = 'block'; c.style.width = '380px'; c.hass = { ...c._hass }; await wait(30);
+    const sizes = ['t-system-pressure', 't-hc-pressure'].map((id) => parseFloat(getComputedStyle(q(c, id)).fontSize));
+    check(sizes.every((v) => Math.abs(v - 13 * 1.3) < 0.1), `#425: the pressure values grow on a narrow card like the other secondary labels (${sizes})`);
+    c.remove();
+    // Presets map system_pressure; an own hc_pressure replaces it as before.
+    const hass = hassOf(toStates({ ...st, 'sensor.espaltherma_water_pressure': ['1.6', 'bar'] }));
+    const base = C._resolve({ preset: 'espaltherma', prefix: 'espaltherma' }, hass).entities;
+    const res = (entities) => C._resolve({ preset: 'espaltherma', prefix: 'espaltherma', entities }, hass).entities;
+    check(base.system_pressure && !base.hc_pressure && !res({ hc_pressure: null }).system_pressure && !res({ hc_pressure: 'none' }).system_pressure && !res({ system_pressure: null }).system_pressure, `system_pressure: hc_pressure: null removes the value of the preset (${base.system_pressure})`);
+    const own = res({ hc_pressure: 'sensor.circ' }); const both = res({ hc_pressure: 'sensor.circ', system_pressure: 'sensor.sys' });
+    check(own.hc_pressure === 'sensor.circ' && !own.system_pressure && both.system_pressure === 'sensor.sys' && both.hc_pressure === 'sensor.circ', 'system_pressure: an own hc_pressure replaces the value of the preset');
   }
 
   // 22d. power at the heater rods (#449) and priorities of the labels (#395)

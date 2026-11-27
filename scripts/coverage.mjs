@@ -49,10 +49,10 @@ globalThis.__card = { HFC_PRESETS, HFC_TILES, HFC_LANGUAGES, HFC_I18N, HFC_EDITO
 // heater rods at three heights, a bypass valve, power sources, circuits 2 to 6) are not counted.
 const AREAS = {
   heat_pump: ['mode', 'status', 'compressor', 'fan_speed', 'defrost', 'power', 'heat', 'flow', 'return', 'volume', 'source_volume',
-    'source_in', 'source_out', 'brine_pressure', 'outdoor', 'valve', 'heater', 'pv_boost'],
+    'source_in', 'source_out', 'brine_pressure', 'system_pressure', 'outdoor', 'valve', 'heater', 'pv_boost'],
   storage: ['dhw_top', 'dhw_middle', 'dhw_bottom', 'dhw_target', 'dhw_mode', 'circulation', 'dhw_heater', 'buffer_top', 'buffer_middle',
     'buffer_bottom', 'buffer_mode', 'buffer_heater', 'solar_collector', 'solar_pump'],
-  circuit: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_mixer', 'hc_pressure', 'room',
+  circuit: ['hc_flow', 'hc_return', 'hc_setpoint', 'hc_mode', 'hc_pump', 'hc_volume', 'hc_curve_offset', 'hc_mixer', 'room',
     'room_target', 'program'],
   details: ['hours', 'starts_total', 'aux_hours', 'energy_total', 'env_energy', 'heat_total', 'compressor_speed', 'evap_temp', 'cond_temp',
     'suction_temp', 'hot_gas', 'liquid_temp', 'low_pressure', 'high_pressure', 'eev', 'superheat', 'subcooling', 'cutout_high_pressure',
