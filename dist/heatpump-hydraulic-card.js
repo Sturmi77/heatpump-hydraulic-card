@@ -3900,7 +3900,10 @@ class HeatpumpFlowCard extends HTMLElement {
     }
     if (config.timeline_marks !== undefined && config.timeline_marks !== null && typeof config.timeline_marks !== 'boolean') {
       if (!Array.isArray(config.timeline_marks)) throw new Error('timeline_marks must be true or a list of entities');
-      config.timeline_marks.forEach((m) => { if (!(typeof m === 'string' ? m : m && m.entity)) throw new Error('timeline_marks: every entry needs an entity'); });
+      config.timeline_marks.forEach((m) => {
+        if (!(typeof m === 'string' ? m : m && m.entity)) throw new Error('timeline_marks: every entry needs an entity');
+        if (m && typeof m === 'object' && m.color !== undefined && typeof m.color !== 'string') throw new Error('timeline_marks: color must be a CSS colour, for example "#ef4444"');
+      });
     }
     if (config.units !== undefined && config.units !== null) {
       const ids = (v) => [v].flat().length > 0 && [v].flat().every((id) => typeof id === 'string' && id);
@@ -4836,6 +4839,11 @@ class HeatpumpFlowCard extends HTMLElement {
     }
     return { kind, entity: this._e[key] };
   }
+  // "850 W" or "1.5 kW" of a heater entity that reports a power, else nothing.
+  _heaterPower(key) {
+    const w = hfcPowerFactor(this._st(key)?.attributes?.unit_of_measurement) === undefined ? NaN : hfcPowerW(this._st(key));
+    return w > 0 ? (w >= 1000 ? `${this._fmt(w / 1000, 1)} kW` : `${this._fmt(w, 0)} W`) : '';
+  }
   // Heater level: 0 = off, 1 = on / stage 1, 2-3 = stage. Binary, on/off text, power (> 0) or a stage number.
   _level(key) {
     if (!this._has(key)) return 0;
@@ -5160,6 +5168,87 @@ class HeatpumpFlowCard extends HTMLElement {
     }
   }
 
+  // Priorities of the labels (#395, stage 3). Most labels always stand. A label with data-prio="room" stands while there is room: the
+  // power at a heater rod at every width, the others on a narrow schematic, where the larger type needs their space (above 500 px they
+  // always stand; `narrow_values: true` keeps the listed ones and `false` leaves all of them out there). In the order of data-rank each
+  // is measured at its own place and at its other places (data-places, "x anchor" separated by ";"), against every label, pipe,
+  // appliance and heater rod, by the rules of the drawing tests; without a free place it is left out.
+  _roomLabels() {
+    const svg = this._rendered && this._$('svg'); if (!svg) return;
+    const all = [...svg.querySelectorAll('text[data-prio="room"]')];
+    const narrow = parseFloat(getComputedStyle(svg).getPropertyValue('--k')) >= 1.4;
+    const own = this._config.narrow_values;
+    // With narrow_focus the flow rates of the heat pump and the circuits stand larger, where there is room for them (#425).
+    const focusFlow = (el) => narrow && this._narrowFocus() && el.classList.contains('vol-label') && !el.closest('.src');
+    const asked = (el) => el.textContent.trim() && (el.classList.contains('rod-val') || el.classList.contains('heater-val') || focusFlow(el)
+      || (narrow && own !== false && !this._narrowFocus()));
+    if (!all.some(asked)) { if (this._roomKey0) { all.forEach((el) => el.classList.remove('room')); this._roomKey0 = ''; this._a11y(true); } return; }
+    const shown = [...svg.querySelectorAll('text')];
+    // The fonts count as well: a theme or card-mod that changes them changes the room (Codex review).
+    const font = all.map((el) => { const cs = getComputedStyle(el); return `${cs.fontSize} ${cs.fontWeight} ${cs.fontFamily}`; }).join('|');
+    const key = `${svg.clientWidth}|${narrow}|${own}|${font}|${shown.map((el) => el.textContent).join('|')}`;
+    if (this._roomKey0 === key && this._roomSvg === svg) return;
+    this._roomKey0 = key; this._roomSvg = svg;
+    let root; try { root = svg.getScreenCTM().inverse(); } catch (err) { return; }
+    const visible = (el) => el.getClientRects().length > 0 && getComputedStyle(el).visibility === 'visible';
+    const map = (el, b) => {
+      let m; try { m = root.multiply(el.getScreenCTM()); } catch (err) { return null; }
+      const pts = [b.l, b.r].flatMap((x) => [b.t, b.b].map((y) => new DOMPoint(x, y).matrixTransform(m)));
+      return { l: Math.min(...pts.map((p) => p.x)), r: Math.max(...pts.map((p) => p.x)), t: Math.min(...pts.map((p) => p.y)), b: Math.max(...pts.map((p) => p.y)) };
+    };
+    const body = (el) => { try { const b = el.getBBox(); return map(el, { l: b.x, r: b.x + b.width, t: b.y, b: b.y + b.height }); } catch (err) { return null; } };
+    const text = (el) => {
+      let b; try { b = el.getBBox(); } catch (err) { return null; }
+      if (!(b.width > 0)) return null;
+      const size = Math.max(...[el, ...el.querySelectorAll('tspan')].map((n) => parseFloat(getComputedStyle(n).fontSize)).filter(Number.isFinite));
+      let top = Infinity; let bottom = -Infinity;
+      for (let n = 0; n < el.getNumberOfChars(); n++) { try { const { y } = el.getStartPositionOfChar(n); top = Math.min(top, y - 0.72 * size); bottom = Math.max(bottom, y + 0.22 * size); } catch (err) { /* hidden part */ } }
+      const box = map(el, { l: b.x, r: b.x + b.width, t: Number.isFinite(top) ? top : b.y, b: Number.isFinite(bottom) ? bottom : b.y + b.height });
+      // The name column of the room overview is clipped.
+      const clip = box && el.matches('.house-row-name') && /^polygon\([^,]+, ([\d.]+)px /.exec(getComputedStyle(el).clipPath);
+      if (clip) box.r = Math.min(box.r, box.l + Number(clip[1]));
+      return box;
+    };
+    const hit = (a, b, gap) => Math.min(a.r, b.r) - Math.max(a.l, b.l) > gap && Math.min(a.b, b.b) - Math.max(a.t, b.t) > gap;
+    const before = all.filter((el) => el.classList.contains('room'));
+    all.forEach((el) => el.classList.remove('room'));
+    // What narrow_values keeps stands anyway and only takes its room.
+    const list = all.filter((el) => asked(el) && !visible(el));
+    const labels = shown.filter((el) => !list.includes(el) && el.textContent.trim() && visible(el)).map(text).filter(Boolean);
+    const bodies = [...svg.querySelectorAll('#hp-box, rect.tank, rect.boiler-box, rect.fws, rect.radiator, rect.column-rib, circle.pump, circle.valve, .heater-flange, rect.collector')].filter(visible).map(body).filter(Boolean);
+    const rods = [...svg.querySelectorAll('.heater-case')].filter(visible).map((el) => [el.parentNode, body(el)]);
+    const dots = [...svg.querySelectorAll('path.pipe')].filter(visible).flatMap((pipe) => {
+      const r = parseFloat(getComputedStyle(pipe).strokeWidth) / 2 || 2; let len = 0; let m;
+      try { len = pipe.getTotalLength(); m = root.multiply(pipe.getScreenCTM()); } catch (err) { return []; }
+      const out = [];
+      for (let at = 0; at <= len; at += 4) { const { x, y } = pipe.getPointAtLength(at).matrixTransform(m); if (!bodies.some((c) => x > c.l && x < c.r && y > c.t && y < c.b)) out.push({ l: x - r, r: x + r, t: y - r, b: y + r }); }
+      return out;
+    });
+    const vb = svg.viewBox.baseVal;
+    const free = (el, b) => b.l >= vb.x && b.r <= vb.x + vb.width && b.t >= vb.y && b.b <= vb.y + vb.height
+      && labels.every((o) => !hit(b, o, -HFC_LABEL_GAP)) && dots.every((o) => !hit(b, o, 1)) && rods.every(([g, o]) => g === el.parentNode || !hit(b, o, 0))
+      // A label inside a tank or the heat pump belongs to it; on its edge it does not fit.
+      && bodies.every((o) => !hit(b, o, 1) || (b.l >= o.l && b.r <= o.r && b.t >= o.t && b.b <= o.b));
+    list.sort((a, b) => a.dataset.rank - b.dataset.rank).forEach((el) => {
+      const home = el._roomHome || (el._roomHome = { x: el.getAttribute('x'), anchor: el.getAttribute('text-anchor') || 'start' });
+      const places = [home, ...(el.dataset.places || '').split(';').map((s) => s.trim().split(/\s+/)).filter((p) => p[0]).map(([x, anchor]) => ({ x, anchor: anchor || home.anchor }))];
+      el.classList.add('room');
+      // A label with a width budget stands in full or not at all.
+      if (el._fit && el.textContent === el._fit.shown) { el.textContent = el._fit.full; el._fit = null; }
+      let wide = 0; try { wide = el.dataset.fit ? el.getComputedTextLength() - parseFloat(el.dataset.fit) : 0; } catch (err) { /* not laid out */ }
+      const at = wide > 0 ? -1 : places.findIndex((p) => {
+        if (places.length > 1) { el.setAttribute('x', p.x); el.setAttribute('text-anchor', p.anchor); }
+        const b = text(el);
+        return b && free(el, b) && labels.push(b);
+      });
+      if (at < 0) el.classList.remove('room');
+      el.classList.toggle('outside', at > 0);
+    });
+    // A value that appears or goes changes what the keyboard can reach (Codex review).
+    const after = all.filter((el) => el.classList.contains('room'));
+    if (after.length !== before.length || after.some((el, n) => el !== before[n])) this._a11y(true);
+  }
+
   // Label whose tail (for example the humidity after the room target) the narrow focus view hides; a narrow schematic also hides
   // the humidity after the room target, which is wider than the house there.
   _txtTail(id, main, tail) {
@@ -5363,7 +5452,7 @@ class HeatpumpFlowCard extends HTMLElement {
             <g class="impeller" id="impeller-primary" style="transform-origin:${P.boiler ? 316 : 340}px 250px"><path d="M${P.boiler ? 316 : 340} 238 L${P.boiler ? 322 : 346} 250 L${P.boiler ? 310 : 334} 250Z M${P.boiler ? 316 : 340} 262 L${P.boiler ? 310 : 334} 250 L${P.boiler ? 322 : 346} 250Z" class="imp"/></g>
           </g>` : ''}
           ${P.condenser ? '' : `${P.boiler ? '' : `<g class="tap" ${de('flow')}><text class="pipe-label${nf ? ' nf-big' : ''}" id="t-vl" x="${this._primaryPump() ? 340 : 338}" y="${this._primaryPump() ? 226 : 236}" text-anchor="middle"></text></g>`}
-          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" x="${P.boiler ? 336 : (this._primaryPump() ? 340 : 346)}" y="${P.boiler ? 324 : this._primaryPump() ? 284 : 275}" text-anchor="middle"></text></g>
+          <g class="tap" ${de('volume')}><text class="vol-label" id="t-vol" data-prio="room" data-rank="2" x="${P.boiler ? 336 : (this._primaryPump() ? 340 : 346)}" y="${P.boiler ? 324 : this._primaryPump() ? 284 : 275}" text-anchor="middle"></text></g>
           <g class="tap" ${de('return')}><text class="pipe-label" id="t-rl" x="335" y="406" text-anchor="middle"></text></g>`}
           ${this._gaugeSvg()}
 
@@ -5401,7 +5490,7 @@ class HeatpumpFlowCard extends HTMLElement {
             ${P.condenser ? '' : `<g class="tap" ${de(e.valve ? 'valve' : 'dhw_mode')}>
               <circle class="valve" cx="420" cy="250" r="18"/>
               <path class="valve-arrow" id="valve-arrow" d="M420 262 V240 M412 248 L420 240 L428 248"/>
-              <text class="small" id="t-valve" x="432" y="198"></text>
+              <text class="small" id="t-valve" x="432" y="198" data-prio="room" data-rank="6"></text>
             </g>`}
             <g class="tap" ${de(['dhw_top', 'dhw_middle', 'dhw_bottom'].find((k) => e[k]) || 'dhw_top')}>
               ${P.combined ? `<text class="tank-title" x="580" y="30" text-anchor="middle" data-fit="220">${this._esc(i.combined_tank)}</text>
@@ -5415,12 +5504,12 @@ class HeatpumpFlowCard extends HTMLElement {
               ${P.dhwType === 'fresh_water' ? `${pipePair('fws-a', `M640 ${HFC_STATION_PORTS.flow} H654`)}${pipePair('fws-b', `M640 ${HFC_STATION_PORTS.return} H654`)}${this._stationArt(652, HFC_STATION_PORTS.flow - 10, 56, HFC_STATION_PORTS.return - HFC_STATION_PORTS.flow + 20)}` : ''}
               ${P.condenser ? '<path class="coil" id="coil-cond" d="M520 336 H546 L528 354 H546 L528 372 H546 L528 390 H546 L528 408 H546 L528 426 H546 L528 444 H546 L528 462 H546 L528 480 H520"/>' : ''}
               <text class="tank-temp" id="t-dhw-top" x="580" y="112" text-anchor="middle"></text>
-              <text class="small${P.combined ? ' on-tank' : ''}" id="t-dhw-mode" x="580" y="262" text-anchor="middle" data-fit="164"></text>
+              <text class="small${P.combined ? ' on-tank' : ''}" id="t-dhw-mode" x="580" y="262" text-anchor="middle" data-fit="164" data-prio="room" data-rank="3"></text>
             </g>
-            ${this._has('dhw_middle') ? `<g class="tap" ${de('dhw_middle')}><text class="tank-sub" id="t-dhw-middle" x="580" y="166" text-anchor="middle"></text></g>` : ''}
-            <g class="tap" ${de('dhw_bottom')}><text class="tank-sub" id="t-dhw-bottom" x="580" y="222" text-anchor="middle"></text></g>
+            ${this._has('dhw_middle') ? `<g class="tap" ${de('dhw_middle')}><text class="tank-sub" id="t-dhw-middle" x="580" y="166" text-anchor="middle" data-prio="room" data-rank="4"${this._rodBeside('dhw_heater_middle')}></text></g>` : ''}
+            <g class="tap" ${de('dhw_bottom')}><text class="tank-sub" id="t-dhw-bottom" x="580" y="222" text-anchor="middle" data-prio="room" data-rank="2"${this._rodBeside('dhw_heater_bottom')}></text></g>
             ${this._tankHeaters('dhw', P).map((h) => this._heaterSvg(...h)).join('')}
-            ${P.circ ? `<g class="tap" ${de(this._circulationKey())}><text class="small circ" id="t-circ" x="650" y="60">↻ ${this._esc(i.circulation)}</text></g>` : ''}` : ''}
+            ${P.circ ? `<g class="tap" ${de(this._circulationKey())}><text class="small circ" id="t-circ" x="650" y="60" data-prio="room" data-rank="5">↻ ${this._esc(i.circulation)}</text></g>` : ''}` : ''}
 
           ${P.buffer ? `
             <g class="tap" ${de(P.combined ? (['buffer_top', 'buffer_middle', 'buffer_bottom', 'buffer_mode'].find((k) => e[k]) || 'buffer_top') : 'buffer_top')}>
@@ -5430,8 +5519,8 @@ class HeatpumpFlowCard extends HTMLElement {
               <text class="tank-temp${equalBuffer ? ' buffer-value' : ''}" id="t-buf-top" x="580" y="${bufferY.buffer_top ?? 392}" text-anchor="middle"></text>
               <text class="small" id="t-buf-mode" x="580" y="542" text-anchor="middle"></text>
             </g>
-            ${this._has('buffer_middle') ? `<g class="tap" ${de('buffer_middle')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-middle" x="580" y="${bufferY.buffer_middle ?? 446}" text-anchor="middle"></text></g>` : ''}
-            <g class="tap" ${de('buffer_bottom')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-bottom" x="580" y="${bufferY.buffer_bottom ?? 502}" text-anchor="middle"></text></g>
+            ${this._has('buffer_middle') ? `<g class="tap" ${de('buffer_middle')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-middle" x="580" y="${bufferY.buffer_middle ?? 446}" text-anchor="middle" data-prio="room" data-rank="4"${this._rodBeside('buffer_heater_middle')}></text></g>` : ''}
+            <g class="tap" ${de('buffer_bottom')}><text class="tank-sub${equalBuffer ? ' buffer-value' : ''}" id="t-buf-bottom" x="580" y="${bufferY.buffer_bottom ?? 502}" text-anchor="middle" data-prio="room" data-rank="2"${this._rodBeside('buffer_heater_bottom')}></text></g>
             ${this._tankHeaters('buffer', P).map((h) => this._heaterSvg(...h)).join('')}` : ''}
 
 
@@ -6477,9 +6566,9 @@ class HeatpumpFlowCard extends HTMLElement {
         <text class="tank-title" x="580" y="122" text-anchor="middle">${this._esc(i.fresh_water_station)}</text>
         ${this._stationArt(526, 132, 108, 80)}
         <text class="house-temp" id="t-dhw-top" x="580" y="182" text-anchor="middle"></text>
-        <text class="small" id="t-dhw-mode" x="580" y="100" text-anchor="middle"></text>
+        <text class="small" id="t-dhw-mode" x="580" y="100" text-anchor="middle" data-prio="room" data-rank="3"></text>
       </g>
-      ${this._parts.circ ? `<g class="tap" ${de(this._circulationKey())}><text class="small circ" id="t-circ" x="650" y="60">↻ ${this._esc(i.circulation)}</text></g>` : ''}`;
+      ${this._parts.circ ? `<g class="tap" ${de(this._circulationKey())}><text class="small circ" id="t-circ" x="650" y="60" data-prio="room" data-rank="5">↻ ${this._esc(i.circulation)}</text></g>` : ''}`;
   }
 
   _seriesSvg() {
@@ -6582,8 +6671,8 @@ class HeatpumpFlowCard extends HTMLElement {
     : `<g class="tap" ${de(k('flow'))}>${this._hcCount > 1
       ? `<text class="pipe-label" id="t-hc${s}" x="688" y="334" text-anchor="start"></text>`
       : `<text class="pipe-label" id="t-hc${s}" x="740" y="334" text-anchor="middle"></text>`}</g>`}
-      <g class="tap" ${de(k('volume'))}><text class="vol-label" id="t-hc-vol${s}" x="720" y="${e[k('curve_offset')] ? 414 : 394}" text-anchor="middle"></text></g>
-      ${this._config.hc_return_label ? `<g class="tap" ${de(k('return'))}><text class="vol-label" id="t-hc-rl${s}" x="690" y="515" text-anchor="start"></text></g>` : ''}
+      <g class="tap" ${de(k('volume'))}><text class="vol-label" id="t-hc-vol${s}" data-prio="room" data-rank="3" x="720" y="${e[k('curve_offset')] ? 414 : 394}" text-anchor="middle"></text></g>
+      ${this._config.hc_return_label ? `<g class="tap" ${de(k('return'))}><text class="vol-label" id="t-hc-rl${s}" data-prio="room" data-rank="4" x="690" y="515" text-anchor="start"></text></g>` : ''}
       ${n === 1 && this._circuitPressureKey()
     // Starts right of the storage column (and right of the risers of further circuits), so a long text such as
     // "Heizungsdruck 1,8 bar" is not covered by the buffer (#129); low enough to pass between the pipes of an underfloor loop. With a
@@ -7587,14 +7676,16 @@ class HeatpumpFlowCard extends HTMLElement {
     return out;
   }
 
-  // Entities shown as extra lanes under the bar: timeline_marks true = the badges, or a list of entities / { entity, label }.
+  // Entities shown as extra lanes under the bar: timeline_marks true = the badges, or a list of entities / { entity, label, color }.
   _timelineMarks() {
     const m = this._config.timeline_marks;
     if (!m) return [];
     const list = m === true ? this._badges : (Array.isArray(m) ? m : []);
     const seen = new Set();
     return list.map((x) => (typeof x === 'string' ? { entity: x } : x)).filter((x) => x && x.entity && !seen.has(x.entity) && seen.add(x.entity))
-      .map((x) => ({ entity: x.entity, label: x.label || this._hass.states[x.entity]?.attributes?.friendly_name || x.entity }));
+      .map((x) => ({ entity: x.entity, label: x.label || this._hass.states[x.entity]?.attributes?.friendly_name || x.entity,
+        // A colour of its own (forum, 23 November); one the browser does not know leaves the badge colour.
+        color: typeof x.color === 'string' && globalThis.CSS?.supports?.('color', x.color) ? x.color : '' }));
   }
 
   // Periods in which a mark entity was on (same on-states as the badge chips), merged, between start and end.
@@ -7611,10 +7702,18 @@ class HeatpumpFlowCard extends HTMLElement {
     return segs;
   }
 
-  _timelineTime(ms) {
-    let tz; try { tz = this._hass.config?.time_zone; new Intl.DateTimeFormat('en', { timeZone: tz }); } catch (err) { tz = undefined; }
-    return new Intl.DateTimeFormat(this._lang, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: tz }).format(ms);
+  // One format per language and time zone: a lane with a few hundred periods formats each of them (forum, 24 November).
+  _timelineFormat(locale = this._lang) {
+    const zone = this._hass?.config?.time_zone;
+    const key = `${locale}|${zone}`;
+    if (this._tlFmt?.key !== key) {
+      let tz; try { tz = zone; new Intl.DateTimeFormat('en', { timeZone: tz }); } catch (err) { tz = undefined; }
+      this._tlFmt = { key, fmt: new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: tz }) };
+    }
+    return this._tlFmt.fmt;
   }
+
+  _timelineTime(ms) { return this._timelineFormat().format(ms); }
 
   // Whole minutes; less than a minute (a gap of a few seconds) reads "< 1 min" instead of a minute that did not pass.
   _timelineDuration(ms) {
@@ -7720,8 +7819,11 @@ class HeatpumpFlowCard extends HTMLElement {
     if (!run) this._tlRun = null;
     const panel = run && this._layout !== 'wall';
     const rows = panel ? this._runValues(run) : [];
+    // To the minute: the first period starts at the window start and the last ends at now, both of which move with every update.
+    // Keyed to the millisecond, the timeline was drawn again on every update of Home Assistant (forum, 24 November).
     const minute = Math.floor(now / 60000);
-    const key = `${minute}|${segs.map((s) => `${s.kind}${s.from}${s.to}`).join(',')}|${lanes.map((l) => `${l.n}${l.label}${l.segs.map((s) => `${s.from}-${s.to}`).join(',')}`).join(';')}|${this._lang}|${this._tlSel ?? ''}|${this._tlMarkSel ?? ''}|${this._tlRun ?? ''}|${runs.length}|${rows.map((r) => r.join('=')).join(';')}`;
+    const mn = (t) => Math.floor(t / 60000);
+    const key = `${minute}|${segs.map((s) => `${s.kind}${mn(s.from)}-${mn(s.to)}`).join(',')}|${lanes.map((l) => `${l.n}${l.label}${l.color}${l.segs.map((s) => `${mn(s.from)}-${mn(s.to)}`).join(',')}`).join(';')}|${this._lang}|${this._tlSel ?? ''}|${this._tlMarkSel ?? ''}|${this._tlRun ?? ''}|${runs.length}|${rows.map((r) => r.join('=')).join(';')}`;
     if (box._k === key) return;
     box._k = key; box.hidden = false;
     this._tl = { segs, start, now, lanes, runs };
@@ -7729,8 +7831,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const i = this._i;
     // Hour ticks at clock times (every 6 h for a day), found in the Home Assistant time zone.
     const step = hours <= 6 ? 1 : hours <= 24 ? 6 : hours <= 48 ? 12 : 24;
-    let tz; try { tz = this._hass.config?.time_zone; new Intl.DateTimeFormat('en', { timeZone: tz }); } catch (err) { tz = undefined; }
-    const fmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: tz });
+    const fmt = this._timelineFormat('en-GB');
     const ticks = [];
     for (let t = Math.ceil(start / 900000) * 900000; t < now; t += 900000) {
       const [h, m] = fmt.format(t).split(':').map(Number);
@@ -7749,10 +7850,10 @@ class HeatpumpFlowCard extends HTMLElement {
     `<span class="seg k-${s.kind}${n === sel && !run ? ' sel' : ''}" data-seg="${n}" style="left:${pct(s.from)}%;width:${(pct(s.to) - pct(s.from)).toFixed(3)}%" title="${this._esc(this._timelineDetail(s))}"></span>`).join('')}${edges.map((t) =>
     `<span class="tick" style="left:${pct(t)}%"></span>`).join('')}${run ? `<span class="run-sel" style="left:${pct(run.from)}%;width:${(pct(run.to) - pct(run.from)).toFixed(3)}%"></span>` : ''}</div>
       ${lanes.map((l) => `<div class="tl-mark" role="img" aria-label="${this._esc(`${l.label}: ${l.segs.map((s) => `${this._timelineTime(s.from)}–${this._timelineTime(s.to)}`).join(', ')}`)}">${l.segs.map((s) =>
-    `<span class="mseg${`${l.n}:${s.from}` === this._tlMarkSel ? ' sel' : ''}" data-mseg="${l.n}:${s.from}" style="left:${pct(s.from)}%;width:${(pct(s.to) - pct(s.from)).toFixed(3)}%" title="${this._esc(markDetail(l, s))}"></span>`).join('')}</div>`).join('')}
+    `<span class="mseg${`${l.n}:${s.from}` === this._tlMarkSel ? ' sel' : ''}" data-mseg="${l.n}:${s.from}" style="left:${pct(s.from)}%;width:${(pct(s.to) - pct(s.from)).toFixed(3)}%${l.color ? `;background:${this._esc(l.color)}` : ''}" title="${this._esc(markDetail(l, s))}"></span>`).join('')}</div>`).join('')}
       <div class="tl-axis">${ticks.map(([t, l]) => `<span style="left:${pct(t)}%">${l}</span>`).join('')}</div>
       ${panel ? this._runPanel(run, rows) : ''}
-      <div class="tl-legend">${kinds.map((k) => `<span><i class="k-${k}"></i>${this._esc(this._timelineLabel({ kind: k }))}</span>`).join('')}${lanes.map((l) => `<span><i class="k-mark"></i>${this._esc(l.label)}</span>`).join('')}</div>`;
+      <div class="tl-legend">${kinds.map((k) => `<span><i class="k-${k}"></i>${this._esc(this._timelineLabel({ kind: k }))}</span>`).join('')}${lanes.map((l) => `<span><i class="k-mark"${l.color ? ` style="background:${this._esc(l.color)}"` : ''}></i>${this._esc(l.label)}</span>`).join('')}</div>`;
   }
 
   // Identity of a run for the selection and its query. A run cut by the window starts at the window start, which moves with
@@ -8045,20 +8146,24 @@ class HeatpumpFlowCard extends HTMLElement {
     return Object.entries(y).map(([pos, h]) => [`${tank}_heater${pos ? `_${pos}` : ''}`, `${dhw ? 'dhw' : 'buf'}${pos ? `-${pos}` : ''}`, h, pos ? 612 : dhw ? 604 : 578]);
   }
 
+  // A tank value beside a heater rod at its height may move left on a narrow card, where wider fonts reach the rod (Firefox on Linux).
+  _rodBeside(key) { return this._has(key) ? ' data-places="568 middle; 524 start"' : ''; }
+
   // Heater rod entering a tank from the right wall at height y, reaching left to x; backup / inline heater as a box inside the heat pump.
   _heaterSvg(key, id, y, left) {
     if (!this._has(key)) return '';
     const de = `data-entity="${this._esc(this._e[key])}"`;
     if (id === 'inline') {
       return `<g class="tap heater" id="heater-${id}" ${de}><rect class="heater-box" x="230" y="266" width="46" height="30" rx="6"/>
-        <path class="heater-el" d="M236 281 l4 -8 l6 16 l6 -16 l6 16 l6 -16 l6 16 l4 -8"/></g>`;
+        <path class="heater-el" d="M236 281 l4 -8 l6 16 l6 -16 l6 16 l6 -16 l6 16 l4 -8"/><text class="unit-val heater-val" id="t-heater-inline" x="253" y="310" text-anchor="middle" data-prio="room" data-rank="3"></text></g>`;
     }
     // A running rod is red like the hot-water phase of the timeline, with rising heat waves like the emitters; a dark casing keeps
     // it visible in a tank of a similar colour.
     const d = `M640 ${y - 4} H${left + 6} Q${left} ${y - 4} ${left} ${y} Q${left} ${y + 4} ${left + 6} ${y + 4} H640`;
     const waves = [0, 1, 2].map((n) => `<path class="wave" d="M${left + 6 + n * (634 - left - 6) / 2} ${y - 7} q4 -4 0 -8 q-4 -4 0 -8"/>`).join('');
     return `<g class="tap heater rod" id="heater-${id}" ${de}><rect class="heater-flange" x="638" y="${y - 9}" width="9" height="18" rx="2"/>
-      <path class="heater-case" d="${d}"/><path class="heater-el" d="${d}"/><g class="waves rod-waves">${waves}</g></g>`;
+      <path class="heater-case" d="${d}"/><path class="heater-el" d="${d}"/><g class="waves rod-waves">${waves}</g>
+      <text class="rod-val" id="t-heater-${id}" x="${left - 7}" y="${y + 5}" text-anchor="end" data-prio="room" data-rank="3" data-places="652 start"></text></g>`;
   }
 
   // The pressure drawn at circuit 1: its own, else the system pressure where the heat pump has no water line to draw it on.
@@ -8114,7 +8219,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const labels = `<g class="tap" ${out}><text class="small" id="t-src-out" x="${this._sourceType === 'exhaust' ? 126 : 130}" y="462" text-anchor="end" data-fit="126"></text></g>
       <g class="tap" ${inn}><text class="small" id="t-src-in" x="${this._sourceType === 'exhaust' ? 214 : 210}" y="462" data-fit="${this._sourceType === 'exhaust' ? 150 : 120}"></text></g>
       <g class="tap" ${inn}><text class="small source-spread" id="t-src-spread" x="128" y="512" text-anchor="end" data-fit="124"></text></g>
-      <g class="tap" ${this._e.source_volume ? `data-entity="${this._esc(this._e.source_volume)}"` : ''}><text class="vol-label" id="t-src-vol" x="212" y="512"></text></g>
+      <g class="tap" ${this._e.source_volume ? `data-entity="${this._esc(this._e.source_volume)}"` : ''}><text class="vol-label" id="t-src-vol" data-prio="room" data-rank="5" x="212" y="512"></text></g>
       ${this._sourceType === 'brine' && this._e.brine_pressure ? `<g class="tap pressure" id="pressure-brine" data-entity="${this._esc(this._e.brine_pressure)}"><text class="pressure-label" id="t-brine-pressure" x="212" y="532" data-fit="300"></text></g>` : ''}`;
     if (this._sourceType === 'exhaust') {
       // Exhaust air comes from the rooms, the vented air leaves through the wall.
@@ -8453,6 +8558,7 @@ class HeatpumpFlowCard extends HTMLElement {
     this._updateDrawing();
     this._fitLabels();
     this._placeLabels();
+    this._roomLabels();
   }
 
   _updateDrawing() {
@@ -8652,6 +8758,8 @@ class HeatpumpFlowCard extends HTMLElement {
       const lv = this._level(key);
       el.classList.toggle('on', lv > 0); el.classList.toggle('stage2', lv > 1);
       el.querySelector('.waves')?.classList.toggle('on', lv > 0);
+      // The measured power of a heater whose entity reports one (#449); on or off alone is drawn, not written.
+      this._txt(`t-heater-${id}`, lv > 0 ? this._heaterPower(key) : '');
     });
 
     if (P.boiler) {
@@ -9074,6 +9182,10 @@ HeatpumpFlowCard.styles = `
   .heater-flange, .heater-box { fill: var(--secondary-background-color, rgba(127,127,127,.15)); stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 1.5; }
   .heater.on .heater-el { stroke: ${hfcVar('heat')}; filter: url(#glow); }
   .heater.on.stage2 .heater-el { stroke: ${hfcVar('hot')}; }
+  .rod-val { font-size: calc(13px * var(--k2, 1)); font-weight: 600; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.45); stroke-width: 3px; }
+  .rod-val:not(.room), .heater-val:not(.room) { display: none; }
+  .rod-val.outside { fill: var(--hfc-muted); stroke: var(--card-background-color, #fff); }
+  .heater-val { font-size: 12px; }
   .heater.rod.on .heater-el, .rod-waves .wave { stroke: ${hfcVar('hot')}; } .rod-waves .wave { stroke-width: 2; }
   .boiler-title { font-size: 12px; font-weight: 600; fill: var(--primary-text-color); }
   .boiler-box { fill: var(--card-background-color, #fff); stroke: var(--divider-color, rgba(127,127,127,.5)); stroke-width: 2; }
@@ -9307,7 +9419,7 @@ HeatpumpFlowCard.styles = `
   /* narrow schematic (phones, narrow columns): larger type, secondary labels hidden */
   .stage { container-type: inline-size; }
   @container (max-width: 640px) { #svg { --k: 1.2; --ku: 1.1; --kp: 1; --k2: 1; --ks: 1.2; --kt: 1.15; } }
-  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .vol-label, .tank-sub, .pre, #t-valve, #t-circ, #t-dhw-mode, #t-room-target .nf-tail { display: none; } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values #t-dhw-middle, .narrow-values #t-dhw-bottom, .narrow-values #t-dhw-mode, .narrow-values .vol-label { display: block; font-size: calc(13px * var(--k2, 1)); } }
+  @container (max-width: 500px) { #svg { --k: 1.4; --ku: 1.25; --kp: 1.4; --k2: 1.3; --ks: 1.4; --kt: 1.3; } .pre, #t-room-target .nf-tail, [data-prio="room"]:not(.room) { display: none; } [data-prio="room"].room:not(.rod-val) { font-size: calc(14px * var(--k2, 1)); } .narrow-values #t-buf-middle, .narrow-values #t-buf-bottom, .narrow-values #t-dhw-middle, .narrow-values #t-dhw-bottom, .narrow-values #t-dhw-mode, .narrow-values .vol-label { display: block; font-size: calc(13px * var(--k2, 1)); } }
   /* narrow_focus: below 500 px the key values grow to about the size of the tank temperature; the outdoor, air inlet and power
      source values move to one line under the schematic, and the secondary labels are hidden. Wins over narrow_values. */
   #t-hp-heat, .focus-line { display: none; }
@@ -9328,6 +9440,7 @@ HeatpumpFlowCard.styles = `
     .narrow-focus .nf-two .house-row-value { font-size: 26px; text-anchor: start; transform: translate(-204px, 27px); }
     .narrow-focus #house-row2.nf-two { transform: translateY(24.5px); } .narrow-focus #house-row3.nf-two { transform: translateY(49px); }
     .narrow-focus .focus-line:not(:empty) { display: block; }
+    .narrow-focus .vol-label[data-prio="room"].room { font-size: 22px; font-weight: 600; fill: var(--primary-text-color); }
   }
   @container (max-width: 500px) {
     .src-val { transform: translateY(7px); }
