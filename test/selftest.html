@@ -188,7 +188,7 @@
     { badges: [{ entity: 'sensor.x', hold_action: 'toggle' }] },
     { program_map: [] }, { program_map: 'eco' }, { sg_ready_map: [] }, { sg_ready_map: { on: 'maybe' } }, { compressor_speed_max: 0 }, { compressor_speed_max: 'fast' },
     { errors: 'sensor.error' }, { error_ok: 'No Error' }, { error_ok: ['No Error', 0] },
-    { timeline: 'yes' }, { timeline_hours: 0 }, { timeline_marks: 'yes' }, { timeline_marks: [{ label: 'x' }] }, { timeline_marks: [7] }, { wall_timeout: -1 }, { wall_timeout: 'soon' }, { unit_style: 'tesla' }, { unit_size: 'huge' },
+    { timeline: 'yes' }, { timeline_hours: 0 }, { timeline_marks: 'yes' }, { timeline_marks: [{ label: 'x' }] }, { timeline_marks: [7] }, { timeline_marks: [{ entity: 'switch.x', color: 7 }] }, { wall_timeout: -1 }, { wall_timeout: 'soon' }, { unit_style: 'tesla' }, { unit_size: 'huge' },
     { animations: 'sometimes' }, { flow_speed: 0 }, { flow_speed: 3.1 }, { source_spread: 'yes' }, { dew_point_margin: -0.1 }, { dew_point_margin: 11 }, { dew_point_margin: 'near' }, { buffer: 'yes' }, { series_buffer: 'yes' }, { primary_pump: 'yes' }, { theme: 'sepia' }, { fullscreen: 'yes' },
     { texts: [] }, { texts: { NL: { title: 'x' } } }, { texts: { nl: { title: 7 } } }, { texts: { nl: { missing_key: 'x' } } },
     { brine_pressure_min: -0.1 }, { hc_pressure_crit: 1.2, hc_pressure_min: 1.0 }, { hc_pressure_min: 3, hc_pressure_max: 2 },
@@ -4265,6 +4265,46 @@
     r = resolve(base, { preset: 'vaillant', prefix: 'home' });
     check(r.ready && r.entities.mode === 'sensor.home_energy_manager_state_2', 'with the prefix set by hand the numbered entity is found, too');
 
+    // #502: an aroTHERM pro hybrid re-added to myPyllant. Home-level entities carry the account prefix, the rest the home name;
+    // device 0 is the hydraulic station (efficiency 1.0), device 1 the heat pump, device 2 the gas boiler.
+    const hybrid = {
+      'sensor.acc_energy_manager_state': 'HEATING', 'sensor.acc_outdoor_temperature': ['0.1', '°C'], 'sensor.acc_system_water_pressure': ['1.9', 'bar'],
+      'sensor.acc_domestic_hot_water_0_tank_temperature': ['55.5', '°C'], 'sensor.acc_domestic_hot_water_0_setpoint': ['55.0', '°C'],
+      'sensor.acc_device_0_heating_device_heating_energy_efficiency': '1.0', 'sensor.acc_device_1_heating_device_heating_energy_efficiency': '3.3',
+      'sensor.acc_device_2_ecotec_plus_heating_energy_efficiency': '0.0', 'sensor.haus_heating_energy_efficiency': '3.2',
+      'sensor.haus_circuit_0_current_flow_temperature': ['26.5', '°C'], 'sensor.haus_circuit_0_flow_temperature_setpoint': ['21.9', '°C'], 'sensor.haus_circuit_0_state': 'HEATING',
+      'sensor.haus_zone_1_circuit_0_current_temperature': ['22.7', '°C'], 'sensor.haus_zone_1_circuit_0_desired_temperature': ['9.0', '°C'],
+      'sensor.haus_device_0_heating_device_consumed_electrical_energy_heating': ['0.0', 'Wh'], 'sensor.haus_device_1_heating_device_consumed_electrical_energy_heating': ['18300.0', 'Wh'],
+      'sensor.haus_device_1_heating_device_heat_generated_heating': ['51600.0', 'Wh'], 'sensor.haus_device_2_ecotec_plus_consumed_primary_energy_heating': ['0.0', 'Wh'],
+    };
+    r = resolve(hybrid); e = r.entities;
+    check(r.prefix === 'acc' && e.cop_heating_today === 'sensor.haus_heating_energy_efficiency', `#502: the COP of the system, not that of the hydraulic station (${e.cop_heating_today})`);
+    check(e.hc_flow === 'sensor.haus_circuit_0_current_flow_temperature' && e.hc_mode === 'sensor.haus_circuit_0_state' && e.room === 'sensor.haus_zone_1_circuit_0_current_temperature'
+      && e.room_target === 'sensor.haus_zone_1_circuit_0_desired_temperature' && e.dhw_top === 'sensor.acc_domestic_hot_water_0_tank_temperature',
+    `#502: circuit and zone under the home name next to the home-level entities under the account (${e.hc_flow} / ${e.room})`);
+    check(r.tiles.energy_heating?.today === 'sensor.haus_device_1_heating_device_consumed_electrical_energy_heating' && r.tiles.heat_heating?.today === 'sensor.haus_device_1_heating_device_heat_generated_heating',
+      `#502: the daily energy of the heat pump, not of the station or the boiler (${r.tiles.energy_heating?.today})`);
+    e = resolve({ 'sensor.acc_energy_manager_state': 'HEATING', 'sensor.next_system_flow_temperature': ['30', '°C'], 'sensor.next_circuit_0_current_flow_temperature': ['29', '°C'] }, { preset: 'vaillant', prefix: 'acc' }).entities;
+    check(e.hc_flow === 'sensor.acc_circuit_0_current_flow_temperature', `#502: with two homes the other prefix is the other home, not a second prefix (${e.hc_flow})`);
+    // Codex review of #507: other homes stay out of the COP and of the choice of the heat pump; an unavailable system value leaves
+    // the heat pump's; the choice follows the readings (dynamic preset).
+    const two = { 'sensor.a_energy_manager_state': 'HEATING', 'sensor.b_energy_manager_state': 'HEATING',
+      'sensor.a_device_0_arotherm_heating_energy_efficiency': '3.0', 'sensor.b_device_1_arotherm_heating_energy_efficiency': '5.0', 'sensor.b_heating_energy_efficiency': '4.8' };
+    e = resolve(two, { preset: 'vaillant', prefix: 'a' }).entities;
+    check(e.cop_heating_today === 'sensor.a_device_0_arotherm_heating_energy_efficiency', `#502: with two homes neither the COP nor the device of the other home (${e.cop_heating_today})`);
+    e = resolve({ ...hybrid, 'sensor.haus_heating_energy_efficiency': 'unavailable' }).entities;
+    check(e.cop_heating_today === 'sensor.acc_device_1_heating_device_heating_energy_efficiency', `#502: an unavailable system COP leaves the heat pump's (${e.cop_heating_today})`);
+    const { 'sensor.haus_heating_energy_efficiency': _s2, ...late } = hybrid;
+    const before = resolve({ ...late, 'sensor.acc_device_1_heating_device_heating_energy_efficiency': 'unknown' }).entities.cop_heating_today;
+    const after = resolve(late).entities.cop_heating_today;
+    check(HFC_PRESETS.vaillant.dynamic === true && after === 'sensor.acc_device_1_heating_device_heating_energy_efficiency' && before !== after,
+      `#502: the heat pump follows its readings, and the preset maps again when they arrive (${before} / ${after})`);
+    const { 'sensor.haus_heating_energy_efficiency': _sys, ...noSystem } = hybrid;
+    e = resolve(noSystem).entities;
+    check(e.cop_heating_today === 'sensor.acc_device_1_heating_device_heating_energy_efficiency', `#502: without the system value the heat pump is the device with the highest efficiency (${e.cop_heating_today})`);
+    e = resolve({ ...base, 'sensor.home_device_0_heating_device_heating_energy_efficiency': '1.0', 'sensor.home_device_1_arotherm_heating_energy_efficiency': '3.6' }).entities;
+    check(e.cop_heating_today === 'sensor.home_device_1_arotherm_heating_energy_efficiency' && e.hc_flow === 'sensor.home_circuit_0_current_flow_temperature', `#502: one prefix as before (${e.cop_heating_today})`);
+
     // Device counters and water pressure (#120): the heat pump is the device with a power sensor, the hydraulic station's
     // counters are its backup heater; the ids of the installation in #120 (station listed first).
     const counters = {
@@ -4889,6 +4929,26 @@
     c.remove();
     c = await tl(s, { timeline_marks: false });
     check(!c.shadowRoot.querySelector('#timeline .tl-mark'), 'timeline_marks: false draws no lane');
+    c.remove();
+    // Forum, 23 and 24 November: a colour per lane; within a minute an update of Home Assistant does not draw the timeline again.
+    c = await tl(s, { timeline_details: false, timeline_marks: [{ entity: 'input_boolean.heatpump_boost', label: 'Boost', color: '#ef4444' }, { entity: 'binary_sensor.heat_pump_utility_lock', color: 'no-colour' }] });
+    {
+      const tbox = c.shadowRoot.getElementById('timeline');
+      const seg = c.shadowRoot.querySelector('#timeline .mseg'); const dot = c.shadowRoot.querySelector('#timeline .tl-legend .k-mark');
+      check(getComputedStyle(seg).backgroundColor === 'rgb(239, 68, 68)' && getComputedStyle(dot).backgroundColor === 'rgb(239, 68, 68)', `a lane takes its own colour in the bar and the legend (${getComputedStyle(seg).backgroundColor})`);
+      // The clock is fixed before the baseline is taken, so a minute that turns during the test cannot redraw it (Codex review).
+      const realNow = Date.now;
+      const minuteStart = Math.floor(realNow() / 60000) * 60000;
+      try {
+        Date.now = () => minuteStart + 30000; c.hass = { ...c._hass }; await wait(10);
+        const first = tbox.firstElementChild;
+        Date.now = () => minuteStart + 31000; c.hass = { ...c._hass }; await wait(10);
+        Date.now = () => minuteStart + 45000; c.hass = { ...c._hass }; await wait(10);
+        const same = tbox.firstElementChild === first;
+        Date.now = () => minuteStart + 91000; c.hass = { ...c._hass }; await wait(10);
+        check(same && tbox.firstElementChild !== first, `the timeline is drawn again once a minute, not on every update (${same})`);
+      } finally { Date.now = realNow; }
+    }
     c.remove();
     c = await tl(s, { timeline_marks: [{ entity: 'input_boolean.heatpump_boost', label: 'Boost run' }, 'sensor.nothing_here'] });
     check(c.shadowRoot.querySelectorAll('#timeline .tl-mark').length === 1 && /Boost run/.test(c.shadowRoot.querySelector('#timeline .tl-legend').textContent), 'a list of entities with a label; an entity without a period draws no lane');
