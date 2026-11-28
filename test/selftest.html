@@ -7988,6 +7988,28 @@
     check(thawRow === '3', `#173: the run details count the defrosts of both units (${thawRow}; ${rows.map((r) => r[0]).join(', ')})`);
     card.remove();
   }
+  // 29. controls without a name: hot water and the heating thermostat are labelled in the card's language, an own name wins,
+  // other entities keep their Home Assistant name
+  {
+    const st = {
+      'water_heater.dhw': { state: 'eco', attributes: { friendly_name: 'Home Domestic Hot Water 0', operation_list: ['eco', 'off'] } },
+      'climate.zone': { state: 'auto', attributes: { friendly_name: 'Home Zone 1 Climate', hvac_modes: ['auto', 'off'] } },
+      'switch.boost': { state: 'off', attributes: { friendly_name: 'Hot Water Boost' } },
+      'sensor.f': ['40', '°C'], 'sensor.r': ['35', '°C'],
+    };
+    const labels = async (language, controls) => {
+      const c = mount({ entities: { flow: 'sensor.f', return: 'sensor.r' }, language, controls }, hassOf(toStates(st))); await wait(20);
+      const out = [...c.shadowRoot.querySelectorAll('#controls .ctl')].map((x) => (x.querySelector('span') || x).textContent.trim());
+      c.remove(); return out;
+    };
+    const ids = ['water_heater.dhw', 'climate.zone', 'switch.boost'];
+    let got = await labels('de', ids);
+    check(got[0] === HFC_I18N.de.dhw && got[1] === HFC_I18N.de.heating_zone && got[2].includes('Hot Water Boost'), `controls without a name in German: ${JSON.stringify(got)}`);
+    got = await labels('en', ids);
+    check(got[0] === HFC_I18N.en.dhw && got[1] === HFC_I18N.en.heating_zone, `controls without a name in English: ${JSON.stringify(got)}`);
+    got = await labels('de', [{ entity: 'water_heater.dhw', name: 'Speicher' }, { entity: 'climate.zone', name: 'Fussboden' }]);
+    check(got[0] === 'Speicher' && got[1] === 'Fussboden', `an own name wins: ${JSON.stringify(got)}`);
+  }
 
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');

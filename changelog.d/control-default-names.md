@@ -1,0 +1,1 @@
+- Quick controls without a `name`: a `water_heater` shows the hot-water text and a `climate` the heating text of the card, in the card's language, instead of the Home Assistant entity name. An own `name` still wins.
