@@ -7989,6 +7989,58 @@
     card.remove();
   }
 
+  // 27. Two-step tile selection (#481, feedback on 0.21.0-beta.1): the add list names a statistic once, its period is chosen in a
+  // field of its own, and 7 and 30 days say that they bring the trend. Before, a Lambda offered 274 entries, one per statistic and period.
+  {
+    const s = setups.find((x) => x.name === 'Lambda');
+    const hass = hassOf(toStates(s.states('heat')), s.registry || {}, null, s);
+    const base = { ...s.config, tiles: ['spf'] };
+    // The counters of electricity and heat as a real Lambda reports them, with daily statistics (state_class total_increasing).
+    const totals = C._resolve(base, hass).tiles;
+    [totals.energy?.total, totals.heat?.total].filter((id) => hass.states[id]).forEach((id) => {
+      hass.states[id] = { ...hass.states[id], attributes: { ...hass.states[id].attributes, state_class: 'total_increasing' } };
+    });
+    const o = C._tileOptions(base, C._resolve(base, hass), hass);
+    const key = ['cop_total', 'energy', 'heat', 'starts'].find((k) => (o.periodWords[k] || []).some((p) => p.value === '7d'));
+    const vals = o.choices.map((c) => c.value);
+    const periodic = vals.filter((v) => { const [k, p] = v.split(':'); return p && o.periodWords[k]; });
+    check(key && vals.filter((v) => v === `add:${key}`).length === 1 && !periodic.length && vals.includes('spf') && o.choices.length < o.options.length,
+      `#481: the add list names ${key} once and no statistic with a period (${o.choices.length} of ${o.options.length} entries; ${periodic.join()})`);
+    const def = o.default(key);
+    const ed = document.createElement('heatpump-flow-card-editor'); let out;
+    ed.addEventListener('config-changed', (ev) => { out = ev.detail.config; });
+    ed.setConfig(base); ed.hass = hass; await wait(10);
+    const fieldOf = (name) => { const walk = (list) => list.flatMap((n) => (n.schema ? walk(n.schema) : [n])); return walk(ed._form.schema).find((n) => n.name === name); };
+    const before = !!fieldOf('tile_pick');
+    ed._changed({ ...ed._form.data, tiles: [...ed._form.data.tiles, `add:${key}`] }); await wait(10);
+    const added = out.tiles.join(); const pick = ed._form.data.tile_pick;
+    const trend = fieldOf('tile_period')?.selector.select.options.find((p) => p.value === '7d')?.label || '';
+    check(!before && added === `spf,${key}:${def}` && pick === `${key}:${def}` && ed._form.data.tile_period === def && / · (with trend|mit Trend)$/.test(trend),
+      `#481: a statistic comes with its usual period, the period field shows it and names the trend (${added}; ${pick}; ${trend})`);
+    ed._changed({ ...ed._form.data, tile_period: '7d' }); await wait(10);
+    const changed = out.tiles.join();
+    ed._changed({ ...ed._form.data, tiles: [...ed._form.data.tiles, `add:${key}`] }); await wait(10);
+    const second = out.tiles.join();
+    ed._changed({ ...ed._form.data, tiles: [...ed._form.data.tiles, `add:${key}`] }); await wait(10);
+    const third = out.tiles.slice(3); const free = o.periodsOf[key].find((p) => ![def, '7d'].includes(p) && [o.default(key), ...o.periodsOf[key]].includes(p));
+    ed._changed({ ...ed._form.data, tiles: ed._form.data.tiles.slice(0, 3) }); await wait(10);
+    check(changed === `spf,${key}:7d` && second === `spf,${key}:7d,${key}:${def}` && third.join() === `${key}:${free}` && out.tiles.length === 3,
+      `#481: the period replaces that of the tile in its place; the same statistic again comes as a further tile with a period not chosen yet (${changed} / ${second} / ${third.join()})`);
+    ed._changed({ ...ed._form.data, tile_pick: `${key}:7d` }); await wait(10);
+    ed._changed({ ...ed._form.data, tile_period: '30d' }); await wait(10);
+    const picked = out.tiles.join();
+    ed._changed({ ...ed._form.data, tile_period: def }); await wait(10);
+    check(picked === `spf,${key}:30d,${key}:${def}` && out.tiles.join() === picked, `#481: a picked tile changes its period; a period it has already is not taken twice (${picked} / ${out.tiles.join()})`);
+    // A bare statistic from YAML stays as it was written until its period is changed.
+    const yamlEd = document.createElement('heatpump-flow-card-editor'); let yamlOut;
+    yamlEd.addEventListener('config-changed', (ev) => { yamlOut = ev.detail.config; });
+    yamlEd.setConfig({ ...s.config, tiles: [key, 'spf'] }); yamlEd.hass = hass; await wait(10);
+    yamlEd._changed({ ...yamlEd._form.data, title: 'x' }); await wait(10);
+    const kept = yamlOut.tiles.join();
+    yamlEd._changed({ ...yamlEd._form.data, tile_period: '7d' }); await wait(10);
+    check(kept === `${key},spf` && yamlOut.tiles.join() === `${key}:7d,spf`, `#481: a tile written without its period stays so, until its period is changed (${kept} / ${yamlOut.tiles.join()})`);
+  }
+
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');
   document.getElementById('result').textContent = fails.length ? 'FAIL' : 'PASS';
