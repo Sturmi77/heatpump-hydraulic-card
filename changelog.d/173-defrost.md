@@ -1,0 +1,1 @@
+- `defrost` also takes a mode text (`defrost`, or what `mode_map` maps to defrost) and a list with one entity per unit of a cascade: the schematic, the timeline and the run details show defrost while any unit defrosts, and the defrosts of all units add up (#173, buliwyf42).

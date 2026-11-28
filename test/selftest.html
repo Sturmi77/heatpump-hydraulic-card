@@ -7924,6 +7924,71 @@
     card.remove();
   }
 
+  // 26. #173: a defrost entity per unit of a cascade, given as the text of each unit's mode (ebusd b516 14: off, heating, hwc,
+  // cooling, defrost). Defrost while any unit defrosts, in the schematic, the timeline and the count of defrosts.
+  {
+    const M = 60000;
+    const chipDefrost = (c) => [...c.shadowRoot.querySelectorAll('.chip')].some((x) => x.classList.contains('mode-defrost'));
+    const st = { 'sensor.ph': 'heating', 'binary_sensor.c': 'on', 'sensor.u1': 'heating', 'sensor.u2': 'defrost', 'sensor.f': ['40', '°C'], 'sensor.r': ['36', '°C'] };
+    const ents = { mode: 'sensor.ph', compressor: 'binary_sensor.c', defrost: ['sensor.u1', 'sensor.u2'], flow: 'sensor.f', return: 'sensor.r' };
+    let card = mount({ entities: ents }, hassOf(toStates(st))); await wait(20);
+    const one = card._defrostOn() && chipDefrost(card);
+    card.hass = { ...card._hass, states: { ...card._hass.states, ...toStates({ 'sensor.u2': 'hwc' }) } }; await wait(20);
+    check(one && !card._defrostOn() && !chipDefrost(card), '#173: defrost while one of two units defrosts, none while both report another mode');
+    const ids = card._timelineIds();
+    const hist = { 'sensor.ph': [{ t: 0, s: 'heating' }, { t: 60 * M, s: 'standby' }], 'binary_sensor.c': [{ t: 0, s: 'on' }, { t: 60 * M, s: 'off' }],
+      'sensor.u1': [{ t: 0, s: 'heating' }, { t: 10 * M, s: 'defrost' }, { t: 14 * M, s: 'heating' }],
+      'sensor.u2': [{ t: 0, s: 'heating' }, { t: 12 * M, s: 'defrost' }, { t: 18 * M, s: 'heating' }, { t: 30 * M, s: 'defrost' }, { t: 33 * M, s: 'off' }, { t: 70 * M, s: 'defrost' }] };
+    const segs = card._timelineSegments(hist, ids, 0, 90 * M).map((x) => `${x.kind}:${x.from / M}-${x.to / M}`).join(' ');
+    check(Array.isArray(ids.thaw) && ids.thaw.length === 2 && segs === 'heat:0-10 defrost:10-18 heat:18-30 defrost:30-33 heat:33-60 idle:60-90',
+      `#173: the timeline shows the defrosts of both units, overlapping ones as one, none while idle (${segs})`);
+    card.remove();
+    // A single text entity through mode_map; a binary entity as before.
+    card = mount({ entities: { ...ents, defrost: 'sensor.u3' }, mode_map: { Abtaubetrieb: 'defrost' } }, hassOf(toStates({ ...st, 'sensor.u3': 'Abtaubetrieb' }))); await wait(20);
+    const mapped = card._defrostOn() && chipDefrost(card); card.remove();
+    card = mount({ entities: { ...ents, defrost: 'binary_sensor.d' } }, hassOf(toStates({ ...st, 'binary_sensor.d': 'on' }))); await wait(20);
+    const binary = card._defrostOn() && chipDefrost(card); card.remove();
+    check(mapped && binary, `#173: a mode text through mode_map and a binary entity both mean defrost (${mapped} / ${binary})`);
+    // Numeric modes (Codex review): with a mode_map only the mapped defrost value counts, not every number above 0.
+    card = mount({ entities: { ...ents, defrost: 'sensor.u4' }, mode_map: { 1: 'heating', 2: 'defrost', 3: 'dhw' } }, hassOf(toStates({ ...st, 'sensor.u4': '1' }))); await wait(20);
+    const numeric = ['1', '2', '3', '0'].map((s) => card._thawState(s)).join(); card.remove();
+    check(numeric === 'false,true,false,false', `#173: numeric modes follow mode_map (${numeric})`);
+    // run_signal: units, the setup of the report: the units' power delimits the runs, the defrost texts mark the defrosts.
+    const cascade = { entities: { mode: 'sensor.ph', defrost: ['sensor.u1', 'sensor.u2'], flow: 'sensor.f', return: 'sensor.r' }, run_signal: 'units',
+      units: [{ power: 'sensor.p1', heat: 'sensor.h1' }, { power: 'sensor.p2', heat: 'sensor.h2' }] };
+    card = mount(cascade, hassOf(toStates({ ...st, 'sensor.p1': ['900', 'W'], 'sensor.p2': ['0', 'W'], 'sensor.h1': ['4', 'kW'], 'sensor.h2': ['0', 'kW'] }))); await wait(20);
+    const cids = card._timelineIds();
+    const chist = { ...hist, 'sensor.p1': [{ t: 0, s: '900' }, { t: 60 * M, s: '0' }], 'sensor.p2': [{ t: 0, s: '0' }, { t: 25 * M, s: '800' }, { t: 60 * M, s: '0' }] };
+    const csegs = card._timelineSegments(chist, cids, 0, 90 * M).map((x) => `${x.kind}:${x.from / M}-${x.to / M}`).join(' ');
+    check(chipDefrost(card) && csegs === 'heat:0-10 defrost:10-18 heat:18-30 defrost:30-33 heat:33-60 idle:60-90',
+      `#173: with run_signal: units the defrost of either unit shows in the schematic and the timeline (${csegs})`);
+    card.remove();
+    // Defrosts of today from the history: those of both units add up; a unit without a usable history is no count.
+    const T0 = Date.parse(C.prototype._periodRange.call({ _hass: { config: {} } }, 'today')[0]);
+    const at = (min, s) => ({ s: String(s), lu: (T0 + min * M) / 1000 });
+    const counts = { 'sensor.u1': [at(0, 'heating'), at(60, 'defrost'), at(66, 'heating'), at(200, 'defrost'), at(205, 'heating')],
+      'sensor.u2': [at(0, 'defrost'), at(3, 'heating'), at(90, 'defrost'), at(96, 'off')] };
+    const tileOf = async (history) => {
+      const c = mount({ entities: ents, tiles: ['defrosts:today'] }, { ...hassOf(toStates(st)), callWS: (q) => (q.type === 'history/history_during_period' ? Promise.resolve(history) : Promise.reject(new Error('n/a'))) });
+      await wait(40); const v = c.shadowRoot.querySelector('.stat .sv')?.textContent; c.remove(); return v;
+    };
+    const both = await tileOf(counts); const gap = await tileOf({ ...counts, 'sensor.u2': [at(0, 'unavailable')] });
+    check(both === '3' && gap === '–', `#173: defrosts of two units add up, not the one going at midnight; a unit without history is no count (${both} / ${gap})`);
+    // The details of a heating run count the defrosts of both units within it.
+    const now = Date.now(); const ago = (min, s) => ({ s: String(s), lu: (now - min * M) / 1000 });
+    const rh = { 'binary_sensor.c': [ago(300, 'off'), ago(200, 'on'), ago(100, 'off')], 'sensor.ph': [ago(300, 'standby'), ago(200, 'heating'), ago(100, 'standby')],
+      'sensor.u1': [ago(300, 'off'), ago(180, 'defrost'), ago(175, 'heating')], 'sensor.u2': [ago(300, 'off'), ago(150, 'defrost'), ago(144, 'heating'), ago(130, 'defrost'), ago(126, 'heating')] };
+    card = mount({ entities: ents, timeline: true }, { ...hassOf(toStates({ ...st, 'binary_sensor.c': 'off', 'sensor.ph': 'standby', 'sensor.u1': 'off', 'sensor.u2': 'off' })), config: { time_zone: 'UTC' },
+      callWS: (q) => (q.type === 'history/history_during_period' ? Promise.resolve(Object.fromEntries(q.entity_ids.map((id) => [id, rh[id] || []]))) : Promise.reject(new Error('n/a'))) });
+    await wait(60);
+    const heatRun = card._tl?.runs?.find((r) => r.kind === 'heat' && !r.ongoing);
+    if (heatRun && !card._runFigures(heatRun)) await wait(60);
+    const rows = heatRun ? card._runFigures(heatRun)?.rows || [] : [];
+    const thawRow = rows.find(([label]) => label === card._i.tiles.defrosts)?.[1];
+    check(thawRow === '3', `#173: the run details count the defrosts of both units (${thawRow}; ${rows.map((r) => r[0]).join(', ')})`);
+    card.remove();
+  }
+
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');
   document.getElementById('result').textContent = fails.length ? 'FAIL' : 'PASS';
