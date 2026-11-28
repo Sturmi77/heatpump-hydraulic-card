@@ -123,7 +123,7 @@ entities:
 ```
 
 ## Stat tiles
-In the UI editor, switch on **Own tile selection**. The editor then offers only the tiles your installation can fill: the statistics with their periods, then the values of the drawing and the details, listed by component and heating circuit, and the further values of the details (`details` of the preset or your own). **Add a Home Assistant entity as a tile** appends any entity; entity and value tiles can be named in the fields below the list. Drag the tiles to sort. Enter an electricity price (a number or an entity) to get the cost tile. In YAML:
+In the UI editor, switch on **Own tile selection**. The editor then offers only the tiles your installation can fill: the statistics, each once, then the values of the drawing and the details, listed by component and heating circuit, and the further values of the details (`details` of the preset or your own). A statistic comes with its usual period; **Tile** and **Period** below the list change the period of a chosen statistic, also of one added before, where **7 days · with trend** and **30 days · with trend** add the arrow (see "Rolling windows and trends"). Adding the same statistic again gives a further tile with a period not chosen yet. **Add a Home Assistant entity as a tile** appends any entity; entity and value tiles can be named in the fields below the list. Drag the tiles to sort. Enter an electricity price (a number or an entity) to get the cost tile. In YAML:
 
 ```yaml
 price: sensor.epex_spot_price   # or a number, e.g. 0.30

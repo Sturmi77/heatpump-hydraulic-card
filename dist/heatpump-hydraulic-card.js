@@ -2368,6 +2368,9 @@ const HFC_EDITOR = {
     tiles_custom_help: 'Off: default tiles. On: pick tiles and periods from what this installation provides; an empty list hides the row.',
     tiles_yaml: 'Some tiles have their own name, entity, price or action: edit them in YAML.',
     tile_entity: 'Add a Home Assistant entity as a tile', tile_entity_help: 'The tile goes to the end of the list. It can be named below.',
+    tiles_add_help: 'Add a value with "Add"; its period (today, month, 7 days …) is chosen in the fields below.',
+    tile_pick: 'Tile', tile_period: 'Period', period_trend: 'with trend',
+    tile_period_help: 'Pick a tile, then its period. 7 and 30 days show an arrow for the trend against as many days before.',
     tile_names: 'Names of the tiles', tile_name: 'Name: {tile}', tile_preview: 'Shows: {value}',
     price_fixed: 'Electricity price per kWh', price_entity: 'Electricity price entity',
     price_help: 'Enables the cost tile. With an entity that has long-term statistics (e.g. a dynamic tariff), the cost is billed per hour.',
@@ -2474,6 +2477,9 @@ const HFC_EDITOR = {
     tiles_custom_help: 'Aus: Standardkacheln. An: Kacheln und Zeiträume aus dem wählen, was diese Anlage liefert; eine leere Liste blendet die Zeile aus.',
     tiles_yaml: 'Einige Kacheln haben einen eigenen Namen, eine eigene Entität, einen Preis oder eine Aktion: im YAML bearbeiten.',
     tile_entity: 'Home-Assistant-Entität als Kachel hinzufügen', tile_entity_help: 'Die Kachel kommt ans Ende der Liste. Unten lässt sie sich benennen.',
+    tiles_add_help: 'Mit „Hinzufügen“ einen Wert wählen; den Zeitraum (heute, Monat, 7 Tage …) in den Feldern darunter.',
+    tile_pick: 'Kachel', tile_period: 'Zeitraum', period_trend: 'mit Trend',
+    tile_period_help: 'Kachel wählen, dann ihren Zeitraum. 7 und 30 Tage zeigen einen Pfeil für den Trend gegenüber gleich vielen Tagen davor.',
     tile_names: 'Namen der Kacheln', tile_name: 'Name: {tile}', tile_preview: 'Zeigt: {value}',
     price_fixed: 'Strompreis je kWh', price_entity: 'Strompreis-Entität',
     price_help: 'Schaltet die Kostenkachel frei. Mit einer Entität mit Langzeitstatistik (z. B. dynamischer Tarif) werden die Kosten stundengenau abgerechnet.',
@@ -3689,7 +3695,13 @@ class HeatpumpFlowCard extends HTMLElement {
         // Tile selection (editor only): a sortable list of the tiles this installation can fill.
         ...(tiles ? [{ name: 'tiles_custom', selector: { boolean: {} } }] : []),
         ...(tiles && Array.isArray(config.tiles)
-          ? [{ name: 'tiles', selector: { select: { multiple: true, reorder: true, mode: 'dropdown', options: tiles.options } } },
+          ? [{ name: 'tiles', selector: { select: { multiple: true, reorder: true, mode: 'dropdown', options: tiles.choices || tiles.options } } },
+            // Second step (#481): the period of a chosen statistic; 7 and 30 days add the trend.
+            ...(tiles.steps?.length ? [{ type: 'grid', name: '', schema: [
+              { name: 'tile_pick', selector: { select: { mode: 'dropdown', options: tiles.steps.map((s) => ({ value: s.value, label: s.label })) } } },
+              { name: 'tile_period', selector: { select: { mode: 'dropdown', options: (tiles.periodWords[tiles.focus?.key] || [])
+                .map((p) => ({ value: p.value, label: HFC_ROLLING[p.value] ? `${p.word} · ${L.period_trend}` : p.word })) } } },
+            ] }] : []),
             { name: 'tile_entity', selector: { entity: {} } },
             // Names of the tiles that show an entity or a card value (#481).
             ...(tiles.names.length ? [{ type: 'expandable', name: 'tile_names', flatten: true, title: L.tile_names,
@@ -5756,9 +5768,11 @@ class HeatpumpFlowCard extends HTMLElement {
     const shown = new Set();
     // The cost tile needs a price (global `price`).
     const hasPrice = config.price !== undefined && config.price !== null && config.price !== '';
+    const steps = new Set();
     Object.keys(HFC_TILES).filter((k) => k !== 'cost' || hasPrice).forEach((key) => {
       const periods = probe._tilePeriods(key);
       periodsOf[key] = periods;
+      if (periods.length > 1) steps.add(key);
       periods.forEach((p) => {
         options.push({ value: periods.length === 1 ? key : `${key}:${p}`, label: probe._tileLabel(key, p, I) });
         const id = probe._tileSource(key, p)?.id;
@@ -5824,7 +5838,37 @@ class HeatpumpFlowCard extends HTMLElement {
     const defaults = Array.isArray(presetDefaults)
       ? presetDefaults.map((t) => HeatpumpFlowCard._tileSpec(t)).filter((s) => s?.key && periodsOf[s.key]?.length).map((s) => valueOf(s.key, s.period))
       : ['cop_heating', 'cop_dhw', 'energy', 'starts', 'spread', 'volume', 'heat_estimated'].filter((k) => periodsOf[k].length).map((k) => valueOf(k));
-    return { options, value, raw, names, yaml, defaults, extra };
+    // Two steps (#481, beta.1 feedback): the add list of the editor (`choices`) names every statistic with several periods once
+    // (`add:<key>`), and its period is chosen afterwards in a field of its own, where 7 and 30 days say that they bring the trend. A
+    // list of every statistic in every period had 274 entries on a Lambda. `options` keeps every statistic and period.
+    const named = new Set();
+    const choices = [];
+    options.forEach((o) => {
+      const [k, p] = o.value.split(':');
+      if (!p || !steps.has(k) || !HFC_TILES[k]) { choices.push(o); return; }
+      if (!named.has(k)) { named.add(k); choices.push({ value: `add:${k}`, label: probe._tileLabel(k, null, I) }); }
+      // A chosen tile stays an option, so its chip keeps its name.
+      if (value.includes(o.value)) choices.push(o);
+    });
+    // Second step: the chosen statistics with more than one period, and the words of their periods.
+    const chosen = value.map((v) => v.split(':')).filter(([k, p]) => p && steps.has(k) && HFC_TILES[k])
+      .map(([k, p]) => ({ value: `${k}:${p}`, key: k, period: p, label: probe._tileLabel(k, p, I) }));
+    const periodWords = Object.fromEntries([...steps].map((k) => [k, periodsOf[k].map((p) => ({ value: p, word: String(I.periods[p] ?? I.rolling[p] ?? p) }))]));
+    return { options, choices, value, raw, names, yaml, defaults, extra, periodsOf, steps: chosen, periodWords, default: (key) => probe._tileDefault(key) };
+  }
+
+  // Editor, first step (#481): a statistic from the add list comes with its usual period, or with the first one not chosen yet, so a
+  // second chip of the same statistic is possible; the second step then changes its period.
+  static _tilesAdded(tiles, selected) {
+    let added = null;
+    const list = [];
+    selected.forEach((v) => {
+      if (!String(v).startsWith('add:')) { list.push(v); return; }
+      const key = v.slice(4); const periods = tiles.periodsOf[key] || [];
+      const p = [tiles.default(key), ...periods].find((q) => q && periods.includes(q) && !selected.includes(`${key}:${q}`) && !list.includes(`${key}:${q}`));
+      if (p) { added = `${key}:${p}`; list.push(added); }
+    });
+    return { list, added };
   }
 
   // Editor: the tile list to store for the selected option values. A tile that stays is kept as it stands in the configuration, with
@@ -9802,6 +9846,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     this._presetErrorOk = r.preset?.error_ok || [];
     const tiles = HeatpumpFlowCard._tileOptions(this._config, r, this._hass);
     this._tiles = tiles;
+    // Second step: the tile whose period the fields show, the one just added or picked, else the last one.
+    tiles.focus = tiles.steps.find((s) => s.value === this._tileFocus) || tiles.steps[tiles.steps.length - 1] || null;
     // Valve states (#126): the preset map with the configuration on top, shown as two lists of raw states.
     const valveId = r.entities.valve;
     const valveState = valveId ? this._hass.states[valveId]?.state : undefined;
@@ -9887,7 +9933,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
         return `${r.preset.tested ? status : `${status} ${L.untested_help}`}${also}`;
       }
       if (s.name === 'tiles_custom') return L.tiles_custom_help;
-      if (s.name === 'tiles') return tiles.yaml ? L.tiles_yaml : '';
+      if (s.name === 'tiles') return tiles.yaml ? `${L.tiles_add_help} ${L.tiles_yaml}` : L.tiles_add_help;
+      if (s.name === 'tile_period') return L.tile_period_help;
       if (s.name === 'tile_entity') return L.tile_entity_help;
       const named = tiles.names.find((t) => t.field === s.name);
       if (named) return named.preview ? L.tile_preview.replace('{value}', named.preview) : '';
@@ -9921,6 +9968,8 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     if (custom) {
       data.tiles = tiles.value;
       data.tile_entity = this._tilePicked || '';
+      data.tile_pick = tiles.focus?.value || '';
+      data.tile_period = tiles.focus?.period || '';
       tiles.names.forEach((t) => { data[t.field] = t.name; });
     }
     this._priceShown = custom;
@@ -10035,7 +10084,21 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     if (Object.keys(ents).length) config.entities = ents; else delete config.entities;
     // Tiles: off = default tiles; switched on = start from the default set; tiles with own options stay as in YAML.
     const picked = value.tile_entity && value.tile_entity !== this._tilePicked ? value.tile_entity : '';
-    delete config.tiles_custom; delete config.tile_entity;
+    delete config.tiles_custom; delete config.tile_entity; delete config.tile_pick; delete config.tile_period;
+    // Two steps (#481): a statistic from the add list gets its period; picking a tile shows its period; a new period replaces the
+    // period of that tile in its place.
+    let selected = Array.isArray(value.tiles) ? value.tiles : null;
+    if (selected && this._tiles) {
+      const { list, added } = HeatpumpFlowCard._tilesAdded(this._tiles, selected);
+      selected = list;
+      const shown = this._tiles.focus;
+      if (added) this._tileFocus = added;
+      else if (value.tile_pick && value.tile_pick !== shown?.value) this._tileFocus = value.tile_pick;
+      else if (shown && value.tile_period && value.tile_period !== shown.period) {
+        const next = `${shown.key}:${value.tile_period}`; const at = selected.indexOf(shown.value);
+        if (at >= 0 && !selected.includes(next)) { selected = selected.map((v, n) => (n === at ? next : v)); this._tileFocus = next; }
+      }
+    }
     Object.keys(config).filter((k) => /^tile_name_\d+$/.test(k)).forEach((k) => { delete config[k]; });
     delete config.price_fixed; delete config.price_entity;
     if (this._priceShown) {
@@ -10045,7 +10108,7 @@ class HeatpumpFlowCardEditor extends HTMLElement {
     }
     if (!value.tiles_custom) delete config.tiles;
     else if (!Array.isArray(this._config.tiles)) config.tiles = this._tiles.defaults;
-    else config.tiles = Array.isArray(value.tiles) ? HeatpumpFlowCard._tilesToStore(this._tiles, value.tiles, value, picked) : this._config.tiles;
+    else config.tiles = selected ? HeatpumpFlowCard._tilesToStore(this._tiles, selected, value, picked) : this._config.tiles;
     // The entity picker keeps showing its choice while the form passes the same empty value: it takes the entity once, then is emptied.
     if (picked) {
       this._tilePicked = picked;
