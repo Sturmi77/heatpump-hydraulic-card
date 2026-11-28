@@ -9408,7 +9408,7 @@ HeatpumpFlowCard.styles = `
   .ctl select, .ctl input { font: inherit; color: inherit; background: transparent; border: none; outline: none; max-width: 11em; }
   .ctl input { width: 3.5em; }
   .ctl em { font-style: normal; color: var(--hfc-muted); }
-  .ctl select option { color: #000; }
+  .ctl select option { color: var(--primary-text-color, #000); background: var(--card-background-color, var(--ha-card-background, #fff)); }
   .drawer { margin: 6px 4px 0; }
   .drawer-toggle { font: inherit; font-size: .9em; color: var(--hfc-muted); background: none; border: none; cursor: pointer; padding: 4px 0; display: inline-flex; align-items: center; gap: 4px; }
   .drawer-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; transition: transform .2s; }
