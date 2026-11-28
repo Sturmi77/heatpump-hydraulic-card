@@ -1,3 +1,0 @@
-- THZ: the preset's `heater_map` applies only to the heater entity the preset found; an own `heater` entity, such as a power sensor, lights the heater again. `heater_map` is now an option of the card, merged over the preset's map, and the diagnostic report says where it applies. (#459)
-- Samsung EHS with EHS Sentinel is marked as tested: confirmed by its reporter on 0.20.0-beta.1. (#403, thanks @ColinSainsbury)
-- The demo has a Stiebel Eltron LWZ / Tecalor THZ installation.

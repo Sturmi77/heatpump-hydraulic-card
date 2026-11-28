@@ -1,2 +1,0 @@
-- Tiles for the previous calendar month (#481): `energy:last_month`, `cop_heating:last_month`, `cost:last_month` and every other statistic with a suitable counter, in the Home Assistant time zone. The COP comes from the heat and the electricity of that month.
-- Tile `last_heating_run` (#481): duration, electricity, heat and COP of the last complete heating run, with the bounds of the run panel. A tap selects the run in the timeline.
