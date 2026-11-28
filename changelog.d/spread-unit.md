@@ -1,1 +1,0 @@
-- New option `spread_unit: "°C"` shows the spreads (tiles, the ΔT of the source, the run details) in °C instead of K, also in the editor; K stays the default (forum, 26 November).
