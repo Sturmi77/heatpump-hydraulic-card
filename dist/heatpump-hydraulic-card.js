@@ -4445,7 +4445,7 @@ class HeatpumpFlowCard extends HTMLElement {
       ...detection,
       '',
       'Entity mappings (source: [preset] found by the preset, [own] set in the card configuration):',
-      ...keys.filter((key) => r.entities[key]).flatMap((key) => (r.sums[key] ? r.sums[key].map((id, n) => `${entityLine(`${key} (${hfcMeanKey(key) ? 'average' : 'sum'} ${n + 1})`, id)} [${source(key, id)}]`)
+      ...keys.filter((key) => r.entities[key]).flatMap((key) => (r.sums[key] ? r.sums[key].map((id, n) => `${entityLine(`${key} (${hfcMeanKey(key) ? 'average' : key === 'defrost' ? 'any' : 'sum'} ${n + 1})`, id)} [${source(key, id)}]`)
         : [`${entityLine(key, r.entities[key])} [${source(key, r.entities[key])}]`])),
       ...(cleared.length ? [`- Cleared on purpose: ${cleared.join(', ')}`] : []),
       `- Not mapped: ${unmapped.length ? unmapped.join(', ') : 'none'} (an empty key is fine when the installation does not have it)`,
@@ -4830,6 +4830,29 @@ class HeatpumpFlowCard extends HTMLElement {
     group.dataset.a11y = `${label}: ${this._pressureText(key)}, ${this._i[`pressure_${state}`]}`;
   }
   _on(key) { return ['on', 'true', 'open', '1', 'ein'].includes(String(this._s(key)).toLowerCase()); }
+  // A state of a defrost entity that means defrost (#173): on as for a compressor, or a text of a unit's operating mode that says
+  // defrost (`defrost`, `defrosting`, or what mode_map maps to defrost), so the mode of each unit of a cascade can serve.
+  _thawState(s) {
+    if (hfcCompressorOn(s)) return true;
+    return ['defrost', 'defrosting'].includes(String(s ?? '').trim().toLowerCase()) || this._norm(this._maps?.mode || {}, s ?? '') === 'defrost';
+  }
+  // The defrost entity, or every member of a list of them, one per unit of a cascade (#173).
+  _thawIds() { return this._has('defrost') ? (this._sums?.defrost || [this._e.defrost]) : []; }
+  // The heat pump defrosts while any one of them does.
+  _defrostOn() { return this._thawIds().some((id) => this._thawState(this._hass?.states[id]?.state)); }
+  // One history for the defrost entities: on while any one defrosts, off while all report otherwise, unavailable without any
+  // state. A single entity gives its own changes, read with the same rule.
+  _thawSeries(hist, thaw) {
+    const lists = [thaw].flat().filter(Boolean).map((id) => hist[id] || []);
+    const pos = lists.map(() => -1); const out = [];
+    const known = (s) => s !== undefined && !['unknown', 'unavailable', 'none', ''].includes(String(s).trim().toLowerCase());
+    [...new Set(lists.flatMap((l) => l.map((e) => e.t)))].sort((a, b) => a - b).forEach((t) => {
+      const states = lists.map((l, k) => { while (pos[k] + 1 < l.length && l[pos[k] + 1].t <= t) pos[k]++; return pos[k] >= 0 ? l[pos[k]].s : undefined; });
+      const s = states.some((x) => known(x) && this._thawState(x)) ? 'on' : states.some(known) ? 'off' : 'unavailable';
+      if (out[out.length - 1]?.s !== s) out.push({ t, s });
+    });
+    return out;
+  }
   // A manually mapped second heat generator may be binary, a numeric level/power, or a common running-state text.
   _boilerOn() {
     if (!this._has('boiler_state')) return this._w('boiler_power') > 0;
@@ -4859,7 +4882,7 @@ class HeatpumpFlowCard extends HTMLElement {
   // Defrost and cooling run the refrigerant circuit backwards: the outdoor heat exchanger is the condenser then.
   _reversedCycle() {
     return ['defrost', 'cooling'].includes(this._norm(this._maps.mode, this._s('mode')))
-      || String(this._s('status') || '').toUpperCase().includes('DEFROST') || (this._has('defrost') && this._on('defrost'));
+      || String(this._s('status') || '').toUpperCase().includes('DEFROST') || this._defrostOn();
   }
   // Compressor modulation 0..1 from `compressor_speed` (percent; Hz or rpm against `compressor_speed_max`), NaN without a usable value.
   _speedFraction() {
@@ -5931,10 +5954,12 @@ class HeatpumpFlowCard extends HTMLElement {
   // defrost. The query starts the grace time before the period, so a defrost that ended just before midnight still claims its
   // restart after it; only changes inside the period count. NaN while the history loads, and when a needed history has no usable
   // state: missing data is no count of 0, and without the defrost history every restart would count as a start.
+  // With a list of defrost entities, one per unit of a cascade (#173), the defrosts of all units add up, and a restart belongs to a
+  // defrost of any unit; every unit needs a usable history.
   _historyCount(src, period) {
-    const range = this._periodRange(period); const defrost = this._e.defrost;
-    if (!range || !defrost) return NaN;
-    const ids = [defrost, src.counter].filter(Boolean);
+    const range = this._periodRange(period); const thaws = this._thawIds();
+    if (!range || !thaws.length) return NaN;
+    const ids = [...thaws, src.counter].filter(Boolean);
     const begin = Date.parse(range[0]); const grace = HFC_HISTORY_COUNT.grace * 1000;
     const hist = this._wsCached(`hcount|${ids.join(',')}|${period}`, {
       type: 'history/history_during_period', start_time: new Date(begin - grace).toISOString(), ...(range[1] ? { end_time: range[1] } : {}), entity_ids: ids,
@@ -5942,14 +5967,16 @@ class HeatpumpFlowCard extends HTMLElement {
     }, (res) => this._timelineHistory(res, ids));
     if (!hist) return NaN;
     const known = (s) => !['unknown', 'unavailable', 'none', ''].includes(String(s ?? '').trim().toLowerCase());
-    const on = (s) => hfcCompressorOn(s);
-    const d = hist[defrost] || [];
-    if (!d.some((e) => known(e.s))) return NaN;
-    if (src.history === 'defrosts') return d.filter((e, n) => n > 0 && e.t >= begin && on(e.s) && known(d[n - 1].s) && !on(d[n - 1].s)).length;
+    const on = (s) => this._thawState(s);
+    const series = thaws.map((id) => hist[id] || []);
+    if (!series.every((d) => d.some((e) => known(e.s)))) return NaN;
+    if (src.history === 'defrosts') {
+      return series.reduce((sum, d) => sum + d.filter((e, n) => n > 0 && e.t >= begin && on(e.s) && known(d[n - 1].s) && !on(d[n - 1].s)).length, 0);
+    }
     const steps = (hist[src.counter] || []).filter((e) => Number.isFinite(parseFloat(e.s)));
     if (!steps.length) return NaN;
     // Defrost windows [from, to + grace).
-    const windows = d.map((e, n) => (on(e.s) ? [e.t, (d[n + 1]?.t ?? Infinity) + grace] : null)).filter(Boolean);
+    const windows = series.flatMap((d) => d.map((e, n) => (on(e.s) ? [e.t, (d[n + 1]?.t ?? Infinity) + grace] : null)).filter(Boolean));
     const inDefrost = (t) => windows.some(([a, b]) => t >= a && t < b);
     let starts = 0; let last = NaN;
     steps.forEach((e) => {
@@ -7376,13 +7403,15 @@ class HeatpumpFlowCard extends HTMLElement {
     // run_signal (#365): the power entities that delimit the runs, the valve for the kind and a defrost entity. The ids of the
     // compressor and the mode stay, so a window without recorded power falls back to them.
     const signal = this._runSignal();
+    // The defrost entity, or the list of them, one per unit of a cascade (#173).
+    const thawIds = this._thawIds(); const thaw = thawIds.length > 1 ? thawIds : thawIds[0] || null;
     if (signal) {
       return { ...(base || {}), ...(base ? cycle : {}), ...overlays, sig: this._runSignalIds(signal),
-        valve: this._has('valve') ? this._e.valve : (base?.valve ?? null), thaw: this._has('defrost') ? this._e.defrost : null };
+        valve: this._has('valve') ? this._e.valve : (base?.valve ?? null), thaw };
     }
     // A defrost entity turns a running period into defrost, as in the schematic: units whose mode or compressor phase stays on
     // heating while they defrost (ViCare, #506).
-    return base ? { ...base, ...cycle, ...overlays, ...(this._has('defrost') ? { thaw: this._e.defrost } : {}) } : null;
+    return base ? { ...base, ...cycle, ...overlays, ...(thaw ? { thaw } : {}) } : null;
   }
 
   // A valve state that means hot water: `valve_map` first, else an on-state (on, true, open, 1, ein) or a text such as Tank or
@@ -7713,8 +7742,9 @@ class HeatpumpFlowCard extends HTMLElement {
       // decides only cooling and a lock (and the kind where no valve exists); defrost comes from the defrost entity only.
       const list = (id) => (id ? hist[id] || [] : []);
       const held = (entries) => { let n = -1; return (t) => { while (n + 1 < entries.length && entries[n + 1].t <= t) n++; return entries[n]?.s; }; };
-      const sig = held(signal); const mode = held(list(ids.mode)); const valve = held(list(ids.valve)); const thaw = held(list(ids.thaw));
-      const times = [...new Set([signal, list(ids.mode), list(ids.valve), list(ids.thaw)].flatMap((l) => l.map((e) => e.t)))].sort((a, b) => a - b);
+      const thawList = ids.thaw ? this._thawSeries(hist, ids.thaw) : [];
+      const sig = held(signal); const mode = held(list(ids.mode)); const valve = held(list(ids.valve)); const thaw = held(thawList);
+      const times = [...new Set([signal, list(ids.mode), list(ids.valve), thawList].flatMap((l) => l.map((e) => e.t)))].sort((a, b) => a - b);
       times.forEach((t) => {
         const ss = sig(t); const ms = mode(t);
         if (ss === undefined) return;
@@ -7723,7 +7753,7 @@ class HeatpumpFlowCard extends HTMLElement {
         if (ss === 'unavailable') kind = 'gap';
         else if (modeKind === 'blocked') kind = 'blocked';
         else if (ss !== 'on') kind = 'idle';
-        else if (ids.thaw && hfcCompressorOn(thaw(t))) kind = 'defrost';
+        else if (ids.thaw && thaw(t) === 'on') kind = 'defrost';
         else if (modeKind === 'cool') kind = 'cool';
         else if (ids.valve) kind = dhwOf(valve(t)) ? 'dhw' : 'heat';
         else kind = ['heat', 'dhw', 'cool'].includes(modeKind) ? modeKind : 'heat';
@@ -7763,7 +7793,7 @@ class HeatpumpFlowCard extends HTMLElement {
       const last = segs[segs.length - 1];
       if (last && last.kind === p.kind && last.to === from) last.to = to; else segs.push({ kind: p.kind, raw: p.raw, from, to });
     });
-    let out = ids.thaw && !signal.length ? this._timelineThaw(segs, hist[ids.thaw] || [], start, end) : segs;
+    let out = ids.thaw && !signal.length ? this._timelineThaw(segs, this._thawSeries(hist, ids.thaw), start, end) : segs;
     if (ids.pv) out = this._timelinePv(out, hist[ids.pv] || [], start, end);
     if (ids.sg) out = this._timelineSg(out, hist[ids.sg] || [], start, end);
     return out;
@@ -7993,7 +8023,7 @@ class HeatpumpFlowCard extends HTMLElement {
     const energyIds = [...['power', 'heat', 'volume', 'flow', 'return'].filter((k) => this._has(k) && !(units && k === 'heat')).flatMap(idsOf),
       ...(units || []).flatMap((u) => [u.power, u.heat].flat())];
     if (!keys.length && !energyIds.length) return null;
-    const list = [...new Set([...keys.map((k) => this._e[k]), ...energyIds])];
+    const list = [...new Set([...keys.map((k) => this._e[k]), ...this._thawIds(), ...energyIds])];
     // Attributes are needed when any requested temperature is read from one, also flow and return of the heat estimate (#327).
     const attrs = [...new Set([...keys, ...['flow', 'return'].filter((k) => this._has(k))])].some((k) => hfcTempAttr(this._e[k], k));
     // A run that is still going ends "now", which moves with every update: its query has no end and a fixed key, so it is
@@ -8070,7 +8100,12 @@ class HeatpumpFlowCard extends HTMLElement {
     };
     const K = (v) => `${this._fmt(v)} ${this._spreadUnit()}`;
     const rows = [];
-    const thaw = this._has('defrost') ? onTime('defrost') : null;
+    // Defrosts of the run: the off → on changes of every defrost entity, one per unit of a cascade (#173), with the rule of the live view.
+    const thawRuns = this._thawIds().map((id) => {
+      const ss = (hist[id] || []).map((e) => ({ t: time(e), s: String(e.s ?? e.state) })).filter((e) => Number.isFinite(e.t)).sort((a, b) => a.t - b.t);
+      return { known: ss.length > 0, starts: ss.filter((e, n) => e.t >= run.from && this._thawState(e.s) && !(n > 0 && this._thawState(ss[n - 1].s))).length };
+    });
+    const thaw = thawRuns.length ? { known: thawRuns.every((x) => x.known), starts: thawRuns.reduce((sum, x) => sum + x.starts, 0) } : null;
     const defrosts = thaw?.known ? thaw.starts : run.phases.filter((p) => p.kind === 'defrost').length;
     if (dhw) {
       const tank = nums(tankKey);
@@ -8540,8 +8575,8 @@ class HeatpumpFlowCard extends HTMLElement {
     const generatorMode = running ? (boilerRunning ? 'both' : 'hp_only') : (boilerRunning ? 'boiler_only' : 'idle');
     const generatorRunning = running || boilerRunning;
     // With run_signal only a defrost entity tells a defrost: an hourly mode or status can report one long after it ended (#365).
-    const defrost = signal ? this._has('defrost') && hfcCompressorOn(this._s('defrost'))
-      : hp === 'defrost' || status.toUpperCase().includes('DEFROST') || (this._has('defrost') && this._on('defrost'));
+    const defrost = signal ? this._defrostOn()
+      : hp === 'defrost' || status.toUpperCase().includes('DEFROST') || this._defrostOn();
     // Valve: binary (on = DHW) or a state such as "Tank" / "DHW".
     // A `valve_map` (raw state → dhw | heating) decides first, for valves that report 1 for heating or other texts.
     const valveMapped = this._has('valve') ? this._valveMapped(this._s('valve')) : undefined;
@@ -8555,7 +8590,7 @@ class HeatpumpFlowCard extends HTMLElement {
         : hp === 'cooling' ? 'cooling' : this._has('valve') ? (valveDhw ? 'dhw' : 'heating') : (['heating', 'dhw', 'cooling'].includes(hp) ? hp : 'heating');
     } else if (!this._has('mode')) hp = defrost ? 'defrost' : !running ? 'idle' : (valveDhw ? 'dhw' : 'heating');
     // A defrost entity wins over an operating mode that keeps reporting heating while the unit defrosts (e.g. Kronoterm).
-    else if (this._has('defrost') && this._on('defrost') && ['heating', 'cooling', 'dhw'].includes(hp)) hp = 'defrost';
+    else if (this._defrostOn() && ['heating', 'cooling', 'dhw'].includes(hp)) hp = 'defrost';
     // An operating mode that stays idle while the compressor runs (preset flag compressor_over_idle, ViCare #196).
     else if (hp === 'idle' && compOn && this._preset?.compressor_over_idle) hp = valveDhw ? 'dhw' : 'heating';
     const cooling = hp === 'cooling' || bufMode === 'cooling';
