@@ -1,0 +1,1 @@
+- The editor chooses tiles in two steps (#481, feedback on 0.21.0-beta.1): the add list names every statistic once instead of once per period (274 entries on a Lambda), and the fields **Tile** and **Period** below it set the period of a chosen tile, where 7 and 30 days say that they show the trend.
