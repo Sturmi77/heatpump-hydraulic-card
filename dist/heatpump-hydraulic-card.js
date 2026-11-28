@@ -5663,6 +5663,15 @@ class HeatpumpFlowCard extends HTMLElement {
     return 'toggle';
   }
 
+  // A control without its own name: hot water and the heating thermostat get the card's text in the card's language, as they
+  // stand for the same parts as the drawing; other entities keep their Home Assistant name.
+  _controlDefaultName(st) {
+    const d = st.entity_id.split('.')[0];
+    if (d === 'water_heater') return this._i.dhw;
+    if (d === 'climate') return this._i.heating_zone;
+    return '';
+  }
+
   _controlOptions(st) {
     const d = st.entity_id.split('.')[0];
     if (d === 'water_heater') return st.attributes.operation_list || [];
@@ -5680,7 +5689,7 @@ class HeatpumpFlowCard extends HTMLElement {
     if (!list.length) return '';
     return `<div class="controls" id="controls">${list.map((c, n) => {
       const st = this._hass.states[c.entity];
-      const name = this._esc(c.name || st.attributes.friendly_name || c.entity);
+      const name = this._esc(c.name || this._controlDefaultName(st) || st.attributes.friendly_name || c.entity);
       const kind = this._controlKind(c.entity);
       if (kind === 'select') {
         return `<label class="ctl sel"><span>${name}</span><select data-ctl="${n}" id="ctl-${n}">${this._controlOptions(st).map((o) => `<option value="${this._esc(o)}">${this._esc(this._stateText(st, o))}</option>`).join('')}</select></label>`;
