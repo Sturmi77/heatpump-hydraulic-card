@@ -3220,7 +3220,7 @@ const HFC_KINDS = {
   counter: { domains: ['sensor', 'number', 'input_number', 'counter'], numeric: true },
   ratio: { domains: ['sensor', 'number', 'input_number'], numeric: true },
   speed: { extra: ['hz', 'rpm', '1/min', 'min⁻¹', 'rps', '%'], domains: ['binary_sensor', 'switch', 'input_boolean', 'sensor'], onoff: true },
-  onoff: { extra: ['%'], domains: ['binary_sensor', 'switch', 'input_boolean', 'sensor'], onoff: true },
+  onoff: { extra: ['%'], domains: ['binary_sensor', 'switch', 'input_boolean', 'sensor', 'calendar'], onoff: true },
   onoff_power: { extra: ['w', 'kw', '%'], domains: ['binary_sensor', 'switch', 'input_boolean', 'sensor'], onoff: true },
   valve: { domains: ['binary_sensor', 'switch', 'input_boolean', 'sensor', 'select', 'input_select'], onoff: true },
   text: { domains: ['sensor', 'select', 'input_select', 'binary_sensor', 'switch', 'climate', 'water_heater', 'input_text', 'text'] },
