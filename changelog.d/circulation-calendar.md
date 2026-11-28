@@ -1,0 +1,1 @@
+- The circulation accepts a calendar entity (an event marks the circulation window), as do the other on/off keys; the editor check no longer reports it as the wrong kind of entity.

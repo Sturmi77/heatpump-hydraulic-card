@@ -7988,6 +7988,18 @@
     check(thawRow === '3', `#173: the run details count the defrosts of both units (${thawRow}; ${rows.map((r) => r[0]).join(', ')})`);
     card.remove();
   }
+  // 28. a calendar whose event marks the circulation window is on/off like a binary sensor: the editor check accepts it, the card
+  // runs the circulation while an event is on
+  {
+    const cal = (state) => ({ state, attributes: { message: 'Circulation', start_time: '2026-11-28 06:00:00', end_time: '2026-11-28 07:00:00' } });
+    check(hfcKindOf('circulation') === 'onoff' && C._fit('onoff', 'calendar.dhw_circulation', cal('on')).verdict !== 'bad'
+      && C._fit('onoff', 'calendar.dhw_circulation', cal('off')).verdict !== 'bad', 'a calendar is accepted for the circulation (on/off)');
+    check(C._fit('onoff', 'light.hall', { state: 'on', attributes: {} }).verdict === 'bad', 'other domains are still reported for on/off keys');
+    const card = mount({ entities: { circulation: 'calendar.dhw_circulation', dhw_top: 'sensor.t' } },
+      hassOf(toStates({ 'calendar.dhw_circulation': cal('on'), 'sensor.t': ['50', '°C'] }))); await wait(20);
+    check(card._on('circulation'), 'the circulation runs while the calendar event is on');
+    card.remove();
+  }
 
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');
