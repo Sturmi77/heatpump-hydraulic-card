@@ -4830,11 +4830,15 @@ class HeatpumpFlowCard extends HTMLElement {
     group.dataset.a11y = `${label}: ${this._pressureText(key)}, ${this._i[`pressure_${state}`]}`;
   }
   _on(key) { return ['on', 'true', 'open', '1', 'ein'].includes(String(this._s(key)).toLowerCase()); }
-  // A state of a defrost entity that means defrost (#173): on as for a compressor, or a text of a unit's operating mode that says
-  // defrost (`defrost`, `defrosting`, or what mode_map maps to defrost), so the mode of each unit of a cascade can serve.
+  // A state of a defrost entity that means defrost (#173), so the mode of each unit of a cascade can serve: on/off words as for a
+  // binary entity; a state that mode_map names (also a number, Codex review) is defrost only where the map says so; the texts
+  // `defrost` and `defrosting`; else the rule of a compressor (running, a number above 0).
   _thawState(s) {
-    if (hfcCompressorOn(s)) return true;
-    return ['defrost', 'defrosting'].includes(String(s ?? '').trim().toLowerCase()) || this._norm(this._maps?.mode || {}, s ?? '') === 'defrost';
+    const raw = String(s ?? '').trim(); const low = raw.toLowerCase();
+    if (['on', 'off', 'true', 'false', 'open', 'closed', 'ein', 'aus'].includes(low)) return hfcCompressorOn(low);
+    const map = this._maps?.mode || {}; const mapped = map[raw] ?? map[raw.toUpperCase()] ?? map[low];
+    if (mapped !== undefined) return mapped === 'defrost';
+    return ['defrost', 'defrosting'].includes(low) || hfcCompressorOn(raw);
   }
   // The defrost entity, or every member of a list of them, one per unit of a cascade (#173).
   _thawIds() { return this._has('defrost') ? (this._sums?.defrost || [this._e.defrost]) : []; }

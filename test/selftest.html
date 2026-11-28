@@ -7949,6 +7949,10 @@
     card = mount({ entities: { ...ents, defrost: 'binary_sensor.d' } }, hassOf(toStates({ ...st, 'binary_sensor.d': 'on' }))); await wait(20);
     const binary = card._defrostOn() && chipDefrost(card); card.remove();
     check(mapped && binary, `#173: a mode text through mode_map and a binary entity both mean defrost (${mapped} / ${binary})`);
+    // Numeric modes (Codex review): with a mode_map only the mapped defrost value counts, not every number above 0.
+    card = mount({ entities: { ...ents, defrost: 'sensor.u4' }, mode_map: { 1: 'heating', 2: 'defrost', 3: 'dhw' } }, hassOf(toStates({ ...st, 'sensor.u4': '1' }))); await wait(20);
+    const numeric = ['1', '2', '3', '0'].map((s) => card._thawState(s)).join(); card.remove();
+    check(numeric === 'false,true,false,false', `#173: numeric modes follow mode_map (${numeric})`);
     // run_signal: units, the setup of the report: the units' power delimits the runs, the defrost texts mark the defrosts.
     const cascade = { entities: { mode: 'sensor.ph', defrost: ['sensor.u1', 'sensor.u2'], flow: 'sensor.f', return: 'sensor.r' }, run_signal: 'units',
       units: [{ power: 'sensor.p1', heat: 'sensor.h1' }, { power: 'sensor.p2', heat: 'sensor.h2' }] };
