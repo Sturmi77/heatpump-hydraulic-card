@@ -1,0 +1,1 @@
+- Select controls: the open list takes the text and background colour of the card, so its options are readable on a dark theme instead of black on a dark list.

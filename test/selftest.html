@@ -7988,6 +7988,22 @@
     check(thawRow === '3', `#173: the run details count the defrosts of both units (${thawRow}; ${rows.map((r) => r[0]).join(', ')})`);
     card.remove();
   }
+  // 27. the options of a select control take the card's text and background colour, so the open list stays readable on a dark
+  // theme (before: black text on the dark list that Chrome draws for a dark page)
+  {
+    const s = setups.find((x) => (x.config.controls || []).some((e) => String(e).startsWith('select.')));
+    const optColors = async (style) => {
+      const c = mount(s.config, hassOf(toStates(s.states('heating')), s.registry || {}, null, s));
+      Object.entries(style).forEach(([k, v]) => c.style.setProperty(k, v)); await wait(20);
+      const opt = c.shadowRoot.querySelector('.ctl select option');
+      const cs = opt && getComputedStyle(opt); const out = opt ? { color: cs.color, background: cs.backgroundColor } : null;
+      c.remove(); return out;
+    };
+    const dark = await optColors({ '--primary-text-color': 'rgb(225, 225, 225)', '--card-background-color': 'rgb(28, 28, 28)' });
+    check(dark && dark.color === 'rgb(225, 225, 225)' && dark.background === 'rgb(28, 28, 28)', `select options on a dark theme: light text on the card background (${JSON.stringify(dark)})`);
+    const light = await optColors({ '--primary-text-color': 'rgb(33, 33, 33)', '--card-background-color': 'rgb(255, 255, 255)' });
+    check(light && light.color === 'rgb(33, 33, 33)' && light.background === 'rgb(255, 255, 255)', `select options on a light theme: dark text on the card background (${JSON.stringify(light)})`);
+  }
 
   log.push(`${checks} checks, ${fails.length} failed`);
   document.getElementById('log').textContent = [...log, ...fails.map((f) => `FAIL ${f}`)].join('\n');
